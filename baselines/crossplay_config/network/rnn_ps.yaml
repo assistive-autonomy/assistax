@@ -1,0 +1,5 @@
+recurrent: true
+agent_param_sharing: true
+embedding_dim: 128
+gru_hidden_dim: 128
+activation: tanh

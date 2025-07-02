@@ -1,0 +1,61 @@
+defaults:
+  - network: ff_nps
+  - _self_
+
+ENV_NAME: scratchitch
+ENV_KWARGS:
+  ctrl_cost_weight: 0
+  homogenisation_method: max
+  backend: mjx
+  disability:
+    joint_idx: 13
+    joint_restriction_factor: 1.0
+    joint_strength: 1.0
+    tremor_magnitude: 0.0
+  #TOTAL_TIMESTEPS: 30e6
+  #NUM_STEPS: 256
+  #NUM_ENVS: 512
+  #NUM_SEEDS: 1
+  #SEED: 0
+  #NUM_EVAL_EPISODES: 64
+TOTAL_TIMESTEPS: 1e3
+NUM_STEPS: 256
+NUM_ENVS: 1
+NUM_SEEDS: 1
+SEED: 0
+NUM_EVAL_EPISODES: 2
+
+# RL HYPERPARAMETERS
+ALGORITHM: IPPO
+UPDATE_EPOCHS: 4
+NUM_MINIBATCHES: 4
+ANNEAL_LR: False
+LR: 1e-3
+ENT_COEF: 1e-4
+CLIP_EPS:  0.3
+SCALE_CLIP_EPS: False
+RATIO_CLIP_EPS: False
+GAMMA: 0.99
+GAE_LAMBDA: 0.95
+VF_COEF: 1.0
+MAX_GRAD_NORM: 0.5
+ADAM_EPS: 1e-8
+
+# COMPUTE OPTIONS
+GPU_ENV_CAPACITY: 8192
+ADVANTAGE_UNROLL_DEPTH: 8
+DISABLE_JIT: False
+DEVICE: 0
+
+# ZOO SETTINGS
+ZOO_PATH: /home/elliot/research/projects/assistax/zoo
+
+
+hydra:
+  job:
+    chdir: true
+  run:
+    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED}

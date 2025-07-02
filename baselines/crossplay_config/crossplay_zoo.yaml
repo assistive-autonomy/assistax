@@ -1,0 +1,62 @@
+defaults:
+  - network: ff_nps
+  - _self_
+
+ENV_NAME: armmanipulation
+
+ENV_KWARGS:
+  ctrl_cost_weight: 0
+  homogenisation_method: max
+  backend: mjx
+  het_reward: False
+  disability:
+    joint_idx: 13
+    joint_restriction_factor: 1.0
+    joint_strength: 1.0
+    tremor_magnitude: 0.0
+
+  # pixel_obs:
+    # hw: int
+    # frame_stack: int
+    # return_float32: bool
+    # cache_objects: bool
+    # n_envs: int # if cachinig same as NUM_ENVS
+
+TOTAL_TIMESTEPS: 30e6
+NUM_STEPS: 256
+NUM_ENVS: 512
+NUM_SEEDS: 4
+SEED: 0
+NUM_EVAL_EPISODES: 8
+
+PARALLEL_BATCH_SIZE: 5
+
+crossplay:
+  robot_algos: ["IPPO", "MAPPO", "MASAC"]
+  algo_configs:
+    IPPO: 
+      main: "IPPO/config/ippo_mabrax_aht.yaml"
+      network: "IPPO/config/network/ff_nps.yaml"
+    MAPPO: 
+      main: "MAPPO/config/mappo_mabrax_aht.yaml"
+      network: "MAPPO/config/network/ff_nps.yaml"
+    MASAC: 
+      main: "MASAC/config/masac_aht.yaml"
+      network: "MASAC/config/network/ff_nps.yaml"
+
+
+PARTNER_ALGORITHMS: ["IPPO", "MAPPO", "MASAC"]
+
+ZOO_PATH: /home/leo/assistax/zoo
+
+GPU_ENV_CAPACITY: 8192
+ADVANTAGE_UNROLL_DEPTH: 8
+DISABLE_JIT: False
+DEVICE: 0
+
+hydra:
+  job:
+    chdir: true
+  run:
+    dir: outputs/crossplay/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+

@@ -1,0 +1,64 @@
+defaults:
+  - network: ff_ps
+  - _self_
+
+ENV_NAME: scratchitch
+ENV_KWARGS:
+  ctrl_cost_weight: 0
+  homogenisation_method: max
+  backend: mjx
+  disability:
+    joint_idx: 13
+    joint_restriction_factor: 1.0
+    joint_strength: 1.0
+    tremor_magnitude: 0.0
+TOTAL_TIMESTEPS: 3e7
+NUM_STEPS: 256
+NUM_ENVS: 512
+NUM_SEEDS: 3
+SEED: 0
+NUM_EVAL_EPISODES: 16
+
+# RL HYPERPARAMETERS
+UPDATE_EPOCHS: 4
+NUM_MINIBATCHES: 4
+ANNEAL_LR: False
+LR: 2.5e-4
+ENT_COEF: 1e-4
+CLIP_EPS: 0.2
+SCALE_CLIP_EPS: False
+RATIO_CLIP_EPS: False
+GAMMA: 0.99
+GAE_LAMBDA: 0.95
+VF_COEF: 1.0
+MAX_GRAD_NORM: 0.5
+ADAM_EPS: 1e-8
+
+# COMPUTE OPTIONS
+GPU_ENV_CAPACITY: 8192
+ADVANTAGE_UNROLL_DEPTH: 8
+DISABLE_JIT: False
+DEVICE: 0
+
+# CROSSPLAY SETTINGS
+crossplay:
+  zoo_base: /home/efos/assistax/JaxMARL/baselines/IPPO/zoo/${ENV_NAME}
+  human_seed: 0
+  robot_seed: 0
+  robot_setting:
+    disability:
+      joint_restriction_factor: 1.0
+      joint_strength: 1.0
+      tremor_magnitude: 0.0
+  paths:
+    robot: ${crossplay.zoo_base}/r${crossplay.robot_setting.disability.joint_restriction_factor}_s${crossplay.robot_setting.disability.joint_strength}_t${crossplay.robot_setting.disability.tremor_magnitude}_${SEED}/robot.safetensors
+    human: ${crossplay.zoo_base}/r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED}/human.safetensors
+
+hydra:
+  job:
+    chdir: true
+  run:
+    dir: outputs/mabrax/${ENV_NAME}/renders/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/mabrax/${ENV_NAME}/renders/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: human_r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED}-${crossplay.human_seed}/robot_r${crossplay.robot_setting.disability.joint_restriction_factor}_s${crossplay.robot_setting.disability.joint_strength}_t${crossplay.robot_setting.disability.tremor_magnitude}_${SEED}-${crossplay.robot_seed}
