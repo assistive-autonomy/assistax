@@ -1,4 +1,5 @@
 import os
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.9"
 import time
 from tqdm import tqdm
 import jax
@@ -13,12 +14,9 @@ import distrax
 import jaxmarl
 from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
 from jaxmarl.wrappers.baselines import LogWrapper
-from jaxmarl.wrappers.aht_all import ZooManager, LoadAgentWrapper
 import hydra
 from omegaconf import OmegaConf
-import pandas as pd
 from typing import Sequence, NamedTuple, Any, Dict
-
 
 
 def _tree_take(pytree, indices, axis=None):
@@ -79,58 +77,31 @@ def _compute_episode_returns(eval_info, time_axis=-2):
 
 
 
-@hydra.main(version_base=None, config_path="config", config_name="ippo_mabrax_aht")
+@hydra.main(version_base=None, config_path="config", config_name="mappo_mabrax")
 def main(config):
     config = OmegaConf.to_container(config, resolve=True)
 
     # IMPORT FUNCTIONS BASED ON ARCHITECTURE
     match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
         case (False, False):
-            from ippo_ff_nps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
+            from mappo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
         case (False, True):
-            from ippo_ff_ps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
+            from mappo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
         case (True, False):
-            from ippo_rnn_nps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
+            from mappo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
         case (True, True):
-            from ippo_rnn_ps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
+            from mappo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
 
     rng = jax.random.PRNGKey(config["SEED"])
     train_rng, eval_rng = jax.random.split(rng)
     train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])    
     print(f"Starting training with {config['TOTAL_TIMESTEPS']} timesteps \n num envs: {config['NUM_ENVS']} \n num seeds: {config['NUM_SEEDS']} \n for env: {config['ENV_NAME']}")
     with jax.disable_jit(config["DISABLE_JIT"]):
-        zoo = ZooManager(config["ZOO_PATH"])
-        alg = config["ALGORITHM"]
-        scenario = config["ENV_NAME"]
-        # index_filtered = zoo.index.query(f'scenario == "{scenario}"'
-        #                          ).query('scenario_agent_id == "human"')
-        
-        partner_dict = {}
-        for partner_algo in config["PARTNER_ALGORITHMS"]:
-            partner_dict[partner_algo] = zoo.index.query(f'algorithm == "{partner_algo}"'
-                                                         ).query(f'scenario == "{scenario}"'
-                                                            ).query('scenario_agent_id == "human"')                                                        
-            
-        train_set = {}
-        test_set = {}
-        for algo in partner_dict.keys():
-            train_set[algo] = partner_dict[algo].sample(frac=0.5)
-            test_set[algo] = partner_dict[algo].drop(train_set[algo].index)
-
-        load_zoo_dict_train = {algo: {"human": list(train_set[algo].agent_uuid)} for algo in partner_dict.keys()}
-        load_zoo_dict_test = {algo: {"human": list(test_set[algo].agent_uuid)} for algo in partner_dict.keys()}
-
-        # These are now shape {algo: {agent: {param_name: param_value}}}
-
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"]) # This seems unnecessary
         train_jit = jax.jit(
-            make_train(
-                config,
-                save_train_state=True,
-                load_zoo=load_zoo_dict_train
-            ),
+            make_train(config, save_train_state=True),
             device=jax.devices()[config["DEVICE"]]
         )
+        # first run (includes JIT)
         out = jax.vmap(train_jit, in_axes=(0, None, None, None))(
             train_rngs,
             config["LR"], config["ENT_COEF"], config["CLIP_EPS"]
@@ -151,18 +122,18 @@ def main(config):
         all_train_states = out["metrics"]["train_state"]
         final_train_state = out["runner_state"].train_state
         safetensors.flax.save_file(
-            flatten_dict(all_train_states.params, sep='/'),
+            flatten_dict(all_train_states.actor.params, sep='/'),
             "all_params.safetensors"
         )
         if config["network"]["agent_param_sharing"]:
             safetensors.flax.save_file(
-                flatten_dict(final_train_state.params, sep='/'),
+                flatten_dict(final_train_state.actor.params, sep='/'),
                 "final_params.safetensors"
             )
         else:
             # split by agent
             split_params = _unstack_tree(
-                jax.tree.map(lambda x: x.swapaxes(0,1), final_train_state.params)
+                jax.tree.map(lambda x: x.swapaxes(0,1), final_train_state.actor.params)
             )
             for agent, params in zip(env.agents, split_params):
                 safetensors.flax.save_file(
@@ -172,7 +143,7 @@ def main(config):
 
         # RUN EVALUATION
         # Assume the first 2 dimensions are batch dims
-        batch_dims = jax.tree.leaves(_tree_shape(all_train_states.params))[:2]
+        batch_dims = jax.tree.leaves(_tree_shape(all_train_states.actor.params))[:2]
         n_sequential_evals = int(jnp.ceil(
             config["NUM_EVAL_EPISODES"] * jnp.prod(jnp.array(batch_dims))
             / config["GPU_ENV_CAPACITY"]
@@ -184,11 +155,8 @@ def main(config):
                 trainstate
             )
             return _tree_split(flat_trainstate, n_sequential_evals)
-        split_trainstate = jax.jit(_flatten_and_split_trainstate)(all_train_states)
-
-        eval_train_env, run_eval_train = make_evaluation(config, load_zoo=load_zoo_dict_train)
-        eval_test_env, run_eval_test = make_evaluation(config, load_zoo=load_zoo_dict_test)
-                
+        split_trainstate = jax.jit(_flatten_and_split_trainstate)(all_train_states.actor)
+        eval_env, run_eval = make_evaluation(config)
         eval_log_config = EvalInfoLogConfig(
             env_state=False,
             done=True,
@@ -200,39 +168,66 @@ def main(config):
             info=False,
             avail_actions=False,
         )
-        eval_train_jit = jax.jit(run_eval_train, static_argnames=["log_eval_info"])
-        eval_train_vmap = jax.vmap(eval_train_jit, in_axes=(None, 0, None))
-        eval_test_jit = jax.jit(run_eval_test, static_argnames=["log_eval_info"])
-        eval_test_vmap = jax.vmap(eval_test_jit, in_axes=(None, 0, None))
-        evals_train = _concat_tree([
-            eval_train_vmap(eval_rng, ts, eval_log_config)
-            for ts in tqdm(split_trainstate, desc="Evaluation batches")
-        ])
-        evals_train = jax.tree.map(
-            lambda x: x.reshape((*batch_dims, *x.shape[1:])),
-            evals_train
+        eval_jit = jax.jit(
+            run_eval,
+            static_argnames=["log_eval_info"],
         )
-        evals_test = _concat_tree([
-            eval_test_vmap(eval_rng, ts, eval_log_config)
+        eval_vmap = jax.vmap(eval_jit, in_axes=(None, 0, None))
+        evals = _concat_tree([
+            eval_vmap(eval_rng, ts, eval_log_config)
             for ts in tqdm(split_trainstate, desc="Evaluation batches")
         ])
-        evals_test = jax.tree.map(
+        evals = jax.tree.map(
             lambda x: x.reshape((*batch_dims, *x.shape[1:])),
-            evals_test
+            evals
         )
 
         # COMPUTE RETURNS
-        train_first_episode_returns = _compute_episode_returns(evals_train)
-        train_first_episode_returns = train_first_episode_returns["__all__"]
-        train_mean_episode_returns = train_first_episode_returns.mean(axis=-1)
-        test_first_episode_returns = _compute_episode_returns(evals_test)
-        test_first_episode_returns = test_first_episode_returns["__all__"]
-        test_mean_episode_returns = test_first_episode_returns.mean(axis=-1)
+        first_episode_returns = _compute_episode_returns(evals)
+        first_episode_returns = first_episode_returns["__all__"]
+        mean_episode_returns = first_episode_returns.mean(axis=-1)
 
         # SAVE RETURNS
-        jnp.save("train_returns.npy", train_mean_episode_returns)
-        jnp.save("test_returns.npy", test_mean_episode_returns)
+        jnp.save("returns.npy", mean_episode_returns)
 
+        # RENDER
+        # Run episodes for render (saving env_state at each timestep)
+        render_log_config = EvalInfoLogConfig(
+            env_state=True,
+            done=True,
+            action=False,
+            value=False,
+            reward=True,
+            log_prob=False,
+            obs=False,
+            info=False,
+            avail_actions=False,
+        )
+        eval_final = eval_jit(eval_rng, _tree_take(final_train_state.actor, 0, axis=0), render_log_config) # not sure why we don't just make final_train_state = out["runner_state"].train_state.actor already
+        first_episode_done = jnp.cumsum(eval_final.done["__all__"], axis=0, dtype=bool)
+        first_episode_rewards = eval_final.reward["__all__"] * (1-first_episode_done)
+        first_episode_returns = first_episode_rewards.sum(axis=0)
+        episode_argsort = jnp.argsort(first_episode_returns, axis=-1)
+        worst_idx = episode_argsort.take(0,axis=-1)
+        best_idx = episode_argsort.take(-1, axis=-1)
+        median_idx = episode_argsort.take(episode_argsort.shape[-1]//2, axis=-1)
+
+        from brax.io import html
+        worst_episode = _take_episode(
+            eval_final.env_state.env_state.pipeline_state, first_episode_done,
+            time_idx=-1, eval_idx=worst_idx,
+        )
+        median_episode = _take_episode(
+            eval_final.env_state.env_state.pipeline_state, first_episode_done,
+            time_idx=-1, eval_idx=median_idx,
+        )
+        best_episode = _take_episode(
+            eval_final.env_state.env_state.pipeline_state, first_episode_done,
+            time_idx=-1, eval_idx=best_idx,
+        )
+        html.save("final_worst.html", eval_env.sys, worst_episode)
+        html.save("final_median.html", eval_env.sys, median_episode)
+        html.save("final_best.html", eval_env.sys, best_episode)
 
 
 if __name__ == "__main__":
