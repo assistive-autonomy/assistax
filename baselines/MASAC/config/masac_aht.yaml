@@ -1,0 +1,77 @@
+defaults:
+  - network: ff_nps
+  - _self_
+
+ENV_NAME: scratchitch
+ENV_KWARGS:
+  ctrl_cost_weight: 0
+  homogenisation_method: max
+  backend: mjx
+  het_reward: False
+  disability:
+    joint_idx: 13
+    joint_restriction_factor: 1.0
+    joint_strength: 1.0
+    tremor_magnitude: 0.0
+TOTAL_TIMESTEPS: 6e6
+
+# NUM_STEPS: 256
+NUM_ENVS: 6
+NUM_SEEDS: 6
+SEED: 0
+NUM_EVAL_EPISODES: 32 # lower for rendering
+NUM_CHECKPOINTS: 256 # how often to save the training parameters for evaluating later
+
+TEST_DURING_TRAINING: True # not currently in use for SAC
+
+# RL HYPERPARAMETERS
+ALGORITHM: MASAC
+EXPLORE_STEPS: 5000  # number of steps to take with random actions at the start of training
+POLICY_UPDATE_DELAY: 4  # Every `policy_update_delay` q network learning steps the policy network is trained.
+                        # It is trained `policy_update_delay` times to compensate, this is a TD3 trick.
+
+# sizes
+BUFFER_SIZE: 1000000  # size of the replay buffer. Note: total size is this * num_devices
+BATCH_SIZE: 128
+
+# learning rates
+POLICY_LR: 3e-4  # the learning rate of the policy network optimizer
+Q_LR: 1e-3  # the learning rate of the Q network network optimizer
+ALPHA_LR: 3e-4  # the learning rate of the alpha optimizer
+MAX_GRAD_NORM: 10
+
+# SAC specific
+TAU: 0.005  # smoothing coefficient for target networks
+GAMMA: 0.99  # discount factor
+NUM_SAC_UPDATES: 32 # Epochs over data
+ROLLOUT_LENGTH: 8 # number of environment steps per vectorised environment.
+
+AUTOTUNE: True  # whether to autotune alpha
+TARGET_ENTROPY_SCALE: 5.0  # scale factor for target entropy (when auto-tuning)
+INIT_ALPHA: 0.1  # initial entropy value when not using autotune
+
+# WANDB
+# WANDB_GROUP: scratchitch
+# WANDB_RUN: test
+
+# COMPUTE OPTIONS
+GPU_ENV_CAPACITY: 8192
+DISABLE_JIT: False
+DEVICE: 0
+
+DETERMINISTIC_EVAL: False
+
+# ZOO SETTINGS
+ZOO_PATH: /home/leo/assistax/zoo
+
+eval: # path to actor all params for eval
+  path: /home/leo/assistax/JaxMARL/baselines/MASAC/outputs/mabrax/scratchitch/2025-01-16/11-52-11/actor_all_params.safetensors
+
+hydra:
+  job:
+    chdir: true
+  run:
+    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ""

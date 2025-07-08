@@ -7,6 +7,7 @@ ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
   backend: mjx
+  het_reward: False
   disability:
     joint_idx: 13
     joint_restriction_factor: 1.0
