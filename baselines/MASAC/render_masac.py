@@ -58,25 +58,10 @@ def _stack_tree(pytree_list, axis=0):
 def main(config):
     config = OmegaConf.to_container(config, resolve=True)
 
-    # IMPORT FUNCTIONS BASED ON ARCHITECTURE
-    # match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
-    #     case (False, False):
-    #         from ippo_ff_nps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
-    #         from ippo_ff_nps_mabrax import MultiActorCritic as NetworkArch
-    #     case (False, True):
-    #         from ippo_ff_ps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
-    #         from ippo_ff_ps_mabrax import ActorCritic as NetworkArch
-    #     case (True, False):
-    #         from ippo_rnn_nps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
-    #         from ippo_rnn_nps_mabrax import MultiActorCriticRNN as NetworkArch
-    #     case (True, True):
-    #         from ippo_rnn_ps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
-    #         from ippo_rnn_ps_mabrax import ActorCriticRNN as NetworkArch
-    #     case _:
-    #         raise Exception
 
-    from masac_ff_nps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
-    from masac_ff_nps_mabrax import MultiSACActor as NetworkArch
+
+    from masac_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
+    from masac_ff_nps import MultiSACActor as NetworkArch
 
     rng = jax.random.PRNGKey(config["SEED"])
     rng, eval_rng = jax.random.split(rng)
