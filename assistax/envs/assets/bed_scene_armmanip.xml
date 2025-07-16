@@ -1,0 +1,191 @@
+<mujoco model="panda scene">
+  <compiler angle="radian" meshdir="bed_assets" autolimits="true"/>
+
+  <asset>
+  <!-- Bed -->
+    <mesh file="bed_single_reduced.obj" scale="1.00 1.00 1.00"/>
+  <!-- Panda -->
+    <mesh file="link0_0.obj"/>
+    <mesh file="link0_1.obj"/>
+    <mesh file="link0_2.obj"/>
+    <mesh file="link0_3.obj"/>
+    <mesh file="link0_4.obj"/>
+    <mesh file="link0_5.obj"/>
+    <mesh file="link0_7.obj"/>
+    <mesh file="link0_8.obj"/>
+    <mesh file="link0_9.obj"/>
+    <mesh file="link0_10.obj"/>
+    <mesh file="link0_11.obj"/>
+    <mesh file="link1.obj"/>
+    <mesh file="link2.obj"/>
+    <mesh file="link3_0.obj"/>
+    <mesh file="link3_1.obj"/>
+    <mesh file="link3_2.obj"/>
+    <mesh file="link3_3.obj"/>
+    <mesh file="link4_0.obj"/>
+    <mesh file="link4_1.obj"/>
+    <mesh file="link4_2.obj"/>
+    <mesh file="link4_3.obj"/>
+    <mesh file="link5_0.obj"/>
+    <mesh file="link5_1.obj"/>
+    <mesh file="link5_2.obj"/>
+    <mesh file="link6_0.obj"/>
+    <mesh file="link6_1.obj"/>
+    <mesh file="link6_2.obj"/>
+    <mesh file="link6_3.obj"/>
+    <mesh file="link6_4.obj"/>
+    <mesh file="link6_5.obj"/>
+    <mesh file="link6_6.obj"/>
+    <mesh file="link6_7.obj"/>
+    <mesh file="link6_8.obj"/>
+    <mesh file="link6_9.obj"/>
+    <mesh file="link6_10.obj"/>
+    <mesh file="link6_11.obj"/>
+    <mesh file="link6_12.obj"/>
+    <mesh file="link6_13.obj"/>
+    <mesh file="link6_14.obj"/>
+    <mesh file="link6_15.obj"/>
+    <mesh file="link6_16.obj"/>
+    <mesh file="link7_0.obj"/>
+    <mesh file="link7_1.obj"/>
+    <mesh file="link7_2.obj"/>
+    <mesh file="link7_3.obj"/>
+    <mesh file="link7_4.obj"/>
+    <mesh file="link7_5.obj"/>
+    <mesh file="link7_6.obj"/>
+    <mesh file="link7_7.obj"/>
+    <mesh file="hand_0.obj"/>
+    <mesh file="hand_1.obj"/>
+    <mesh file="hand_2.obj"/>
+    <mesh file="hand_3.obj"/>
+    <mesh file="hand_4.obj"/>
+    <mesh file="finger_0.obj"/>
+    <mesh file="finger_1.obj"/>
+    <material name="off_white" rgba="0.901961 0.921569 0.929412 1"/>
+    <material class="panda" name="white" rgba="1 1 1 1"/>
+    <material class="panda" name="black" rgba="0.25 0.25 0.25 1"/>
+    <material class="panda" name="green" rgba="0 1 0 1"/>
+    <material class="panda" name="light_blue" rgba="0.039216 0.541176 0.780392 1"/>
+  </asset>
+
+  <default>
+    <geom contype="0" conaffinity="0"/>
+    <default class="bed">
+      <geom contype="0" conaffinity="0"/>
+      <material specular="0.5" shininess="0.25"/>
+      <default class="c_bed_mattress">
+        <geom contype="2" conaffinity="12" group="3" rgba="1 0 0 0.1"/>
+      </default>
+      <default class="c_bed_pillow">
+        <geom contype="1" conaffinity="32" group="3" rgba="1 0 0 0.1"/>
+      </default>
+      <default class="no-c_bed">
+        <geom contype="0" conaffinity="0" group="3" rgba="0 1 0 0.1"/>
+      </default>
+    </default>
+    <default class="humanoid">
+      <geom contype="0" conaffinity="0"/>
+      <default class="c_human_head">
+        <geom contype="32" conaffinity="1" />
+      </default>
+      <default class="c_human_right-arm">
+        <geom contype="16" conaffinity="6" />
+      </default>
+      <default class="c_human_body">
+        <geom contype="8" conaffinity="2"/>
+      </default>
+      <default class="no-c_human">
+        <geom contype="0" conaffinity="0"/>
+      </default>
+      <joint armature="1" damping="1" limited="true"/>
+      <general dyntype="none" biastype="affine" ctrlrange="-.4 .4" ctrllimited="true"/>
+      <material specular="0.5" rgba="0.4 0.33 0.26 1.0"/>
+    </default>
+    <default class="panda">
+      <geom contype="0" conaffinity="0"/>
+      <joint armature="0.1" damping="1" axis="0 0 1" range="-2.8973 2.8973"/>
+      <general dyntype="none" biastype="affine" ctrlrange="-1 1" ctrllimited="true" forcerange="-87 87"/>
+      <default class="finger">
+        <joint axis="0 1 0" type="slide" range="0 0.04"/>
+      </default>
+      <default class="c_robot_hand">
+        <geom contype="4" conaffinity="28" rgba="0 0 1 0.1"/>
+      </default>
+      <default class="c_robot_tool">
+        <geom contype="4" conaffinity="28" group="3" rgba="0 0 1 1.0"/>
+      </default>
+      <default class="no-c_robot">
+        <geom contype="0" conaffinity="0" group="3" rgba="0 1 0 0.1"/>
+      </default>
+    </default>
+    <default class="visual">
+      <geom type="mesh" contype="0" conaffinity="0" group="2"/>
+    </default>
+    <default class="disabled_collision">
+      <geom contype="0" conaffinity="0" group="3" rgba="0 1 0 0.1"/>
+    </default>
+  </default>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="120" elevation="-20"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <camera name="default" pos="0.846 -1.465 0.916" xyaxes="0.866 0.500 0.000 -0.171 0.296 0.940"/>
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane" conaffinity="1"/>
+    <body name="bed_container" pos="0 0 0" quat="0.5 0.5 0.5 0.5">
+      <include file="bed_assets/bed_bare.xml"/>
+    </body>
+    <body childclass="humanoid" name="humanoid_container" pos="1.00 0.00 0.9" euler="0 -1.5707963 0">
+      <include file="bed_assets/humanoid_bare_armmanip.xml"/>
+      <freejoint/>
+    </body>
+    <body childclass="panda" name="panda_container" pos="-0.25 -0.9 0" euler="0 0 1.57">
+      <include file="bed_assets/panda_bare_armmanip.xml"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <!-- Human -->
+    <general class="humanoid" gear="100" joint="abdomen_y" name="abdomen_y" biasprm="0 -0.004 0"/>
+    <general class="humanoid" gear="100" joint="abdomen_z" name="abdomen_z" biasprm="0 -0.004 0" />
+    <general class="humanoid" gear="100" joint="abdomen_x" name="abdomen_x" biasprm="0 -0.004 0" />
+    <general class="humanoid" gear="100" joint="right_hip_x" name="right_hip_x" biasprm="0 -0.004 0" />
+    <general class="humanoid" gear="100" joint="right_hip_z" name="right_hip_z" biasprm="0 -0.004 0" />
+    <general class="humanoid" gear="300" joint="right_hip_y" name="right_hip_y" biasprm="0 -0.0005 0" />
+    <general class="humanoid" gear="200" joint="right_knee" name="right_knee" biasprm="0 -0.000 0" />
+    <general class="humanoid" gear="100" joint="left_hip_x" name="left_hip_x" biasprm="0 -0.004 0" />
+    <general class="humanoid" gear="100" joint="left_hip_z" name="left_hip_z" biasprm="0 -0.004 0" />
+    <general class="humanoid" gear="300" joint="left_hip_y" name="left_hip_y" biasprm="0 -0.0005 0" />
+    <general class="humanoid" gear="200" joint="left_knee" name="left_knee" biasprm="0 -0.000 0" />
+    <general class="humanoid" gear="0" joint="right_shoulder1" name="right_shoulder1" biasprm="0 -0.001 0"/>
+    <general class="humanoid" gear="0" joint="right_shoulder2" name="right_shoulder2" biasprm="0 -0.001 0"/>
+    <general class="humanoid" gear="0" joint="right_elbow" name="right_elbow" biasprm="0 -0.001 0" />
+    <general class="humanoid" gear="25" joint="left_shoulder1" name="left_shoulder1" biasprm="0 -0.001 0"/>
+    <general class="humanoid" gear="25" joint="left_shoulder2" name="left_shoulder2" biasprm="0 -0.001 0"/>
+    <general class="humanoid" gear="25" joint="left_elbow" name="left_elbow" biasprm="0 -0.001 0"/>
+    <!-- Panda -->
+    <general class="panda" name="actuator1" joint="joint1" gainprm="4500" biasprm="0 -1433 -450" ctrlrange="-0.9222 0.9222"/>
+    <general class="panda" name="actuator2" joint="joint2" gainprm="4500" biasprm="0 -1433 -450" ctrlrange="-0.5611 0.5611"/>
+    <general class="panda" name="actuator3" joint="joint3" gainprm="3500" biasprm="0 -1115 -350" ctrlrange="-0.9222 0.9222"/>
+    <general class="panda" name="actuator4" joint="joint4" gainprm="3500" biasprm="0 -1115 -350" ctrlrange="-0.9778 -0.0222"/>
+    <general class="panda" name="actuator5" joint="joint5" gainprm="2000" biasprm="0 -637 -200" ctrlrange="-0.9222 0.9222" forcerange="-12 12"/>
+    <general class="panda" name="actuator6" joint="joint6" gainprm="2000" biasprm="0 -637 -200" ctrlrange="-0.0056 1.1945" forcerange="-12 12"/>
+    <general class="panda" name="actuator7" joint="joint7" gainprm="2000" biasprm="0 -637 -200" ctrlrange="-0.9222 0.9222" forcerange="-12 12"/>
+   </actuator>
+
+    <keyframe>
+        <key name="init" qpos='0.993262 -0.000105017 0.596627 0.763017 -3.73223e-05 -0.646378 -3.34884e-05 0.031416 -0.140084 7.77399e-05 0.000375903 0.00416532 0.01257 -0.0328086 0.000321011 0.00417231 0.0125667 -0.032815 -0.129915 -1.02842 -1.571 -0.755935 0.64877 -1.571 0.20279 0.00399175 -0.0587206 -0.06953 -0.0210571 -0.00660036 0.00690138'/>
+    </keyframe>
+  
+  </mujoco>

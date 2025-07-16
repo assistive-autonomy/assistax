@@ -1,0 +1,9 @@
+<mujoco model="bed">
+  <body name="bed">
+    <geom mesh="bed_single_reduced" class="visual" />
+    <geom name="bed_mattress" class="c_bed_mattress" type="box" pos="0.000 0.400 0.000" size="0.470 0.270 1.000" euler="0.000 0.000 0.000" />
+    <geom name="bed_footboard" class="no-c_bed" type="box" pos="0.000 0.250 1.025" size="0.470 0.250 0.035" euler="0.000 0.000 0.000" />
+    <geom name="bed_headboard" class="no-c_bed" type="box" pos="0.000 0.530 -1.035" size="0.470 0.530 0.035" euler="0.000 0.000 0.000" />
+    <geom name="bed_pillow" class="c_bed_pillow" type="capsule" fromto="-0.210 0.510 -0.540 0.210 0.510 -0.540" size="0.260"/>
+  </body>
+</mujoco>

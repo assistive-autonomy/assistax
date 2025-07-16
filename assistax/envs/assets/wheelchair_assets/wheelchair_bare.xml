@@ -1,0 +1,17 @@
+<mujoco model="wheelchair">
+  <body name="wheelchair" childclass="chair">
+    <geom mesh="wheelchair_permobil_reduced_compressed" material="off_white" class="visual" />
+    <geom class="c_chair_lower" name="chair_base" type="box" pos=" 0.0000  0.1350  0.0600" size="0.3450  0.1200  0.2850" euler="0.000 0.000 0.000"/> <!-- base -->
+    <geom class="c_chair_lower" name="chair_seat" type="box" pos=" 0.0000  0.3600 -0.0300" size="0.2700  0.0750  0.2400" euler="0.000 0.000 0.000"/> <!-- seat -->
+    <geom class="no-c_chair" name="chair_stem" type="box" pos=" 0.0000  0.2700  0.0450" size="0.0750  0.0600  0.2250" euler="0.000 0.000 0.000"/> <!-- stem -->
+    <geom class="no-c_chair" name="chair_trunk" type="box" pos=" 0.0000  0.4650  0.1950" size="0.1500  0.1440  0.0300" euler="0.297 0.000 0.000"/> <!-- trunk -->
+    <geom class="c_chair_upper" name="chair_back" type="box" pos=" 0.0000  0.7350  0.2100" size="0.2250  0.2250  0.0330" euler="0.297 0.000 0.000"/> <!-- back -->
+    <geom class="c_chair_upper" name="chair_arm1" type="box" pos=" 0.2475  0.6255 -0.0300" size="0.0375  0.0225  0.1725" euler="0.087 0.000 0.000"/> <!-- arm -->
+    <geom class="c_chair_upper" name="chair_arm2" type="box" pos="-0.2475  0.6255 -0.0300" size="0.0375  0.0225  0.1725" euler="0.087 0.000 0.000"/> <!-- arm -->
+    <geom class="c_chair_upper" name="chair_headrest" type="box" pos=" 0.0000  1.1025  0.2850" size="0.1200  0.0750  0.0300" euler="0.384 0.000 0.000"/> <!-- headrest -->
+    <geom class="no-c_chair" name="chair_neck" type="box" pos=" 0.0000  1.0200  0.3150" size="0.0150  0.0750  0.0300" euler="-0.332 0.000 0.000"/> <!-- neck -->
+    <geom class="no-c_chair" name="chair_wheel1" type="box" pos="-0.3300  0.0450 -0.0150" size="0.0600  0.1050  0.3900" euler="0.000 0.000 0.000"/> <!-- wheel -->
+    <geom class="no-c_chair" name="chair_wheel2" type="box" pos=" 0.3300  0.0450 -0.0150" size="0.0600  0.1050  0.3900" euler="0.000 0.000 0.000"/> <!-- wheel -->
+    <geom class="c_chair_lower" name="chair_footrest" type="box" pos=" 0.0000  0.0300 -0.4050" size="0.2100  0.1350  0.0075" euler="-1.571 0.000 0.000"/> <!-- footrest -->
+  </body>
+</mujoco>
