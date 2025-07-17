@@ -36,7 +36,7 @@ import distrax
 import jaxmarl
 from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
 from jaxmarl.wrappers.baselines import LogWrapper
-from jaxmarl.wrappers.aht import ZooManager # check whether this should be aht_all 
+from jaxmarl.wrappers.aht import ZooManager # check whether this should be  
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict

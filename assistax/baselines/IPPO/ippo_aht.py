@@ -34,7 +34,7 @@ import distrax
 import jaxmarl
 from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
 from jaxmarl.wrappers.baselines import LogWrapper
-from jaxmarl.wrappers.aht_all import ZooManager, LoadAgentWrapper
+from jaxmarl.wrappers.aht import ZooManager, LoadAgentWrapper
 import hydra
 from omegaconf import OmegaConf
 import pandas as pd

@@ -51,7 +51,7 @@ from flax.core.scope import FrozenVariableDict
 from flax.traverse_util import flatten_dict
 from flashbax.buffers.trajectory_buffer import TrajectoryBufferState
 from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper, LogCrossplayWrapper
-from jaxmarl.wrappers.aht_all import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
+from jaxmarl.wrappers.aht import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, TypeAlias, Dict, Optional
 from functools import partial
@@ -853,7 +853,7 @@ def make_train(config, save_train_state=True, load_zoo=False):
                     
                     Args:
                         runner_state: Current training state
-                        rng: Random number generator key
+                        rng
                         
                     Returns:
                         Tuple of (updated_runner_state, metrics)

@@ -67,7 +67,6 @@ class BedBathing(PipelineEnv):
         BODY_IDX = mujoco.mjtObj.mjOBJ_BODY
         ACTUATOR_IDX = mujoco.mjtObj.mjOBJ_ACTUATOR
         SITE_IDX = mujoco.mjtObj.mjOBJ_SITE
-        print(GEOM_IDX)
         
         self.panda_actuators_ids = []
         self.humanoid_actuators_ids = []
