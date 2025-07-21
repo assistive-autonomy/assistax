@@ -19,10 +19,10 @@ import functools
 from typing import Dict, Optional, Type, Any
 
 
-from brax.envs import scratchitch
-from brax.envs import bedbathing
-from brax.envs import armmanipulation
-from brax.envs import pushcoop
+from assistax.envs import scratchitch
+from assistax.envs import bedbathing
+from assistax.envs import armmanipulation
+from assistax.envs import pushcoop
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from brax.envs.wrappers import training
 
