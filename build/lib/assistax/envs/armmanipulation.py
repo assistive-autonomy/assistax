@@ -50,7 +50,7 @@ class ArmManipulation(PipelineEnv):
           backend: str, the physics backend to use
           **kwargs: Arguments that are passed to the base class.
         """
-        self.path = epath.resource_path("assistax") / "envs/assets/bed_scene_armmanip.xml"
+        self.path = epath.resource_path("brax") / "envs/assets/bed_scene_armmanip.xml"
 
         mjmodel = mujoco.MjModel.from_xml_path(str(self.path))
         self.sys = mjcf.load_model(mjmodel)

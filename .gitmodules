@@ -1,6 +1,0 @@
-[submodule "submodules/brax"]
-	path = submodules/brax
-	url = https://github.com/LeoHink/brax-assistax.git
-[submodule "submodules/jaxmarl"]
-	path = submodules/jaxmarl
-	url = https://github.com/LeoHink/JaxMARL-assistax.git
