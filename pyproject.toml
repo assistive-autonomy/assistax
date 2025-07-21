@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "assistax"
 version = "0.1.0"
-description = "Assistax: A JAX-based hardware-accelerated benchmark environment for reinforcement learning in assistive robotics."
+description = "Your JAX-based RL project with custom brax and jaxmarl forks"
 authors = [
-    {name = "Leonard Hinckeldey", email = "l.hinckeldey@ed.ac.uk"}
+    {name = "Your Name", email = "your.email@example.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.11.11,<3.12"
@@ -19,19 +19,25 @@ classifiers = [
 ]
 
 dependencies = [
-
-    # Core JAX ecosystem - exact versions to match your working environment
+    # ⚠️  CRITICAL: All dependencies use exact versions (==) because JAX ecosystem is fragile
+    # DO NOT change to >= unless you test thoroughly
+    
+    # CRITICAL: Core JAX ecosystem - exact versions to match your working environment
     "jax[cuda12]==0.4.37",
+    # "jax==0.4.37",
+    # "jaxlib==0.4.36",
+    # "jax-cuda12-pjrt==0.4.36",
+    # "jax-cuda12-plugin==0.4.36",
+    # "jaxopt==0.8.5",
     "jaxtyping==0.3.2",
-    "flax==0.10.2",
-    "optax==0.2.5",
-    "chex==0.1.89",
-    "distrax==0.1.5",
+    # "flax==0.10.2",
+    # "optax==0.2.5",
+    # "chex==0.1.89",
+    # "distrax==0.1.5",
     
     # Your custom forks (replace with your actual GitHub URLs)
     # "brax @ git+https://github.com/LeoHink/brax-assistax.git",
-    "jaxmarl @ git+https://github.com/LeoHink/JaxMARL-assistax.git",
-    "brax==0.10.4",
+    # "jaxmarl @ git+https://github.com/LeoHink/JaxMARL-assistax.git",
     
     # RL and environment libraries - exact versions
     "gymnasium==1.2.0",

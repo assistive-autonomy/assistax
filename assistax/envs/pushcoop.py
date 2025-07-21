@@ -44,7 +44,7 @@ class PushCoop(PipelineEnv):
             t_dist_weight: Weight for t distance.
             t_contact_weight: Weight for t contact distance.
         """
-        self.path = epath.resource_path("assistax") / "envs/assets/push_coop.xml"
+        self.path = epath.resource_path("brax") / "envs/assets/push_coop.xml"
 
         mjmodel = mujoco.MjModel.from_xml_path(str(self.path))
         self.sys = mjcf.load_model(mjmodel)

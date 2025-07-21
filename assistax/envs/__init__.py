@@ -19,10 +19,10 @@ import functools
 from typing import Dict, Optional, Type, Any
 
 
-from assistax.envs import scratchitch
-from assistax.envs import bedbathing
-from assistax.envs import armmanipulation
-from assistax.envs import pushcoop
+from brax.envs import scratchitch
+from brax.envs import bedbathing
+from brax.envs import armmanipulation
+from brax.envs import pushcoop
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from brax.envs.wrappers import training
 
@@ -93,5 +93,7 @@ def create(
         env = training.AutoResetWrapper(env)
     if disability:
         env = training.DisabilityWrapper(env, disability)
+    if pixel_obs:
+        env = training.PixelWrapper(env, **pixel_obs)
 
     return env
