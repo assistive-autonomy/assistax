@@ -25,6 +25,7 @@ from assistax.envs import armmanipulation
 from assistax.envs import pushcoop
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from brax.envs.wrappers import training
+from assistax.envs.wrappers import disable
 
 _envs = {
     "scratchitch": scratchitch.ScratchItch,
@@ -92,8 +93,6 @@ def create(
     if auto_reset:
         env = training.AutoResetWrapper(env)
     if disability:
-        env = training.DisabilityWrapper(env, disability)
-    if pixel_obs:
-        env = training.PixelWrapper(env, **pixel_obs)
+        env = disable.DisabilityWrapper(env, disability)
 
     return env
