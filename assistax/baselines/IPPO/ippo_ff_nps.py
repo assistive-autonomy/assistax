@@ -21,7 +21,6 @@ from flax.training.train_state import TrainState
 import optax
 import distrax
 import assistax
-# import jaxmarl
 from assistax.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper, LogCrossplayWrapper
 from assistax.wrappers.aht import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
 import hydra

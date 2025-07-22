@@ -39,7 +39,7 @@ import jax.numpy as jnp
 import flax.linen as nn
 import optax
 import distrax
-import jaxmarl
+import assistax
 import safetensors.flax
 import flashbax as fbx
 import hydra
@@ -50,8 +50,8 @@ from flax import struct
 from flax.core.scope import FrozenVariableDict
 from flax.traverse_util import flatten_dict
 from flashbax.buffers.trajectory_buffer import TrajectoryBufferState
-from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper, LogCrossplayWrapper
-from jaxmarl.wrappers.aht import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
+from assistax.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper, LogCrossplayWrapper
+from assistax.wrappers.aht import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, TypeAlias, Dict, Optional
 from functools import partial
@@ -534,10 +534,10 @@ def make_train(config, save_train_state=True, load_zoo=False):
     # ===== ENVIRONMENT SETUP =====
     if load_zoo:
         zoo = ZooManager(config["ZOO_PATH"])
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
     else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     # ===== TRAINING CONFIGURATION =====
     config["NUM_UPDATES"] = int(jnp.ceil(
@@ -1202,13 +1202,13 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
     # ===== ENVIRONMENT SETUP =====
     if load_zoo:
         zoo = ZooManager(config["ZOO_PATH"])
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         if crossplay:
             env = LoadEvalAgentWrapper.load_from_zoo(env, zoo, load_zoo)
         else:
             env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
     else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     # ===== CONFIGURATION SETUP =====
     config["OBS_DIM"] = int(get_space_dim(env.observation_space(env.agents[0])))
@@ -1451,7 +1451,7 @@ def main(config):
 
         # ===== SAVE MODEL PARAMETERS =====
         print("Saving model parameters...")
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 
         all_train_states_actor = out["metrics"]["actor_train_state"]
         all_train_states_q1 = out["metrics"]["q1_train_state"]
@@ -1605,11 +1605,11 @@ if __name__ == "__main__":
 # import distrax
 # import sys
 # import numpy as np
-# import jaxmarl
+# import assistax
 # # from jaxmarl.distributions.tanh_distribution import TanhTransformedDistribution # try new distribution
-# from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-# from jaxmarl.wrappers.baselines import LogWrapper, LogCrossplayWrapper
-# from jaxmarl.wrappers.aht_all import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
+# from assistax.wrappers.baselines import get_space_dim, LogEnvState
+# from assistax.wrappers.baselines import LogWrapper, LogCrossplayWrapper
+# from assistax.wrappers.aht_all import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
 # import hydra
 # from omegaconf import OmegaConf
 # from typing import Sequence, NamedTuple, TypeAlias, Any, Dict, Optional
@@ -1864,10 +1864,10 @@ if __name__ == "__main__":
 # def make_train(config, save_train_state=True, load_zoo=False): 
 #     if load_zoo:
 #         zoo = ZooManager(config["ZOO_PATH"])
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #         env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
 #     else:
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #     config["NUM_UPDATES"] = int(jnp.ceil(
 #         config["TOTAL_TIMESTEPS"] / config["ROLLOUT_LENGTH"] / config["NUM_ENVS"])
 #     ) # round up to do at least config["TOTAL_TIMESTEPS"]
@@ -2464,13 +2464,13 @@ if __name__ == "__main__":
 # # def make_evaluation(config, load_zoo=False, crossplay=False):
 # #     if load_zoo:
 # #         zoo = ZooManager(config["ZOO_PATH"])
-# #         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+# #         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 # #         if crossplay:
 # #             env = LoadEvalAgentWrapper.load_from_zoo(env, zoo, load_zoo, crossplay)
 # #         else:
 # #             env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
 # #     else:
-# #         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+# #         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 # #     config["OBS_DIM"] = get_space_dim(env.observation_space(env.agents[0]))
 # #     config["ACT_DIM"] = get_space_dim(env.action_space(env.agents[0]))
 # #     env = LogWrapper(env, replace_info=True)
@@ -2481,13 +2481,13 @@ if __name__ == "__main__":
 # def make_evaluation(config, load_zoo=False, crossplay=False):
 #     if load_zoo:
 #         zoo = ZooManager(config["ZOO_PATH"])
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #         if crossplay:
 #             env = LoadEvalAgentWrapper.load_from_zoo(env, zoo, load_zoo)
 #         else:
 #             env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
 #     else:
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #     config["OBS_DIM"] = int(get_space_dim(env.observation_space(env.agents[0])))
 #     config["ACT_DIM"] = int(get_space_dim(env.action_space(env.agents[0])))
 #     if crossplay:
@@ -2685,7 +2685,7 @@ if __name__ == "__main__":
 #         )
 
 #         # SAVE PARAMS
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 
 #         all_train_states_actor = out["metrics"]["actor_train_state"]
 #         all_train_states_q1 = out["metrics"]["q1_train_state"]

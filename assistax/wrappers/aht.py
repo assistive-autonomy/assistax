@@ -14,7 +14,7 @@ from flax.training.train_state import TrainState
 from flax.traverse_util import flatten_dict, unflatten_dict
 import safetensors.flax
 from jaxmarl.environments.multi_agent_env import State, MultiAgentEnv
-from jaxmarl.wrappers.baselines import JaxMARLWrapper
+from assistax.wrappers.baselines import JaxMARLWrapper
 from typing import Sequence, NamedTuple, Any, Dict, Optional, Callable, Tuple, List
 import functools
 from omegaconf import OmegaConf

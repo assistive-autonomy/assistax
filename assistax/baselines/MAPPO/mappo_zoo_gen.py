@@ -15,8 +15,8 @@ import hydra
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-import jaxmarl
-from jaxmarl.wrappers.aht import ZooManager
+import assistax
+from assistax.wrappers.aht import ZooManager
 
 
 # ============================================================================
@@ -297,7 +297,7 @@ def _run_training_pipeline(config: Dict):
     print(f"  Clip epsilon: {config['CLIP_EPS']}")
     
     # Initialize environment for agent information
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     print(f"  Number of agents: {len(env.agents)}")
     print(f"  Agent IDs: {env.agents}")
     

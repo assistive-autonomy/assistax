@@ -5,48 +5,6 @@ This module implements ISAC, an off-policy multi-agent reinforcement learning al
 based on Soft Actor-Critic (SAC). ISAC extends SAC to multi-agent environments where
 each agent learns independently with its own networks and experience.
 
-Algorithm Overview:
-==================
-
-ISAC is built on the maximum entropy reinforcement learning framework, where agents
-learn policies that maximize both expected reward and entropy (exploration). Key components:
-
-1. **Actor Networks**: Learn stochastic policies that output action distributions
-2. **Dual Q-Networks**: Two critic networks (Q1, Q2) to reduce overestimation bias
-3. **Target Networks**: Slowly updated copies of Q-networks for stable learning
-4. **Experience Replay**: Off-policy learning from stored transitions
-5. **Automatic Entropy Tuning**: Learns optimal exploration-exploitation balance
-
-Key ISAC Features:
-=================
-- **Off-Policy Learning**: Can reuse past experiences via replay buffer
-- **Maximum Entropy**: Balances reward maximization with exploration
-- **Dual Critics**: Q1 and Q2 networks reduce Q-value overestimation
-- **Soft Updates**: Gradual target network updates for stability
-- **Independent Learning**: Each agent has separate networks (no parameter sharing)
-- **Continuous Actions**: Designed for continuous control tasks
-
-Network Architecture:
-====================
-- **Actor**: obs → mean, std → action distribution
-- **Q-Networks**: (obs, action) → Q-value
-- **Target Networks**: Slowly updated copies of Q-networks
-
-Training Process:
-================
-1. **Exploration Phase**: Random actions to populate replay buffer
-2. **Experience Collection**: Collect transitions using current policy
-3. **Q-Network Updates**: Update Q1, Q2 using target Q-values
-4. **Policy Updates**: Update actor to maximize Q-values minus entropy
-5. **Target Updates**: Soft update of target networks
-6. **Entropy Tuning**: Adjust entropy coefficient automatically
-
-Research Applications:
-=====================
-- Continuous multi-agent control (robotics, autonomous vehicles)
-- Sample efficiency studies (off-policy vs on-policy)
-- Exploration vs exploitation analysis
-- Multi-agent coordination in continuous spaces
 """
 
 import os
@@ -66,9 +24,8 @@ import tensorflow_probability.substrates.jax.distributions as tfd
 from flax.core.scope import FrozenVariableDict
 import flashbax as fbx
 from flashbax.buffers.trajectory_buffer import TrajectoryBufferState
-
-import jaxmarl
-from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper
+import assistax
+from assistax.wrappers.baselines import  get_space_dim, LogEnvState, LogWrapper
 
 
 # ============================================================================
@@ -429,7 +386,7 @@ def make_train(config, save_train_state=True):
         Compiled training function
     """
     # Initialize environment and configuration
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     # Calculate training parameters
     config["NUM_UPDATES"] = (
@@ -1129,7 +1086,7 @@ def make_evaluation(config):
         Tuple of (environment, evaluation_function)
     """
     # Initialize environment
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     config["OBS_DIM"] = get_space_dim(env.observation_space(env.agents[0]))
     config["ACT_DIM"] = get_space_dim(env.action_space(env.agents[0]))
     env = LogWrapper(env, replace_info=True)
@@ -1248,9 +1205,9 @@ def make_evaluation(config):
 # import distrax
 # import sys
 # import numpy as np
-# import jaxmarl
-# from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-# from jaxmarl.wrappers.baselines import LogWrapper
+# import assistax
+# from assistax.wrappers.baselines import get_space_dim, LogEnvState
+# from assistax.wrappers.baselines import LogWrapper
 # import hydra
 # from omegaconf import OmegaConf
 # from typing import Sequence, NamedTuple, TypeAlias, Any, Dict
@@ -1483,7 +1440,7 @@ def make_evaluation(config):
 
 
 # def make_train(config, save_train_state=True): 
-#     env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#     env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #     config["NUM_UPDATES"] = (
 #         config["TOTAL_TIMESTEPS"] // config["ROLLOUT_LENGTH"] // config["NUM_ENVS"]
 #     )
@@ -2037,7 +1994,7 @@ def make_evaluation(config):
 #     return train
 
 # def make_evaluation(config):
-#     env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#     env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #     config["OBS_DIM"] = get_space_dim(env.observation_space(env.agents[0]))
 #     config["ACT_DIM"] = get_space_dim(env.action_space(env.agents[0]))
 #     env = LogWrapper(env, replace_info=True)
@@ -2152,7 +2109,7 @@ def make_evaluation(config):
 #         )
 
 #         # SAVE PARAMS
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 
 #         all_train_states_actor = out["metrics"]["actor_train_state"]
 #         all_train_states_q1 = out["metrics"]["q1_train_state"]

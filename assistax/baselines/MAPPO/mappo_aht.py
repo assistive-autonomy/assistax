@@ -18,8 +18,8 @@ from tqdm import tqdm
 from flax.traverse_util import flatten_dict
 import safetensors.flax
 
-import jaxmarl
-from jaxmarl.wrappers.aht import ZooManager, LoadAgentWrapper
+import assistax
+from assistax.wrappers.aht import ZooManager, LoadAgentWrapper
 
 
 # ============================================================================
@@ -456,7 +456,7 @@ def _save_training_results(config: Dict, training_results: Dict):
     jnp.save("metrics.npy", filtered_metrics, allow_pickle=True)
     
     # Save model parameters
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     all_train_states = metrics["train_state"]
     final_train_state = training_results["training_results"]["runner_state"].train_state
     

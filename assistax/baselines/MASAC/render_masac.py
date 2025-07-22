@@ -391,9 +391,9 @@ if __name__ == "__main__":
 # import safetensors.flax
 # import optax
 # import distrax
-# import jaxmarl
-# from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-# from jaxmarl.wrappers.baselines import LogWrapper
+# import assistax
+# from assistax.wrappers.baselines import get_space_dim, LogEnvState
+# from assistax.wrappers.baselines import LogWrapper
 # import hydra
 # from omegaconf import OmegaConf
 # from typing import Sequence, NamedTuple, Any, Dict, Callable

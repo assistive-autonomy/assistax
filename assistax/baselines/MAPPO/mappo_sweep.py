@@ -34,7 +34,7 @@ import hydra
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-import jaxmarl
+import assistax
 
 
 # ============================================================================
@@ -292,7 +292,7 @@ def _save_model_parameters(config_key: str, config: Dict, all_train_states, fina
     For parameter sharing: saves single set of parameters
     For no parameter sharing: saves separate parameters for each agent
     """
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     # Save all training states (across sweep)
     safetensors.flax.save_file(
@@ -593,9 +593,9 @@ if __name__ == "__main__":
 # import safetensors.flax
 # import optax
 # import distrax
-# import jaxmarl
-# from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-# from jaxmarl.wrappers.baselines import LogWrapper
+# import assistax
+# from assistax.wrappers.baselines import get_space_dim, LogEnvState
+# from assistax.wrappers.baselines import LogWrapper
 # import hydra
 # from omegaconf import OmegaConf
 # from typing import Sequence, NamedTuple, Any, Dict
@@ -783,7 +783,7 @@ if __name__ == "__main__":
 #         )
 
 #         # SAVE PARAMS
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #         all_train_states = out["metrics"]["train_state"]
 #         final_train_state = out["runner_state"].train_state
 #         safetensors.flax.save_file(

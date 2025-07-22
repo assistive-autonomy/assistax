@@ -31,10 +31,9 @@ from flax.traverse_util import flatten_dict
 import safetensors.flax
 import optax
 import distrax
-import jaxmarl
-from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-from jaxmarl.wrappers.baselines import LogWrapper
-from jaxmarl.wrappers.aht import ZooManager, LoadAgentWrapper
+import assistax
+from assistax.wrappers.baselines import  get_space_dim, LogEnvState, LogWrapper
+from assistax.wrappers.aht import ZooManager, LoadAgentWrapper
 import hydra
 from omegaconf import OmegaConf
 import pandas as pd
@@ -297,7 +296,7 @@ def main(config):
 
         # ===== AHT TRAINING EXECUTION =====
         print("Starting Ad Hoc Teamwork training...")
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         
         # Create training function with zoo partner loading
         train_jit = jax.jit(

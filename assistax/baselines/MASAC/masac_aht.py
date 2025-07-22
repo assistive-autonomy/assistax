@@ -45,8 +45,8 @@ import safetensors.flax
 from tqdm import tqdm
 from flax.traverse_util import flatten_dict
 from omegaconf import OmegaConf
-import jaxmarl
-from jaxmarl.wrappers.aht import ZooManager
+import assistax
+from assistax.wrappers.aht import ZooManager
 from typing import Dict, Any, List
 
 
@@ -395,7 +395,7 @@ def main(config):
         raise ValueError("Insufficient agents in zoo for train/test split. Need at least 2 agents.")
     
     # ===== ENVIRONMENT SETUP =====
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     print(f"Environment agents: {env.agents}")
     
     # ===== RANDOM NUMBER GENERATOR SETUP =====
@@ -637,10 +637,10 @@ if __name__ == "__main__":
 # import safetensors.flax
 # import optax
 # import distrax
-# import jaxmarl
-# from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-# from jaxmarl.wrappers.baselines import LogWrapper
-# from jaxmarl.wrappers.aht import ZooManager
+# import assistax
+# from assistax.wrappers.baselines import get_space_dim, LogEnvState
+# from assistax.wrappers.baselines import LogWrapper
+# from assistax.wrappers.aht import ZooManager
 # import hydra
 # from omegaconf import OmegaConf
 # from typing import Sequence, NamedTuple, Any, Dict
@@ -783,7 +783,7 @@ if __name__ == "__main__":
 #                                  ).query('scenario_agent_id == "human"')
 #         train_set = index_filtered.sample(frac=0.5)
 #         test_set = index_filtered.drop(train_set.index)
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #         train_jit = jax.jit(
 #             make_train(
 #                 config,
@@ -811,7 +811,7 @@ if __name__ == "__main__":
 #         )
 
 #         # SAVE PARAMS
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #         all_train_states = out["metrics"]["train_state"]
 #         final_train_state = out["runner_state"].train_state
 #         safetensors.flax.save_file(

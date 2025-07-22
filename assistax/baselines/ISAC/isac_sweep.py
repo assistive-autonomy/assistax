@@ -24,7 +24,7 @@ from tqdm import tqdm
 from flax.traverse_util import flatten_dict
 import safetensors.flax
 
-import jaxmarl
+import assistax
 
 
 # ============================================================================
@@ -210,7 +210,7 @@ def _save_hyperparameters(config_key: str, sweep: Dict, config: Dict):
 
 def _save_model_parameters(config_key: str, config: Dict, all_train_states, final_train_state):
     """Save ISAC model parameters (actor only for evaluation)."""
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     # Save all actor training states (Q-networks not needed for evaluation)
     safetensors.flax.save_file(
@@ -467,9 +467,9 @@ if __name__ == "__main__":
 # import safetensors.flax
 # import optax
 # import distrax
-# import jaxmarl
-# from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-# from jaxmarl.wrappers.baselines import LogWrapper
+# import assistax
+# from assistax.wrappers.baselines import get_space_dim, LogEnvState
+# from assistax.wrappers.baselines import LogWrapper
 # import hydra
 # from omegaconf import OmegaConf
 # from typing import Sequence, NamedTuple, Any, Dict
@@ -679,7 +679,7 @@ if __name__ == "__main__":
 #         )
 
 #         # SAVE PARAMS
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #         all_train_states = out["metrics"]["actor_train_state"]
 
 #         final_train_state = out["runner_state"].train_states.actor

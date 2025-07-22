@@ -11,9 +11,9 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 import safetensors.flax
 import optax
 import distrax
-import jaxmarl
-from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-from jaxmarl.wrappers.baselines import LogWrapper
+import assistax
+from assistax.wrappers.baselines import get_space_dim, LogEnvState
+from assistax.wrappers.baselines import LogWrapper
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict, Callable
@@ -121,7 +121,7 @@ def main(config):
 
         # ===== SAVE MODEL PARAMETERS =====
         print("Saving model parameters...")
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 
         all_train_states_actor = out["metrics"]["actor_train_state"]
         all_train_states_q1 = out["metrics"]["q1_train_state"]

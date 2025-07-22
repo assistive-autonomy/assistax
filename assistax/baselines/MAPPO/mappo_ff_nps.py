@@ -10,10 +10,10 @@ from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 import optax
 import distrax
-import jaxmarl
-from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-from jaxmarl.wrappers.baselines import LogWrapper, LogCrossplayWrapper
-from jaxmarl.wrappers.aht import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
+import assistax
+from assistax.wrappers.baselines import get_space_dim, LogEnvState
+from assistax.wrappers.baselines import LogWrapper, LogCrossplayWrapper
+from assistax.wrappers.aht import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict, Optional
@@ -176,10 +176,10 @@ def make_train(config, save_train_state=False, load_zoo=False):
      
     if load_zoo:
         zoo = ZooManager(config["ZOO_PATH"])
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
     else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -558,13 +558,13 @@ def make_train(config, save_train_state=False, load_zoo=False):
 def make_evaluation(config, load_zoo=False, crossplay=False):
     if load_zoo:
         zoo = ZooManager(config["ZOO_PATH"])
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         if crossplay:
             env = LoadEvalAgentWrapper.load_from_zoo(env, zoo, load_zoo)
         else:
             env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
     else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     config["OBS_DIM"] = int(get_space_dim(env.observation_space(env.agents[0])))
     config["ACT_DIM"] = int(get_space_dim(env.action_space(env.agents[0])))
     config["GOBS_DIM"] = int(get_space_dim(env.observation_space("global")))

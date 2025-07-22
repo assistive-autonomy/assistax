@@ -40,9 +40,9 @@ from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 import optax
 import distrax
-import jaxmarl
-from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-from jaxmarl.wrappers.baselines import LogWrapper
+import assistax
+from assistax.wrappers.baselines import  get_space_dim, LogEnvState, LogWrapper
+from assistax.wrappers.aht import ZooManager, LoadAgentWrapper
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict, Optional
@@ -332,7 +332,7 @@ def make_train(config, save_train_state=False):
         Compiled training function
     """
     # Environment setup
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     # Configuration calculations
     config["NUM_UPDATES"] = (
@@ -776,7 +776,7 @@ def make_evaluation(config):
         Tuple of (environment, evaluation_function)
     """
     # Environment setup
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     config["OBS_DIM"] = get_space_dim(env.observation_space(env.agents[0]))
     config["ACT_DIM"] = get_space_dim(env.action_space(env.agents[0]))
     env = LogWrapper(env, replace_info=True)
@@ -999,9 +999,9 @@ if __name__ == "__main__":
 # from flax.training.train_state import TrainState
 # import optax
 # import distrax
-# import jaxmarl
-# from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-# from jaxmarl.wrappers.baselines import LogWrapper
+# import assistax
+# from assistax.wrappers.baselines import get_space_dim, LogEnvState
+# from assistax.wrappers.baselines import LogWrapper
 # import hydra
 # from omegaconf import OmegaConf
 # from typing import Sequence, NamedTuple, Any, Dict, Optional
@@ -1154,7 +1154,7 @@ if __name__ == "__main__":
 #     return dict(zip(agents, jnp.split(qty, len(agents))))
 
 # def make_train(config, save_train_state=False):
-#     env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#     env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #     config["NUM_UPDATES"] = (
 #         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
 #     )
@@ -1506,7 +1506,7 @@ if __name__ == "__main__":
 #     return train
 
 # def make_evaluation(config):
-#     env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#     env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #     config["OBS_DIM"] = get_space_dim(env.observation_space(env.agents[0]))
 #     config["ACT_DIM"] = get_space_dim(env.action_space(env.agents[0]))
 #     env = LogWrapper(env, replace_info=True)

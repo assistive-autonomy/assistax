@@ -16,7 +16,7 @@ from tqdm import tqdm
 from flax.traverse_util import flatten_dict
 import safetensors.flax
 
-import jaxmarl
+import assistax
 
 
 # ============================================================================
@@ -276,7 +276,7 @@ def _save_model_parameters(config: Dict, training_results: Dict):
         )
     else:
         # No parameter sharing: separate parameters per agent
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         split_params = _unstack_tree(
             jax.tree.map(lambda x: x.swapaxes(0, 1), final_train_state.actor.params)
         )

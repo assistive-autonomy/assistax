@@ -17,9 +17,9 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 import safetensors.flax
 import optax
 import distrax
-import jaxmarl
-from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-from jaxmarl.wrappers.baselines import LogWrapper
+import assistax
+from assistax.wrappers.baselines import get_space_dim, LogEnvState
+from assistax.wrappers.baselines import LogWrapper
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict, Callable

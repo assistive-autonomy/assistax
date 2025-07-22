@@ -56,7 +56,7 @@ from tqdm import tqdm
 from flax import struct
 from flax.traverse_util import unflatten_dict
 from omegaconf import OmegaConf
-from jaxmarl.wrappers.aht_all import ZooManager, extract_uuids_from_eval_results
+from assistax.wrappers.aht_all import ZooManager, extract_uuids_from_eval_results
 from hydra.utils import to_absolute_path
 from typing import Dict, List, Any, Callable, Tuple
 
@@ -802,10 +802,10 @@ if __name__ == "__main__":
 # import safetensors.flax
 # import optax
 # import distrax
-# import jaxmarl
-# from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-# from jaxmarl.wrappers.baselines import LogWrapper
-# from jaxmarl.wrappers.aht_all import ZooManager, LoadAgentWrapper, extract_uuids_from_eval_results
+# import assistax
+# from assistax.wrappers.baselines import get_space_dim, LogEnvState
+# from assistax.wrappers.baselines import LogWrapper
+# from assistax.wrappers.aht_all import ZooManager, LoadAgentWrapper, extract_uuids_from_eval_results
 # import hydra
 # from omegaconf import OmegaConf
 # import pandas as pd

@@ -25,9 +25,9 @@ import distrax
 import hydra
 from omegaconf import OmegaConf
 
-import jaxmarl
-from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper
-from jaxmarl.wrappers.aht import ZooManager, LoadAgentWrapper
+import assistax
+from assistax.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper
+from assistax.wrappers.aht import ZooManager, LoadAgentWrapper
 
 
 # ============================================================================
@@ -354,10 +354,10 @@ def make_train(config, save_train_state=False, load_zoo=False):
     # Initialize environment
     if load_zoo:
         zoo = ZooManager(config["ZOO_PATH"])
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
     else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     # Calculate derived configuration values
     config["NUM_UPDATES"] = (
@@ -908,10 +908,10 @@ def make_evaluation(config, load_zoo=False):
     # Initialize environment (same as training)
     if load_zoo:
         zoo = ZooManager(config["ZOO_PATH"])
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
     else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     # Set configuration parameters
     config["OBS_DIM"] = get_space_dim(env.observation_space(env.agents[0]))
@@ -1100,10 +1100,10 @@ if __name__ == "__main__":
 # from flax.training.train_state import TrainState
 # import optax
 # import distrax
-# import jaxmarl
-# from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-# from jaxmarl.wrappers.baselines import LogWrapper 
-# from jaxmarl.wrappers.aht import ZooManager, LoadAgentWrapper
+# import assistax
+# from assistax.wrappers.baselines import get_space_dim, LogEnvState
+# from assistax.wrappers.baselines import LogWrapper 
+# from assistax.wrappers.aht import ZooManager, LoadAgentWrapper
 # import hydra
 # from omegaconf import OmegaConf
 # from typing import Sequence, NamedTuple, Any, Dict, Optional
@@ -1297,10 +1297,10 @@ if __name__ == "__main__":
 # def make_train(config, save_train_state=False, load_zoo=False):
 #     if load_zoo:
 #         zoo = ZooManager(config["ZOO_PATH"])
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #         env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
 #     else:
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #     config["NUM_UPDATES"] = (
 #         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
 #     )
@@ -1739,10 +1739,10 @@ if __name__ == "__main__":
 # def make_evaluation(config, load_zoo=False):
 #     if load_zoo:
 #         zoo = ZooManager(config["ZOO_PATH"])
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #         env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
 #     else:
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #     config["OBS_DIM"] = get_space_dim(env.observation_space(env.agents[0]))
 #     config["ACT_DIM"] = get_space_dim(env.action_space(env.agents[0]))
 #     config["GOBS_DIM"] = get_space_dim(env.observation_space("global"))

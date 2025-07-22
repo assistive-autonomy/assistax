@@ -12,9 +12,9 @@ from flax.traverse_util import flatten_dict
 import safetensors.flax
 import optax
 import distrax
-import jaxmarl
-from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-from jaxmarl.wrappers.baselines import LogWrapper
+import assistax
+from assistax.wrappers.baselines import  get_space_dim, LogEnvState, LogWrapper
+from assistax.wrappers.aht import ZooManager, LoadAgentWrapper
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict
@@ -202,7 +202,7 @@ def main(config):
         )
 
         # SAVE PARAMS
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         # all_train_states = out["metrics"]["train_state"]
 
         final_train_state = out["runner_state"].train_state

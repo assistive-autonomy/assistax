@@ -36,10 +36,10 @@ organization by agent ID and training seed.
 import jax
 import jax.numpy as jnp
 import hydra
-import jaxmarl
+import assistax
 from tqdm import tqdm
 from omegaconf import OmegaConf
-from jaxmarl.wrappers.aht import ZooManager
+from assistax.wrappers.aht import ZooManager
 from typing import Dict, Any
 
 
@@ -329,7 +329,7 @@ def main(config):
     from masac_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
     
     # ===== ENVIRONMENT SETUP =====
-    env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     print(f"Environment agents: {env.agents}")
     print(f"Total agents to train: {len(env.agents) * config['NUM_SEEDS']}")
     
@@ -431,10 +431,10 @@ if __name__ == "__main__":
 # import safetensors.flax
 # import optax
 # import distrax
-# import jaxmarl
-# from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-# from jaxmarl.wrappers.baselines import LogWrapper
-# from jaxmarl.wrappers.aht import ZooManager
+# import assistax
+# from assistax.wrappers.baselines import get_space_dim, LogEnvState
+# from assistax.wrappers.baselines import LogWrapper
+# from assistax.wrappers.aht import ZooManager
 # import hydra
 # from omegaconf import OmegaConf
 # from typing import Sequence, NamedTuple, Any, Dict
@@ -569,7 +569,7 @@ if __name__ == "__main__":
 #     train_rng, eval_rng = jax.random.split(rng)
 #     train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])    
 #     with jax.disable_jit(config["DISABLE_JIT"]):
-#         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+#         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 #         train_jit = jax.jit(
 #             make_train(config, save_train_state=False),
 #             device=jax.devices()[config["DEVICE"]]
