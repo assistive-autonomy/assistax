@@ -20,7 +20,8 @@ from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 import optax
 import distrax
-import jaxmarl
+import assistax
+# import jaxmarl
 from assistax.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper, LogCrossplayWrapper
 from assistax.wrappers.aht import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
 import hydra
@@ -247,10 +248,10 @@ def make_train(config, save_train_state=False, load_zoo=False):
     # Environment setup
     if load_zoo:
         zoo = ZooManager(config["ZOO_PATH"])
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
     else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     # Configuration calculations
     config["NUM_UPDATES"] = (
@@ -667,13 +668,13 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
     # Environment setup
     if load_zoo:
         zoo = ZooManager(config["ZOO_PATH"])
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         if crossplay:
             env = LoadEvalAgentWrapper.load_from_zoo(env, zoo, load_zoo)
         else:
             env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
     else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     config["OBS_DIM"] = int(get_space_dim(env.observation_space(env.agents[0])))
     config["ACT_DIM"] = int(get_space_dim(env.action_space(env.agents[0])))
