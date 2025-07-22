@@ -21,9 +21,8 @@ from flax.training.train_state import TrainState
 import optax
 import distrax
 import jaxmarl
-from jaxmarl.wrappers.baselines import get_space_dim, LogEnvState
-from jaxmarl.wrappers.baselines import LogWrapper, LogCrossplayWrapper
-from jaxmarl.wrappers.aht import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
+from assistax.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper, LogCrossplayWrapper
+from assistax.wrappers.aht import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict, Optional
