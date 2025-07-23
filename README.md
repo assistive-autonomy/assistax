@@ -68,13 +68,23 @@ uv run python assistax/baselines/IPPO/ippo_sweep.py ENV_NAME=scratchitch
 
 This will generate a sweep for the specified IPPO varient for the scratchitch task. You can run larger sweeps by utilizing hydras multirun feature see more below. 
 
-### Other information 
+### 🥱 Other information 
 
 - We use hydra for managing configuration and training runs for more information see the [hydra docs](https://hydra.cc/docs/intro/)
 
 ## 🏝️ Environments 
 
-TODO add a discription of the environments here
+- Scratch: A scratching target is randomly sampled on the surface of the human’s right
+arm. The robot must move its end-effector to this position and apply a specified force. The human
+can move its arm to make the target more accessible to the robot. [implementation](assistax/envs/scratchitch.py)
+- Bed Bath: We provide target bath points distributed along the surface of the human’s
+arm. The robot must reach each point and apply a certain force to activate the next point. The aim
+is to reach (’wipe’) all points before the end of an episode. [implementation](assistax/envs/bedbathing.py)
+- Arm Assist: The robot must help the human lift its right arm back into a comfortable
+position on the bed. In this task the human is too weak to complete the task on their own and thus
+requires the robot. The robot has to learn to align its end-effector with a target section of the arm
+(shown in green on Figure 1(c)), and then move the human arm until the green and blue targets
+overlap. [implementation](assistax/envs/armmanipulation.py)
 
 ## 📈 Baselines 
 
@@ -90,7 +100,7 @@ TODO add citation for the paper here
 
 ## Other TODOS 
 
-- Add the license Apache 2.0?
-- Add link to Arxiv once uploaded. 
+-[] Add the license Apache 2.0?
+-[] Add link to Arxiv once uploaded. 
 
 
