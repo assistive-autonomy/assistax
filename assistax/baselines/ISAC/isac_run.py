@@ -473,7 +473,7 @@ def _analyze_performance(evaluation_results: Dict) -> Dict:
 # MAIN ISAC RUNNER FUNCTION
 # ============================================================================
 
-@hydra.main(version_base=None, config_path="config", config_name="isac_mabrax")
+@hydra.main(version_base=None, config_path="config", config_name="isac")
 def main(config):
     """
     Main function for comprehensive ISAC training and evaluation.
@@ -583,7 +583,6 @@ def main(config):
     # GENERATE VISUALIZATIONS
     # ========================================================================
 
-    
 
     if config["VIZ_POLICY"]:
         

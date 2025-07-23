@@ -543,7 +543,7 @@ def _generate_episode_visualizations(config: Dict, training_results: Dict,
 # MAIN RUNNER FUNCTION
 # ============================================================================
 
-@hydra.main(version_base=None, config_path="config", config_name="mappo_mabrax")
+@hydra.main(version_base=None, config_path="config", config_name="mappo")
 def main(config):
     """
     Main function for comprehensive MAPPO training and evaluation.

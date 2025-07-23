@@ -387,7 +387,7 @@ def _run_evaluation_pipeline(config: Dict, training_results: Dict) -> Optional[D
 # MAIN ZOO GENERATION FUNCTION
 # ============================================================================
 
-@hydra.main(version_base=None, config_path="config", config_name="mappo_mabrax_zoo_gen")
+@hydra.main(version_base=None, config_path="config", config_name="mappo_zoo_gen")
 def main(config):
     """
     Main function for MAPPO zoo generation.

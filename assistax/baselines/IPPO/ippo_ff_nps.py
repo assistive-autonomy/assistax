@@ -837,96 +837,96 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
 
 # ================================ MAIN FUNCTION ================================
 
-@hydra.main(version_base=None, config_path="config", config_name="ippo_ff_mabrax")
-def main(config):
-    """
-    Main function for hyperparameter sweeping and training execution.
+# @hydra.main(version_base=None, config_path="config", config_name="ippo_ff_mabrax")
+# def main(config):
+#     """
+#     Main function for hyperparameter sweeping and training execution.
     
-    Supports swept hyperparameters including learning rate, entropy coefficient,
-    and clipping epsilon. Results are saved as numpy arrays for analysis.
-    """
-    config_key = hash(config) % 2**62
-    sweep_config = config.SWEEP
-    config = OmegaConf.to_container(config)
+#     Supports swept hyperparameters including learning rate, entropy coefficient,
+#     and clipping epsilon. Results are saved as numpy arrays for analysis.
+#     """
+#     config_key = hash(config) % 2**62
+#     sweep_config = config.SWEEP
+#     config = OmegaConf.to_container(config)
     
-    # Initialize random number generators
-    rng = jax.random.PRNGKey(config["SEED"])
-    hparam_rng, run_rng = jax.random.split(rng, 2)
+#     # Initialize random number generators
+#     rng = jax.random.PRNGKey(config["SEED"])
+#     hparam_rng, run_rng = jax.random.split(rng, 2)
     
-    # Generate hyperparameter configurations
-    NUM_HPARAM_CONFIGS = sweep_config.num_configs
-    lr_rng, ent_coef_rng, clip_eps_rng = jax.random.split(hparam_rng, 3)
+#     # Generate hyperparameter configurations
+#     NUM_HPARAM_CONFIGS = sweep_config.num_configs
+#     lr_rng, ent_coef_rng, clip_eps_rng = jax.random.split(hparam_rng, 3)
 
-    # Learning rate sweep
-    if sweep_config.get("lr", False):
-        lrs = 10**jax.random.uniform(
-            lr_rng,
-            shape=(NUM_HPARAM_CONFIGS,),
-            minval=sweep_config.lr.min,
-            maxval=sweep_config.lr.max,
-        )
-        lr_axis = 0
-    else:
-        lrs = config["LR"]
-        lr_axis = None
+#     # Learning rate sweep
+#     if sweep_config.get("lr", False):
+#         lrs = 10**jax.random.uniform(
+#             lr_rng,
+#             shape=(NUM_HPARAM_CONFIGS,),
+#             minval=sweep_config.lr.min,
+#             maxval=sweep_config.lr.max,
+#         )
+#         lr_axis = 0
+#     else:
+#         lrs = config["LR"]
+#         lr_axis = None
 
-    # Entropy coefficient sweep
-    if sweep_config.get("ent_coef", False):
-        ent_coefs = 10**jax.random.uniform(
-            ent_coef_rng,
-            shape=(NUM_HPARAM_CONFIGS,),
-            minval=sweep_config.ent_coef.min,
-            maxval=sweep_config.ent_coef.max,
-        )
-        ent_coef_axis = 0
-    else:
-        ent_coefs = config["ENT_COEF"]
-        ent_coef_axis = None
+#     # Entropy coefficient sweep
+#     if sweep_config.get("ent_coef", False):
+#         ent_coefs = 10**jax.random.uniform(
+#             ent_coef_rng,
+#             shape=(NUM_HPARAM_CONFIGS,),
+#             minval=sweep_config.ent_coef.min,
+#             maxval=sweep_config.ent_coef.max,
+#         )
+#         ent_coef_axis = 0
+#     else:
+#         ent_coefs = config["ENT_COEF"]
+#         ent_coef_axis = None
 
-    # Clipping epsilon sweep
-    if sweep_config.get("clip_eps", False):
-        clip_epss = 10**jax.random.uniform(
-            clip_eps_rng,
-            shape=(NUM_HPARAM_CONFIGS,),
-            minval=sweep_config.clip_eps.min,
-            maxval=sweep_config.clip_eps.max,
-        )
-        clip_eps_axis = 0
-    else:
-        clip_epss = config["CLIP_EPS"]
-        clip_eps_axis = None
+#     # Clipping epsilon sweep
+#     if sweep_config.get("clip_eps", False):
+#         clip_epss = 10**jax.random.uniform(
+#             clip_eps_rng,
+#             shape=(NUM_HPARAM_CONFIGS,),
+#             minval=sweep_config.clip_eps.min,
+#             maxval=sweep_config.clip_eps.max,
+#         )
+#         clip_eps_axis = 0
+#     else:
+#         clip_epss = config["CLIP_EPS"]
+#         clip_eps_axis = None
 
-    # Prepare training runs
-    run_rngs = jax.random.split(run_rng, config["NUM_SEEDS"])
+#     # Prepare training runs
+#     run_rngs = jax.random.split(run_rng, config["NUM_SEEDS"])
     
-    # Execute training with vmapped hyperparameter sweep
-    with jax.disable_jit(config["DISABLE_JIT"]):
-        train_jit = jax.jit(
-            make_train(config),
-            device=jax.devices()[config["DEVICE"]]
-        )
-        out = jax.vmap(
-            jax.vmap(
-                train_jit,
-                in_axes=(0, None, None, None),  # Vmap over seeds
-            ),
-            in_axes=(None, lr_axis, ent_coef_axis, clip_eps_axis)  # Vmap over hyperparameters
-        )(run_rngs, lrs, ent_coefs, clip_epss)
+#     # Execute training with vmapped hyperparameter sweep
+#     with jax.disable_jit(config["DISABLE_JIT"]):
+#         train_jit = jax.jit(
+#             make_train(config),
+#             device=jax.devices()[config["DEVICE"]]
+#         )
+#         out = jax.vmap(
+#             jax.vmap(
+#                 train_jit,
+#                 in_axes=(0, None, None, None),  # Vmap over seeds
+#             ),
+#             in_axes=(None, lr_axis, ent_coef_axis, clip_eps_axis)  # Vmap over hyperparameters
+#         )(run_rngs, lrs, ent_coefs, clip_epss)
     
-    # Save results
-    jnp.save(f"metrics_{config_key}.npy", out["metrics"], allow_pickle=True)
-    jnp.save(f"hparams_{config_key}.npy", {
-        "lr": lrs,
-        "ent_coef": ent_coefs,
-        "clip_eps": clip_epss,
-        "ratio_clip_eps": config["RATIO_CLIP_EPS"],
-        "num_steps": config["NUM_STEPS"],
-        "num_envs": config["NUM_ENVS"],
-        "update_epochs": config["UPDATE_EPOCHS"],
-        "num_minibatches": config["NUM_MINIBATCHES"],
-    })
+#     # Save results
+#     jnp.save(f"metrics_{config_key}.npy", out["metrics"], allow_pickle=True)
+#     jnp.save(f"hparams_{config_key}.npy", {
+#         "lr": lrs,
+#         "ent_coef": ent_coefs,
+#         "clip_eps": clip_epss,
+#         "ratio_clip_eps": config["RATIO_CLIP_EPS"],
+#         "num_steps": config["NUM_STEPS"],
+#         "num_envs": config["NUM_ENVS"],
+#         "update_epochs": config["UPDATE_EPOCHS"],
+#         "num_minibatches": config["NUM_MINIBATCHES"],
+#     })
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
 

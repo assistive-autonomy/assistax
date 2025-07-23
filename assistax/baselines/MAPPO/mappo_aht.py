@@ -546,7 +546,7 @@ def _analyze_aht_performance(evaluation_results: Dict, train_partners: List[str]
 # MAIN AHT EXPERIMENT FUNCTION
 # ============================================================================
 
-@hydra.main(version_base=None, config_path="config", config_name="mappo_mabrax_aht")
+@hydra.main(version_base=None, config_path="config", config_name="mappo_aht")
 def main(config):
     """
     Main function for MAPPO Ad Hoc Teamwork experiments.
@@ -628,46 +628,10 @@ def main(config):
     except Exception as e:
         print(f"Error saving results: {e}")
         raise
-    
-    # ========================================================================
-    # ANALYZE PERFORMANCE
-    # ========================================================================
-    
-    analysis = _analyze_aht_performance(
-        evaluation_results, train_partners, test_partners
-    )
-    
-    # ========================================================================
-    # SUMMARY AND RESULTS
-    # ========================================================================
-    
-    total_time = time.time() - total_start_time
-    
+
     print(f"\n{'='*80}")
-    print(f"AD HOC TEAMWORK EXPERIMENT COMPLETED SUCCESSFULLY")
+    print(f"ZSC Experiment Completed successfully!")
     print(f"{'='*80}")
-    
-    print(f"\nExperiment Summary:")
-    print(f"  Total time: {total_time:.2f} seconds")
-    print(f"  Training time: {training_results['training_time']:.2f} seconds")
-    print(f"  Training partners: {analysis['num_train_partners']}")
-    print(f"  Testing partners: {analysis['num_test_partners']}")
-    
-    print(f"\nPerformance Results:")
-    print(f"  Training Partners (Seen):")
-    print(f"    Mean return: {analysis['train_performance']['mean']:.4f}")
-    print(f"    Std return: {analysis['train_performance']['std']:.4f}")
-    print(f"    Range: [{analysis['train_performance']['min']:.4f}, {analysis['train_performance']['max']:.4f}]")
-    
-    print(f"\n  Testing Partners (Unseen - Zero-Shot):")
-    print(f"    Mean return: {analysis['test_performance']['mean']:.4f}")
-    print(f"    Std return: {analysis['test_performance']['std']:.4f}")
-    print(f"    Range: [{analysis['test_performance']['min']:.4f}, {analysis['test_performance']['max']:.4f}]")
-    
-    print(f"\nGeneralization Analysis:")
-    print(f"  Generalization gap: {analysis['generalization_gap']:.4f}")
-    print(f"  Relative performance: {analysis['relative_performance']:.4f}")
-    
 
 if __name__ == "__main__":
     main()

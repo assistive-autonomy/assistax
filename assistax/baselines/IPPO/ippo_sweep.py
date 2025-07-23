@@ -5,23 +5,6 @@ This module orchestrates large-scale hyperparameter sweeps for IPPO experiments 
 network architectures. It systematically explores hyperparameter spaces, manages experiment
 organization, and handles efficient evaluation of multiple configurations simultaneously.
 
-Key Features:
-- Systematic hyperparameter space exploration (learning rate, entropy coefficient, clipping epsilon)
-- Automatic experiment organization with unique directory creation
-- Efficient nested vmapping for simultaneous sweep execution
-- Dynamic algorithm selection based on network architecture configuration
-- Comprehensive result saving (metrics, parameters, hyperparameters, returns)
-- Memory-efficient evaluation across large parameter spaces
-- Support for all four IPPO variants (FF/RNN x NPS/PS)
-
-Differences from Single-Run Script:
-- Generates hyperparameter configurations automatically
-- Uses nested vmaps for sweep execution (seeds x hyperparameters)
-- Creates unique directories for each experiment
-- Handles 3D batch dimensions (hyperparams x seeds x envs)
-- Focuses on systematic exploration rather than visualization
-- Saves hyperparameter configurations separately
-
 Usage:
     python ippo_sweep.py [hydra options]
     
@@ -421,13 +404,7 @@ def main(config):
         )
         
         # Save final parameters (different format for parameter sharing vs independent)
-        if config["network"]["agent_param_sharing"]:
-            # For parameter sharing: single set of shared parameters
-            safetensors.flax.save_file(
-                flatten_dict(final_train_state.params, sep='/'),
-                f"{config_key}/final_params.safetensors"
-            )
-        else:
+        if not config["network"]["agent_param_sharing"]:
             # For independent parameters: split by agent
             # Note: Different axis manipulation for 3D sweep structure (hyperparams x seeds x agents)
             split_params = _unstack_tree(

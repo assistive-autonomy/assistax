@@ -738,21 +738,3 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
         return all_episode_eval_infos
 
     return env, run_evaluation
-
-@hydra.main(version_base=None, config_path="config", config_name="mappo_mabrax")
-def main(config):
-    config = OmegaConf.to_container(config)
-    rng = jax.random.PRNGKey(config["SEED"])
-    hparam_rng, run_rng = jax.random.split(rng, 2)
-
-
-    with jax.disable_jit(config["DISABLE_JIT"]):
-        train_jit = jax.jit(
-            make_train(config),
-            device=jax.devices()[config["DEVICE"]]
-        )
-        out = train_jit(run_rng, config["LR"], config["ENT_COEF"], config["CLIP_EPS"])
-
-
-if __name__ == "__main__":
-    main()

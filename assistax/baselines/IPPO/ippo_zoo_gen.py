@@ -213,7 +213,7 @@ def _compute_episode_returns(eval_info, time_axis=-2):
 
 # ================================ MAIN ZOO GENERATION FUNCTION ================================
 
-@hydra.main(version_base=None, config_path="config", config_name="ippo_mabrax_zoo_gen")
+@hydra.main(version_base=None, config_path="config", config_name="ippo_zoo_gen")
 def main(config):
     """
     Main function for generating a diverse population of IPPO agents and saving them to a zoo.
@@ -240,16 +240,16 @@ def main(config):
     # Import the appropriate IPPO variant based on network architecture configuration
     match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
         case (False, False):
-            from ippo_ff_nps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
+            from ippo_ff_nps import make_train
             print("Using: Feedforward Networks with No Parameter Sharing")
         case (False, True):
-            from baselines.IPPO.ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
+            from ippo_ff_ps import make_train
             print("Using: Feedforward Networks with Parameter Sharing")
         case (True, False):
-            from baselines.IPPO.ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
+            from ippo_rnn_nps import make_train
             print("Using: Recurrent Networks with No Parameter Sharing")
         case (True, True):
-            from baselines.IPPO.ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
+            from ippo_rnn_ps import make_train
             print("Using: Recurrent Networks with Parameter Sharing")
 
     # ===== TRAINING SETUP =====

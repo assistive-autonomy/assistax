@@ -1,11 +1,4 @@
 import os
-# os.environ["XLA_FLAGS"] = (
-#     "--xla_gpu_enable_triton_softmax_fusion=true "
-#     "--xla_gpu_triton_gemm_any=true "
-#     "--xla_dump_to=xla_dump "
-# )
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]="0.95"
 import time
 from tqdm import tqdm
 import jax
@@ -87,29 +80,12 @@ def _compute_episode_returns(eval_info, time_axis=-2):
     return undiscounted_returns
 
 
-@hydra.main(version_base=None, config_path="config", config_name="masac_mabrax")
+@hydra.main(version_base=None, config_path="config", config_name="masac")
 def main(config):
     config = OmegaConf.to_container(config, resolve=True)
 
-    # IMPORT FUNCTIONS BASED ON ARCHITECTURE
-    # match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
-    #     case (False, False):
-    #         from ippo_ff_nps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
-    #         from ippo_ff_nps_mabrax import MultiActorCritic as NetworkArch
-    #     case (False, True):
-    #         from ippo_ff_ps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
-    #         from ippo_ff_ps_mabrax import ActorCritic as NetworkArch
-    #     case (True, False):
-    #         from ippo_rnn_nps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
-    #         from ippo_rnn_nps_mabrax import MultiActorCriticRNN as NetworkArch
-    #     case (True, True):
-    #         from ippo_rnn_ps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
-    #         from ippo_rnn_ps_mabrax import ActorCriticRNN as NetworkArch
-    #     case _:
-    #         raise Exception
-        
-    from masac_ff_nps_mabrax import make_train, make_evaluation, EvalInfoLogConfig
-    from masac_ff_nps_mabrax import MultiSACActor as NetworkArch
+    from masac_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
+    from masac_ff_nps import MultiSACActor as NetworkArch
 
     rng = jax.random.PRNGKey(config["SEED"])
     rng, eval_rng = jax.random.split(rng)

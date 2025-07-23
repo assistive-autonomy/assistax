@@ -1,11 +1,4 @@
 import os
-# os.environ["XLA_FLAGS"] = (
-#     "--xla_gpu_enable_triton_softmax_fusion=true "
-#     "--xla_gpu_triton_gemm_any=true "
-#     "--xla_dump_to=xla_dump "
-# )
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]="0.95"
 import time
 from tqdm import tqdm
 import jax
@@ -49,28 +42,9 @@ def _take_episode(pipeline_states, dones, time_idx=-1, eval_idx=0):
     ]
 
 
-@hydra.main(version_base=None, config_path="config", config_name="isac_mabrax")
+@hydra.main(version_base=None, config_path="config", config_name="isac")
 def main(config):
     config = OmegaConf.to_container(config, resolve=True)
-
-    # TODO: once I have more SAC variations include the matching code
-
-    # IMPORT FUNCTIONS BASED ON ARCHITECTURE
-    # match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
-    #     case (False, False):
-    #         from ippo_ff_nps_mabrax import MultiActorCritic as NetworkArch
-    #         from ippo_ff_nps_mabrax import make_evaluation as make_evaluation
-    #     # make sure that all of these are called MultiActorCritic
-    #     case (False, True):
-    #         from ippo_ff_ps_mabrax import ActorCritic as NetworkArch
-    #         from ippo_ff_ps_mabrax import make_evaluation as make_evaluation
-    #     case (True, False):
-    #         from ippo_rnn_nps_mabrax import MultiActorCriticRNN as NetworkArch
-    #         from ippo_rnn_nps_mabrax import make_evaluation as make_evaluation
-    #     case (True, True):
-    #         from ippo_rnn_ps_mabrax import ActorCriticRNN as NetworkArch
-    #         from ippo_rnn_ps_mabrax import make_evaluation as make_evaluation
-    
 
     from isac_ff_nps import MultiSACActor as NetworkArch
     from isac_ff_nps import make_evaluation as make_evaluation
@@ -119,7 +93,8 @@ def main(config):
         worst_idx = episode_argsort.take(0,axis=-1)
         best_idx = episode_argsort.take(-1, axis=-1)
         median_idx = episode_argsort.take(episode_argsort.shape[-1]//2, axis=-1)
-        from brax.io import html
+        
+        from assistax.render import html
         worst_episode = _take_episode(
             eval_final.env_state.env_state.pipeline_state, first_episode_done,
             time_idx=-1, eval_idx=worst_idx,

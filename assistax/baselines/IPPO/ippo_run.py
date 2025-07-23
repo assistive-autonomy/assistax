@@ -5,21 +5,6 @@ This module serves as the main orchestration script for running IPPO experiments
 network architectures. It dynamically imports the appropriate IPPO variant based on configuration
 settings, handles training execution, parameter saving, evaluation, and result visualization.
 
-Key Features:
-- Dynamic algorithm selection based on recurrent/parameter sharing configuration
-- Complete training pipeline with progress tracking
-- Model parameter saving in SafeTensors format
-- Comprehensive evaluation with performance metrics
-- Interactive HTML visualization of best/worst/median episodes
-- Efficient memory management for large-scale evaluations
-- Support for all four IPPO variants (FF/RNN x NPS/PS)
-
-Architecture Selection Matrix:
-- Feedforward + No Parameter Sharing: ippo_ff_nps
-- Feedforward + Parameter Sharing: ippo_ff_ps  
-- RNN + No Parameter Sharing: ippo_rnn_nps
-- RNN + Parameter Sharing: ippo_rnn_ps
-
 Usage:
     python ippo_run.py [hydra options] e.g. network=ff_nps
     
@@ -212,7 +197,7 @@ def _compute_episode_returns(eval_info, time_axis=-2):
 
 # ================================ MAIN ORCHESTRATION FUNCTION ================================
 
-@hydra.main(version_base=None, config_path="config", config_name="ippo_mabrax")
+@hydra.main(version_base=None, config_path="config", config_name="ippo")
 def main(config):
     """
     Main orchestration function for IPPO training and evaluation.
@@ -397,6 +382,7 @@ def main(config):
         )
         
         # Evaluate final model for visualization
+        # TODO: limit to fewer evaluation episodes to make rendering more memory efficient
         eval_final = eval_jit(eval_rng, _tree_take(final_train_state, 0, axis=0), render_log_config)
         
         # Compute episode returns and select representative episodes

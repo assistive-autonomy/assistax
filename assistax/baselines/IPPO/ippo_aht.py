@@ -4,14 +4,6 @@ IPPO Ad Hoc Teamwork (AHT) Training for Zero-Shot Generalization
 This module implements Ad Hoc Teamwork training using IPPO, where agents learn to collaborate
 effectively with diverse, pre-trained teammates from a zoo. The goal is to train agents that
 can generalize to work with previously unseen partners in zero-shot scenarios.
-
-Training Methodology:
-1. Load diverse pre-trained partners from zoo (multiple algorithms)
-2. Split partners into train/test sets for proper evaluation
-3. Train new agents against the training set of partners
-4. Evaluate on both train and test sets to measure generalization
-5. Compare performance to assess zero-shot transfer capabilities
-
 Usage:
     python ippo_aht.py [hydra options]
     
@@ -79,15 +71,6 @@ def _tree_shape(pytree):
 def _unstack_tree(pytree):
     """
     Unstack a pytree along the first axis, yielding a list of pytrees.
-    
-    Converts a pytree where each leaf has shape (N, ...) into a list of N pytrees
-    where each leaf has shape (...). Useful for separating different seeds or agents.
-    
-    Args:
-        pytree: JAX pytree with arrays of shape (N, ...)
-        
-    Returns:
-        List of N pytrees, each with arrays of shape (...)
     """
     leaves, treedef = jax.tree_util.tree_flatten(pytree)
     unstacked_leaves = zip(*leaves)
@@ -211,7 +194,7 @@ def _compute_episode_returns(eval_info, time_axis=-2):
 
 # ================================ MAIN AHT TRAINING FUNCTION ================================
 
-@hydra.main(version_base=None, config_path="config", config_name="ippo_mabrax_aht")
+@hydra.main(version_base=None, config_path="config", config_name="ippo_aht")
 def main(config):
     """
     Main function for Ad Hoc Teamwork training using IPPO with zoo-based partners.
