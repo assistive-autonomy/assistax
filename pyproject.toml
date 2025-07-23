@@ -1,8 +1,9 @@
 [project]
 name = "assistax"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.0.1"
+description = "A Hardware-Accelerated Reinforcement Learning Benchmark for Assistive Robotics "
 readme = "README.md"
+authors = [{name = "Leonard Hinckeldey", email = "l.hinckeldey@ed.ac.uk"}]
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "absl-py==2.3.0",
