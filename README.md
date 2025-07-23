@@ -6,14 +6,6 @@
   <img src="docs/imgs/armassist.jpeg" alt="Bedbathing" style="width: 32%;">
 </div>
 
-# 🦾 Assistax
-
-<div style="display: flex; justify-content: space-between;">
-<img src="docs/imgs/scratch.jpeg" alt="Scratching" style="width: 32%;">
-<img src="docs/imgs/bedbath.jpeg" alt="Bed Bath" style="width: 32%;">
-<img src="docs/imgs/armassist.jpeg" alt="Arm Assist" style="width: 32%;">
-</div>
-
 Assistax is a Python library that provides hardware-accelerated environments in the domain of assistive robotics together with accompanying baseline algorithm implementations. We utilize JAX and Brax for quick RL and MARL training pipelines.
 
 ## 🏄 Installation
