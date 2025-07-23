@@ -11,7 +11,7 @@ assistive robotics together with accompanying baseline algorithm implementation.
 
 ## 🏄 Installation 
 
-We use `uv` for environment and package management. We highly recommend to use `uv` when working with this project for installing `uv` see [`uv` installation](docs.astral.sh/uv/getting-started/installation/) and for more infromation and further documentation see [`uv`](https://docs.astral.sh/uv/)
+We use `uv` for environment and package management. We highly recommend to use `uv` when working with this project for installing `uv` see [`uv` installation](docs.astral.sh/uv/getting-started/installation/) and for more infromation and further documentation see [`uv` docs](https://docs.astral.sh/uv/)
 
 1. Clone the repository 
 ```bash 
