@@ -1,3 +1,19 @@
+"""
+MASAC Training, Evaluation, and Visualization Runner
+
+This module serves as the main orchestration script for running Multi-Agent Soft Actor-Critic
+(MASAC) experiments. It handles training execution with separate actor and critic networks,
+parameter saving for all network components, evaluation, result analysis, and optional
+trajectory visualization.
+
+Usage:
+    python masac_run.py [hydra options]
+    
+The script trains MASAC agents with independent actor and dual Q-networks per agent,
+saves all network parameters separately, runs comprehensive evaluation, and optionally
+generates interactive HTML visualizations of agent behaviors.
+"""
+
 import os
 import sys
 import time
@@ -18,76 +34,48 @@ import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict, Callable
 from flax import struct
+from assistax.baselines.utils import (
+    _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
+    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    )
+
+
+
+# ================================ EVALUATION DATA STRUCTURES ================================
 
 @struct.dataclass
 class EvalNetworkState:
+    """Network state for MASAC evaluation with pre-trained models."""
     apply_fn: Callable = struct.field(pytree_node=False)
     params: Dict
 
-def _tree_take(pytree, indices, axis=None):
-    return jax.tree.map(lambda x: x.take(indices, axis=axis), pytree)
+# ================================ MAIN ORCHESTRATION FUNCTION ================================
 
-def _tree_shape(pytree):
-    return jax.tree.map(lambda x: x.shape, pytree)
-
-def _unstack_tree(pytree):
-    leaves, treedef = jax.tree_util.tree_flatten(pytree)
-    unstacked_leaves = zip(*leaves)
-    return [jax.tree_util.tree_unflatten(treedef, leaves)
-            for leaves in unstacked_leaves]
-
-def _stack_tree(pytree_list, axis=0):
-    return jax.tree.map(
-        lambda *leaf: jnp.stack(leaf, axis=axis),
-        *pytree_list
-    )
-
-def _concat_tree(pytree_list, axis=0):
-    return jax.tree.map(
-        lambda *leaf: jnp.concat(leaf, axis=axis),
-        *pytree_list
-    )
-
-def _tree_split(pytree, n, axis=0):
-    leaves, treedef = jax.tree.flatten(pytree)
-    split_leaves = zip(
-        *jax.tree.map(lambda x: jnp.array_split(x,n,axis), leaves)
-    )
-    return [
-        jax.tree.unflatten(treedef, leaves)
-        for leaves in split_leaves
-    ]
-
-def _take_episode(pipeline_states, dones, time_idx=-1, eval_idx=0):
-    episodes = _tree_take(pipeline_states, eval_idx, axis=1)
-    dones = dones.take(eval_idx, axis=1)
-    return [
-        state
-        for state, done in zip(_unstack_tree(episodes), dones)
-        if not (done)
-    ]
-
-def _compute_episode_returns(eval_info, time_axis=-2):
-    done_arr = eval_info.done["__all__"]
-    first_timestep = [slice(None) for _ in range(done_arr.ndim)]
-    first_timestep[time_axis] = 0
-    episode_done = jnp.cumsum(done_arr, axis=time_axis, dtype=bool)
-    episode_done = jnp.roll(episode_done, 1, axis=time_axis)
-    episode_done = episode_done.at[tuple(first_timestep)].set(False)
-    undiscounted_returns = jax.tree.map(
-        lambda r: (r*(1-episode_done)).sum(axis=time_axis),
-        eval_info.reward
-    )
-    return undiscounted_returns
-
-
-@hydra.main(version_base=None, config_path="config", config_name="masac_mabrax")
+@hydra.main(version_base=None, config_path="config", config_name="masac")
 def main(config):
+    """
+    Main orchestration function for MASAC training and evaluation.
+    
+    This function:
+    1. Imports MASAC implementation with separate actor and critic networks
+    2. Runs training with SAC-specific hyperparameters (policy_lr, q_lr, alpha_lr, tau)
+    3. Saves all network parameters separately (actor, q1, q2 networks)
+    4. Evaluates trained agents and computes performance metrics
+    5. Optionally creates interactive HTML visualizations via separate script
+    
+    Args:
+        config: Hydra configuration object containing all hyperparameters
+    """
+    print("Starting MASAC training and evaluation...")
     config = OmegaConf.to_container(config, resolve=True)
-        
+    
+    # ===== ALGORITHM IMPORTS =====
+    # MASAC uses Multi SAC Actor with separate Q-networks
     from masac_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
     from masac_ff_nps import MultiSACActor as NetworkArch
+    print("Using: Multi-Agent Soft Actor-Critic with separate actor and dual Q-networks")
 
+    # ===== TRAINING SETUP =====
     rng = jax.random.PRNGKey(config["SEED"])
     train_rng, eval_rng = jax.random.split(rng)
     train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
@@ -96,15 +84,22 @@ def main(config):
     print(f"Num environments: {config['NUM_ENVS']}")
     print(f"Num seeds: {config['NUM_SEEDS']}")
     print(f"Environment: {config['ENV_NAME']}")
+    print(f"SAC Hyperparameters:")
+    print(f"  Policy LR: {config['POLICY_LR']}")
+    print(f"  Q LR: {config['Q_LR']}")
+    print(f"  Alpha LR: {config['ALPHA_LR']}")
+    print(f"  Tau (soft update): {config['TAU']}")
 
+    # ===== TRAINING EXECUTION =====
     with jax.disable_jit(config["DISABLE_JIT"]):
         
         train_jit = jax.jit(
             make_train(config, save_train_state=True, load_zoo=False),
             device=jax.devices()[config["DEVICE"]]
         )
-        # Execute training across all seeds (includes JIT compilation on first run)
-        print("Running training...")
+        
+        # Execute MASAC training across all seeds with SAC-specific hyperparameters
+        print("Running MASAC training...")
         out = jax.vmap(train_jit, in_axes=(0, None, None, None, None))(
             train_rngs,
             config["POLICY_LR"], config["Q_LR"], config["ALPHA_LR"], config["TAU"]
@@ -112,6 +107,7 @@ def main(config):
 
         # ===== SAVE TRAINING METRICS =====
         print("Saving training metrics...")
+        # Exclude large training states from metrics file (SAC has 3 networks)
         EXCLUDED_METRICS = ["actor_train_state", "q1_train_state", "q2_train_state"]
         jnp.save("metrics.npy", {
             key: val
@@ -120,23 +116,28 @@ def main(config):
         }, allow_pickle=True)
 
         # ===== SAVE MODEL PARAMETERS =====
-        print("Saving model parameters...")
+        print("Saving MASAC model parameters...")
         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 
+        # Extract training states for all three networks (actor, q1, q2)
         all_train_states_actor = out["metrics"]["actor_train_state"]
         all_train_states_q1 = out["metrics"]["q1_train_state"]
         all_train_states_q2 = out["metrics"]["q2_train_state"]
+        
         final_train_state_actor = out["runner_state"].train_states.actor
         final_train_state_q1 = out["runner_state"].train_states.q1
         final_train_state_q2 = out["runner_state"].train_states.q2
 
-        # Save all training states (for analysis across training)
+        # Save all training states across training (for analysis)
+        print("Saving complete training history for all networks...")
         actor_all_path = "actor_all_params.safetensors"
         safetensors.flax.save_file(
             flatten_dict(all_train_states_actor.params, sep='/'),
             actor_all_path
         )
-        actor_all_path = os.path.abspath(actor_all_path) # getting this to run render later
+        # Get absolute path for potential rendering script
+        actor_all_path = os.path.abspath(actor_all_path)
+        
         safetensors.flax.save_file(
             flatten_dict(all_train_states_q1.params, sep='/'),
             "q1_all_params.safetensors"
@@ -146,14 +147,15 @@ def main(config):
             "q2_all_params.safetensors"
         )
 
-        # Save final parameters
+        # Save final parameters (different format for parameter sharing vs independent)
+        print("Saving final network parameters...")
         if config["network"]["agent_param_sharing"]:
-            # For parameter sharing: single set of shared parameters
+            # For parameter sharing: single set of shared parameters for each network
+            print("Saving shared parameters for all networks...")
             safetensors.flax.save_file(
                 flatten_dict(final_train_state_actor.params, sep='/'),
                 "actor_final_params.safetensors"
             )
-
             safetensors.flax.save_file(
                 flatten_dict(final_train_state_q1.params, sep='/'),
                 "q1_final_params.safetensors"
@@ -163,7 +165,10 @@ def main(config):
                 "q2_final_params.safetensors"
             )
         else:
-            # For independent parameters: split by agent
+            # For independent parameters: split by agent for each network
+            print("Saving agent-specific parameters for all networks...")
+            
+            # Split and save actor parameters by agent
             split_actor_params = _unstack_tree(
                 jax.tree.map(lambda x: x.swapaxes(0, 1), final_train_state_actor.params)
             )
@@ -173,6 +178,7 @@ def main(config):
                     f"actor_{agent}.safetensors",
                 )
 
+            # Split and save Q1 parameters by agent
             split_q1_params = _unstack_tree(
                 jax.tree.map(lambda x: x.swapaxes(0, 1), final_train_state_q1.params)
             )
@@ -182,6 +188,7 @@ def main(config):
                     f"q1_{agent}.safetensors",
                 )
 
+            # Split and save Q2 parameters by agent
             split_q2_params = _unstack_tree(
                 jax.tree.map(lambda x: x.swapaxes(0, 1), final_train_state_q2.params)
             )
@@ -192,7 +199,7 @@ def main(config):
                 )
 
         # ===== EVALUATION SETUP =====
-        print("Setting up evaluation...")
+        print("Setting up MASAC evaluation...")
         
         # Calculate evaluation batching for memory efficiency
         batch_dims = jax.tree.leaves(_tree_shape(all_train_states_actor.params))[:2]
@@ -202,38 +209,46 @@ def main(config):
         ))
         
         def _flatten_and_split_trainstate(trainstate):
-            """Flatten and split training states for sequential evaluation."""
+            """
+            Flatten training states across batch dimensions and split for sequential evaluation.
+            
+            This operation is JIT compiled for memory efficiency during evaluation.
+            For MASAC, we only need the actor network for policy evaluation.
+            """
             flat_trainstate = jax.tree.map(
                 lambda x: x.reshape((x.shape[0] * x.shape[1], *x.shape[2:])),
                 trainstate
             )
             return _tree_split(flat_trainstate, n_sequential_evals)
 
+        # Use actor network for evaluation (Q-networks not needed for rollouts)
         split_trainstate = jax.jit(_flatten_and_split_trainstate)(all_train_states_actor)
         
         # ===== EVALUATION EXECUTION =====
-        print("Running evaluation...")
+        print("Running MASAC evaluation...")
         eval_env, run_eval = make_evaluation(config)
         
-        # Configure evaluation logging
+        # Configure what information to log during evaluation
         eval_log_config = EvalInfoLogConfig(
-            env_state=False,
-            done=True,
-            action=False,
-            reward=True,
-            log_prob=False,
-            obs=False,
-            info=False,
-            avail_actions=False,
+            env_state=False,       # Don't need environment states for performance metrics
+            done=True,             # Need done flags for episode boundary detection
+            action=False,          # Don't need actions for performance analysis
+            reward=True,           # Need rewards for return computation
+            log_prob=False,        # Don't need log probabilities
+            obs=False,             # Don't need observations
+            info=False,            # Don't need environment info
+            avail_actions=False,   # Don't need available actions
         )
         
-        # JIT compile evaluation functions
+        # JIT compile evaluation functions for efficiency
         eval_jit = jax.jit(
             run_eval,
             static_argnames=["log_eval_info"],
         )
         eval_vmap = jax.vmap(eval_jit, in_axes=(None, 0, None))
+        
         # Run evaluation in batches for memory efficiency
+        print("Executing evaluation batches...")
         evals = _concat_tree([
             eval_vmap(eval_rng, ts, eval_log_config)
             for ts in tqdm(split_trainstate, desc="Evaluation batches")
@@ -246,7 +261,7 @@ def main(config):
         )
 
         # ===== COMPUTE PERFORMANCE METRICS =====
-        print("Computing performance metrics...")
+        print("Computing MASAC performance metrics...")
         first_episode_returns = _compute_episode_returns(evals)
         first_episode_returns = first_episode_returns["__all__"]
         mean_episode_returns = first_episode_returns.mean(axis=-1)
@@ -255,16 +270,25 @@ def main(config):
         print("Saving evaluation results...")
         jnp.save("returns.npy", mean_episode_returns)
         
-        print(f"Mean episode return: {mean_episode_returns.mean():.2f} ± {mean_episode_returns.std():.2f}")
-        print("Training and evaluation completed successfully!")
+        print(f"MASAC Performance Summary:")
+        print(f"  Mean episode return: {mean_episode_returns.mean():.2f} ± {mean_episode_returns.std():.2f}")
+        print("MASAC training and evaluation completed successfully!")
 
+        # ===== OPTIONAL VISUALIZATION =====
         if config["VIZ_POLICY"]:
+            print("Launching trajectory visualization...")
             
-            actor_all_path = actor_all_path 
+            # Get current directory and script paths for visualization
             current_output_dir = os.getcwd()
             script_directory = os.path.dirname(os.path.abspath(__file__))
-            render_script_path = os.path.join(script_directory, "render_masac.py") # Because hydra changes the dir
-            breakpoint()
+            render_script_path = os.path.join(script_directory, "render_masac.py")
+            
+            print(f"Executing visualization script: {render_script_path}")
+            print(f"Using actor parameters: {actor_all_path}")
+            print(f"Rendering {config['N_RENDER_EPISODES']} episodes...")
+            
+            # Execute separate rendering script with appropriate parameters
+            # Note: Using os.execv to replace current process with rendering script
             os.execv(sys.executable, 
                     [sys.executable,
                     render_script_path,
@@ -272,6 +296,7 @@ def main(config):
                     f'hydra.run.dir={current_output_dir}',
                     f'NUM_EVAL_EPISODES={config["N_RENDER_EPISODES"]}',
                     ])
+
 
 if __name__ == "__main__":
     main()

@@ -26,7 +26,8 @@ TEST_DURING_TRAINING: True # not currently in use for SAC
 
 # RL HYPERPARAMETERS
 ALGORITHM: MASAC
-EXPLORE_STEPS: 5000  # number of steps to take with random actions at the start of training
+EXPLORE_STEPS: 5000
+PARTNER_ALGORITHMS: ["IPPO", "MAPPO"]  # number of steps to take with random actions at the start of training
 POLICY_UPDATE_DELAY: 4  # Every `policy_update_delay` q network learning steps the policy network is trained.
                         # It is trained `policy_update_delay` times to compensate, this is a TD3 trick.
 

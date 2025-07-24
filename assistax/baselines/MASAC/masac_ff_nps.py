@@ -6,22 +6,6 @@ no parameter sharing between agents. MASAC extends the SAC algorithm to multi-ag
 environments by maintaining separate actor networks for each agent while using 
 shared critic networks that observe the global state.
 
-Key Features:
-- Feedforward actor networks with agent-specific parameters
-- Shared critic networks using global observation space
-- Automatic entropy tuning with learnable temperature parameter
-- Experience replay buffer with trajectory sampling
-- Delayed policy updates for stability
-- Comprehensive evaluation with configurable logging
-- Support for zoo loading and crossplay evaluation
-
-Algorithm Details:
-- Actor Networks: Individual feedforward networks per agent (vmapped)
-- Critic Networks: Two shared Q-networks operating on global state + joint actions
-- Training: Off-policy learning with experience replay and target networks
-- Exploration: Gaussian policy with entropy regularization during training
-- Evaluation: Deterministic or stochastic policy evaluation
-
 Usage:
     This module is designed to be imported and used with Hydra configuration:
     

@@ -36,123 +36,128 @@ from tqdm import tqdm
 
 import assistax
 
+from assistax.baselines.utils import (
+    _tree_take, _unstack_tree, _take_episode,
+    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    )
+from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
 
 # ============================================================================
 # TREE UTILITY FUNCTIONS
 # ============================================================================
 
-def _tree_take(pytree, indices, axis=None):
-    """Take elements from pytree along specified axis."""
-    return jax.tree.map(lambda x: x.take(indices, axis=axis), pytree)
+# def _tree_take(pytree, indices, axis=None):
+#     """Take elements from pytree along specified axis."""
+#     return jax.tree.map(lambda x: x.take(indices, axis=axis), pytree)
 
 
-def _tree_shape(pytree):
-    """Get shapes of all leaves in pytree."""
-    return jax.tree.map(lambda x: x.shape, pytree)
+# def _tree_shape(pytree):
+#     """Get shapes of all leaves in pytree."""
+#     return jax.tree.map(lambda x: x.shape, pytree)
 
 
-def _unstack_tree(pytree):
-    """
-    Unstack a pytree along its first axis.
+# def _unstack_tree(pytree):
+#     """
+#     Unstack a pytree along its first axis.
     
-    Converts a tree with arrays of shape (n, ...) to a list of n trees
-    with arrays of shape (...).
-    """
-    leaves, treedef = jax.tree_util.tree_flatten(pytree)
-    unstacked_leaves = zip(*leaves)
-    return [jax.tree_util.tree_unflatten(treedef, leaves)
-            for leaves in unstacked_leaves]
+#     Converts a tree with arrays of shape (n, ...) to a list of n trees
+#     with arrays of shape (...).
+#     """
+#     leaves, treedef = jax.tree_util.tree_flatten(pytree)
+#     unstacked_leaves = zip(*leaves)
+#     return [jax.tree_util.tree_unflatten(treedef, leaves)
+#             for leaves in unstacked_leaves]
 
 
-def _stack_tree(pytree_list, axis=0):
-    """Stack a list of pytrees along specified axis."""
-    return jax.tree.map(
-        lambda *leaf: jnp.stack(leaf, axis=axis),
-        *pytree_list
-    )
+# def _stack_tree(pytree_list, axis=0):
+#     """Stack a list of pytrees along specified axis."""
+#     return jax.tree.map(
+#         lambda *leaf: jnp.stack(leaf, axis=axis),
+#         *pytree_list
+#     )
 
 
-def _concat_tree(pytree_list, axis=0):
-    """Concatenate a list of pytrees along specified axis."""
-    return jax.tree.map(
-        lambda *leaf: jnp.concat(leaf, axis=axis),
-        *pytree_list
-    )
+# def _concat_tree(pytree_list, axis=0):
+#     """Concatenate a list of pytrees along specified axis."""
+#     return jax.tree.map(
+#         lambda *leaf: jnp.concat(leaf, axis=axis),
+#         *pytree_list
+#     )
 
 
-def _tree_split(pytree, n, axis=0):
-    """Split pytree into n parts along specified axis."""
-    leaves, treedef = jax.tree.flatten(pytree)
-    split_leaves = zip(
-        *jax.tree.map(lambda x: jnp.array_split(x, n, axis), leaves)
-    )
-    return [
-        jax.tree.unflatten(treedef, leaves)
-        for leaves in split_leaves
-    ]
+# def _tree_split(pytree, n, axis=0):
+#     """Split pytree into n parts along specified axis."""
+#     leaves, treedef = jax.tree.flatten(pytree)
+#     split_leaves = zip(
+#         *jax.tree.map(lambda x: jnp.array_split(x, n, axis), leaves)
+#     )
+#     return [
+#         jax.tree.unflatten(treedef, leaves)
+#         for leaves in split_leaves
+#     ]
 
 
-# ============================================================================
-# EVALUATION UTILITY FUNCTIONS
-# ============================================================================
+# # ============================================================================
+# # EVALUATION UTILITY FUNCTIONS
+# # ============================================================================
 
-def _take_episode(pipeline_states, dones, time_idx=-1, eval_idx=0):
-    """
-    Extract episode data from pipeline states.
+# def _take_episode(pipeline_states, dones, time_idx=-1, eval_idx=0):
+#     """
+#     Extract episode data from pipeline states.
     
-    Args:
-        pipeline_states: Full pipeline state data
-        dones: Done flags for episodes
-        time_idx: Time index to extract from
-        eval_idx: Evaluation index to extract from
+#     Args:
+#         pipeline_states: Full pipeline state data
+#         dones: Done flags for episodes
+#         time_idx: Time index to extract from
+#         eval_idx: Evaluation index to extract from
         
-    Returns:
-        List of episode states that are not done
-    """
-    episodes = _tree_take(pipeline_states, eval_idx, axis=1)
-    dones = dones.take(eval_idx, axis=1)
-    return [
-        state
-        for state, done in zip(_unstack_tree(episodes), dones)
-        if not done
-    ]
+#     Returns:
+#         List of episode states that are not done
+#     """
+#     episodes = _tree_take(pipeline_states, eval_idx, axis=1)
+#     dones = dones.take(eval_idx, axis=1)
+#     return [
+#         state
+#         for state, done in zip(_unstack_tree(episodes), dones)
+#         if not done
+#     ]
 
 
-def _compute_episode_returns(eval_info, common_reward=False, time_axis=-2):
-    """
-    Compute undiscounted episode returns from evaluation info.
+# def _compute_episode_returns(eval_info, common_reward=False, time_axis=-2):
+#     """
+#     Compute undiscounted episode returns from evaluation info.
     
-    Args:
-        eval_info: Evaluation information containing rewards and done flags
-        common_reward: Whether to use common reward across agents
-        time_axis: Axis along which time is indexed
+#     Args:
+#         eval_info: Evaluation information containing rewards and done flags
+#         common_reward: Whether to use common reward across agents
+#         time_axis: Axis along which time is indexed
         
-    Returns:
-        Dictionary of undiscounted returns per agent
-    """
-    done_arr = eval_info.done["__all__"]
+#     Returns:
+#         Dictionary of undiscounted returns per agent
+#     """
+#     done_arr = eval_info.done["__all__"]
     
-    # Create episode mask to separate different episodes
-    first_timestep = [slice(None) for _ in range(done_arr.ndim)]
-    first_timestep[time_axis] = 0
-    episode_done = jnp.cumsum(done_arr, axis=time_axis, dtype=bool)
-    episode_done = jnp.roll(episode_done, 1, axis=time_axis)
-    episode_done = episode_done.at[tuple(first_timestep)].set(False)
+#     # Create episode mask to separate different episodes
+#     first_timestep = [slice(None) for _ in range(done_arr.ndim)]
+#     first_timestep[time_axis] = 0
+#     episode_done = jnp.cumsum(done_arr, axis=time_axis, dtype=bool)
+#     episode_done = jnp.roll(episode_done, 1, axis=time_axis)
+#     episode_done = episode_done.at[tuple(first_timestep)].set(False)
     
-    # Compute returns by masking out rewards from previous episodes
-    undiscounted_returns = jax.tree.map(
-        lambda r: (r * (1 - episode_done)).sum(axis=time_axis),
-        eval_info.reward
-    )
+#     # Compute returns by masking out rewards from previous episodes
+#     undiscounted_returns = jax.tree.map(
+#         lambda r: (r * (1 - episode_done)).sum(axis=time_axis),
+#         eval_info.reward
+#     )
     
-    # Add global return if not present
-    if "__all__" not in undiscounted_returns:
-        undiscounted_returns.update({
-            "__all__": (sum(undiscounted_returns.values())
-                        / (len(undiscounted_returns) if common_reward else 1))
-        })
+#     # Add global return if not present
+#     if "__all__" not in undiscounted_returns:
+#         undiscounted_returns.update({
+#             "__all__": (sum(undiscounted_returns.values())
+#                         / (len(undiscounted_returns) if common_reward else 1))
+#         })
     
-    return undiscounted_returns
+#     return undiscounted_returns
 
 
 # ============================================================================

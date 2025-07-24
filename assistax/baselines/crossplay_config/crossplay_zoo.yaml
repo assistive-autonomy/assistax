@@ -15,13 +15,6 @@ ENV_KWARGS:
     joint_strength: 1.0
     tremor_magnitude: 0.0
 
-  # pixel_obs:
-    # hw: int
-    # frame_stack: int
-    # return_float32: bool
-    # cache_objects: bool
-    # n_envs: int # if cachinig same as NUM_ENVS
-
 TOTAL_TIMESTEPS: 30e6
 NUM_STEPS: 256
 NUM_ENVS: 512
@@ -47,7 +40,7 @@ crossplay:
 
 PARTNER_ALGORITHMS: ["IPPO", "MAPPO", "MASAC"]
 
-ZOO_PATH: /home/leo/assistax/zoo
+ZOO_PATH: ./path/to/assistax/zoo
 
 GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8

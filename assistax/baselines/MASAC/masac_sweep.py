@@ -5,29 +5,6 @@ This module orchestrates comprehensive hyperparameter sweeps for Multi-Agent Sof
 It automatically generates random hyperparameter configurations, runs training across all combinations,
 and evaluates the resulting policies to identify optimal hyperparameter settings.
 
-Key Features:
-- Automated hyperparameter sampling from specified ranges
-- Parallel training across multiple hyperparameter configurations
-- Memory-efficient evaluation with sequential batching
-- Comprehensive result saving including metrics, parameters, and hyperparameters
-- Unique directory creation for each sweep run
-- Support for sweeping learning rates (policy, Q-network, temperature) and tau
-
-Sweep Configuration:
-- Policy Learning Rate: Sampled from log-uniform distribution
-- Q-Network Learning Rate: Sampled from log-uniform distribution  
-- Temperature Learning Rate: Sampled from log-uniform distribution
-- Tau (soft update coefficient): Sampled from log-uniform distribution
-- Each parameter can be enabled/disabled in sweep configuration
-
-Output Structure:
-For each sweep run, creates a unique directory containing:
-- metrics.npy: Training metrics across all configurations
-- hparams.npy: Hyperparameter values for each configuration
-- all_params.safetensors: All model parameters during training
-- final_params.safetensors: Final trained parameters
-- returns.npy: Evaluation results for all configurations
-
 Usage:
     python masac_sweep.py [hydra options]
     
@@ -45,6 +22,12 @@ from flax.traverse_util import flatten_dict
 from omegaconf import OmegaConf
 from base64 import urlsafe_b64encode
 from typing import Dict, Any, Optional
+from assistax.baselines.utils import (
+    _tree_take, _unstack_tree, _take_episode,
+    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    )
+from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
+
 
 
 # ================================ TREE MANIPULATION UTILITIES ================================

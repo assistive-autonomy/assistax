@@ -6,26 +6,6 @@ for later use in mixed training scenarios. The zoo is a collection of trained ag
 that can be loaded and used as training partners, enabling diverse multi-agent interactions
 and robust policy development.
 
-Key Features:
-- Trains MASAC agents across multiple random seeds
-- Automatically saves each trained agent to the zoo with proper metadata
-- Supports individual agent parameter extraction for non-parameter-sharing setups
-- Integrates with JaxMARL zoo management system
-- Efficient training without storing intermediate training states
-
-Zoo Concept:
-A "zoo" in multi-agent reinforcement learning is a repository of trained agent policies
-that can be used for:
-- Training against diverse opponents/partners
-- Curriculum learning with gradually improving partners
-- Robust policy evaluation against varied behaviors
-- Population-based training approaches
-
-Output:
-- Trained agent policies saved to the specified zoo path
-- Each agent from each seed is saved separately with unique identifiers
-- Metadata includes training configuration and performance information
-
 Usage:
     python masac_zoo_gen.py [hydra options] ZOO_PATH=path/to/zoo
     
@@ -41,6 +21,10 @@ from tqdm import tqdm
 from omegaconf import OmegaConf
 from assistax.wrappers.aht import ZooManager
 from typing import Dict, Any
+from assistax.baselines.utils import (
+    _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
+    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    )
 
 
 # ================================ TREE MANIPULATION UTILITIES ================================

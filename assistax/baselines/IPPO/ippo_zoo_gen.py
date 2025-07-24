@@ -40,6 +40,10 @@ from assistax.wrappers.aht import ZooManager # check whether this should be
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict
+from assistax.baselines.utils import (
+    _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
+    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    )
 
 
 # ================================ TREE MANIPULATION UTILITIES ================================
