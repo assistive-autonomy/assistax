@@ -79,19 +79,25 @@ This will generate a sweep for the specified IPPO variant for the scratchitch ta
 
 ## 📈 Baselines 
 
-TODO add a discription or a table of the baselines we use here 
+| Algorithm | FF | PS | NPS | RNN | ZSC |
+|-----------|----|----|----|----|----|
+| IPPO    | ✅ | ✅ | ✅ | ✅ | ✅  |
+| MAPPO  | ✅ | ✅ | ✅ | ✅ | ✅  |
+| ISAC   | ✅  | ❌ | ✅ | ❌ | ❌|
+| MASAC  | ✅  | ❌ | ✅ | ❌ | ✅ |
 
 ## Related 
 
-TODO add related repositories here 
+Some relavant repo's you should check out include:
+
+TODO add relevant other repos 
 
 ## Citations 
 
-TODO add citation for the paper here 
+TODO add citation for the paper here once uploaded on Arxiv
 
-## Other TODOS 
+## TODOS 
 
-- Add the license Apache 2.0?
- Add link to Arxiv once uploaded. 
+- [ ] Homogonize the configs e.g. have `rl.gamma` instead of `GAMMA` 
 
 
