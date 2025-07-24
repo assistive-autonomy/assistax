@@ -69,7 +69,7 @@ This will generate a sweep for the specified IPPO variant for the scratchitch ta
 
 - We use Hydra for managing configuration and training runs. For more information, see the [Hydra docs](https://hydra.cc/docs/intro/).
 - We rely on Mujoco's MJX as a physics engine you may wish to tune performance by setting the following XLA environment variable `XLA_FLAGS=--xla_gpu_triton_gemm_any=true` (see [MJX docs](https://mujoco.readthedocs.io/en/stable/mjx.html#gpu-performance))
-- If you run into memory issues please try trouble shooting setting environment variables in accordance to the [JAX docs](https://docs.jax.dev/en/latest/gpu_memory_allocation.html). 
+- If you run into memory issues please try trouble shooting by setting environment variables in accordance to the [JAX docs](https://docs.jax.dev/en/latest/gpu_memory_allocation.html). 
 
 ## 🏝️ Environments
 
@@ -90,9 +90,12 @@ This will generate a sweep for the specified IPPO variant for the scratchitch ta
 
 ## Related 
 
-Some relavant repo's you should check out include:
+Some relavant repo's you should check out!
 
-TODO add relevant other repos 
+- [JaxMARL](https://github.com/FLAIROx/JaxMARL/tree/v0.0.5)
+- [MAVA] (https://github.com/instadeepai/Mava?tab=readme-ov-file)
+- [gymnax](https://github.com/RobertTLange/gymnax)
+- [JaxRobotarium](https://github.com/GT-STAR-Lab/JaxRobotarium)  
 
 ## Citations 
 
