@@ -68,6 +68,8 @@ This will generate a sweep for the specified IPPO variant for the scratchitch ta
 ### 🥱 Other information
 
 - We use Hydra for managing configuration and training runs. For more information, see the [Hydra docs](https://hydra.cc/docs/intro/).
+- We rely on Mujoco's MJX as a physics engine you may wish to tune performance by setting the following XLA environment variable `XLA_FLAGS=--xla_gpu_triton_gemm_any=true` (see [MJX docs](https://mujoco.readthedocs.io/en/stable/mjx.html#gpu-performance))
+- If you run into memory issues please try trouble shooting setting environment variables in accordance to the [JAX docs](https://docs.jax.dev/en/latest/gpu_memory_allocation.html). 
 
 ## 🏝️ Environments
 
@@ -75,7 +77,7 @@ This will generate a sweep for the specified IPPO variant for the scratchitch ta
 
 - **Bed Bath**: We provide target bathing points distributed along the surface of the human's arm. The robot must reach each point and apply a certain force to activate the next point. The aim is to reach (wipe) all points before the end of an episode. [implementation](assistax/envs/bedbathing.py)
 
-- **Arm Assist**: The robot must help the human lift their right arm back into a comfortable position on the bed. In this task, the human is too weak to complete the task on their own and thus requires the robot. The robot has to learn to align its end-effector with a target section of the arm (shown in green in Figure 1(c)), and then move the human's arm until the green and blue targets overlap. [implementation](assistax/envs/armmanipulation.py)
+- **Arm Assist**: The robot must help the human lift their right arm back into a comfortable position on the bed. In this task, the human is too weak to complete the task on their own and thus requires the robot. The robot has to learn to align its end-effector with a target section of the arm, and then move the human's arm until the green and blue targets overlap. [implementation](assistax/envs/armmanipulation.py)
 
 ## 📈 Baselines 
 
