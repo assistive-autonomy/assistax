@@ -34,27 +34,27 @@ _envs = {
 }
 
 
-def get_environment(env_name: str, **kwargs) -> Env:
-    """Returns an environment from the environment registry.
+# def get_environment(env_name: str, **kwargs) -> Env:
+#     """Returns an environment from the environment registry.
 
-    Args:
-      env_name: environment name string
-      **kwargs: keyword arguments that get passed to the Env class constructor
+#     Args:
+#       env_name: environment name string
+#       **kwargs: keyword arguments that get passed to the Env class constructor
 
-    Returns:
-      env: an environment
-    """
-    return _envs[env_name](**kwargs)
+#     Returns:
+#       env: an environment
+#     """
+#     return _envs[env_name](**kwargs)
 
 
-def register_environment(env_name: str, env_class: Type[Env]):
-    """Adds an environment to the registry.
+# def register_environment(env_name: str, env_class: Type[Env]):
+#     """Adds an environment to the registry.
 
-    Args:
-      env_name: environment name string
-      env_class: the Env class to add to the registry
-    """
-    _envs[env_name] = env_class
+#     Args:
+#       env_name: environment name string
+#       env_class: the Env class to add to the registry
+#     """
+#     _envs[env_name] = env_class
 
 
 def create(
@@ -64,8 +64,6 @@ def create(
     auto_reset: bool = True,
     batch_size: Optional[int] = None,
     disability: Optional[dict[str, Any]] = None,
-    pixel_obs: Optional[Dict[str, Any]] = None,
-    het_reward: Optional[bool] = False,
     **kwargs,
 ) -> Env:
     """Creates an environment from the registry.
@@ -95,3 +93,4 @@ def create(
         env = training.DisabilityWrapper(env, disability)
 
     return env
+

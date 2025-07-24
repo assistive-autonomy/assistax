@@ -28,8 +28,6 @@ from assistax.baselines.utils import (
     )
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
 
-
-
 # ================================ TREE MANIPULATION UTILITIES ================================
 
 def _tree_take(pytree, indices, axis=None):

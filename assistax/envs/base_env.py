@@ -281,8 +281,6 @@ class MABraxEnv(MultiAgentEnv):
     def sys(self):
         return self.env.sys
 
-
-
 class ScratchItch(MABraxEnv):
     def __init__(self, **kwargs):
         super().__init__("scratchitch", **kwargs)

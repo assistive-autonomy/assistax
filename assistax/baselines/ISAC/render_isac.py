@@ -83,8 +83,6 @@ def main(config):
         final_eval = _tree_take(final_eval_network_state, 0, axis=0)
         # eval_final = eval_jit(eval_rng, _tree_take(final_eval_network_state, 0, axis=0), True)
         
-
-
         eval_final = eval_jit(eval_rng, final_eval, eval_log_config)
         first_episode_done = jnp.cumsum(eval_final.done["__all__"], axis=0, dtype=bool)
         first_episode_rewards = eval_final.reward["__all__"] * (1-first_episode_done)

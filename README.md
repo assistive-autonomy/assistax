@@ -81,12 +81,12 @@ This will generate a sweep for the specified IPPO variant for the scratchitch ta
 
 ## 📈 Baselines 
 
-| Algorithm | FF | PS | NPS | RNN | ZSC |
-|-----------|----|----|----|----|----|
-| IPPO    | ✅ | ✅ | ✅ | ✅ | ✅  |
-| MAPPO  | ✅ | ✅ | ✅ | ✅ | ✅  |
-| ISAC   | ✅  | ❌ | ✅ | ❌ | ❌|
-| MASAC  | ✅  | ❌ | ✅ | ❌ | ✅ |
+| Algorithm | FF | PS | NPS | RNN |
+|-----------|----|----|----|----|
+| IPPO    | ✅ | ✅ | ✅ | ✅ | 
+| MAPPO  | ✅ | ✅ | ✅ | ✅ | 
+| ISAC   | ✅  | ❌ | ✅ | ❌ |
+| MASAC  | ✅  | ❌ | ✅ | ❌ |
 
 ## Related 
 
@@ -104,6 +104,7 @@ TODO add citation for the paper here once uploaded on Arxiv
 ## TODOS 
 
 - [ ] Homogonize the configs e.g. have `rl.gamma` instead of `GAMMA` 
-- [ ] Refactor and rename `ippo_aht.py` to `ppo_aht.py` and perhaps have this in a new drecttory `./baseliens/zsc`
+- [ ] Refactor and rename `ippo_aht.py` to `ppo_aht.py` and perhaps have this in a new drecttory `./baseliens/zsc
+- [ ] Fix train-test split for aht code currently we are splitting each partner agents based on the algorithm. 
 
 

@@ -212,8 +212,6 @@ def main(config):
         # ===== AGENT PARAMETER LOADING =====
         print("Loading pre-trained agent parameters...")
         if config['ENV_NAME'] == 'pushcoop':
-            # PushCoop environment uses two robot agents
-            print("Environment: PushCoop (robot1, robot2)")
             robot1_params = unflatten_dict(
                 safetensors.flax.load_file(config["eval"]["path"]["human"]), sep='/'
             )
@@ -222,8 +220,6 @@ def main(config):
             )
             agent_params = {'robot1': robot1_params, 'robot2': robot2_params}
         else:
-            # Standard two-agent environment (human-robot collaboration)
-            print("Environment: Standard (human, robot)")
             human_params = unflatten_dict(
                 safetensors.flax.load_file(config["eval"]["path"]["human"]), sep='/'
             )

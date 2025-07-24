@@ -253,8 +253,6 @@ class ScratchItch(PipelineEnv):
             done=done
         )
 
-    # TODO: actually whether or not they make contact should not be used in the observation funciton but in the reward
-    # observation should only include the distance from end effectors to the target which I can find with .site_xpos or .geom_xpos
     def _get_robo_obs(self, pipeline_state, state_info) -> jax.Array:
         """Returns the environment observations."""
         tool_position = pipeline_state.site_xpos[self.panda_scratcher_tip_idx]
@@ -278,7 +276,7 @@ class ScratchItch(PipelineEnv):
         }
     
 
-    # TODO: Forces this is the only way human and robo obs are different
+    # Forces is the only way human and robo obs are different
     def _get_human_obs(self, pipeline_state, state_info) -> jax.Array:
         """Returns the environment observations."""
         tool_position = pipeline_state.site_xpos[self.panda_scratcher_tip_idx]
