@@ -93,7 +93,7 @@ This will generate a sweep for the specified IPPO variant for the scratchitch ta
 Some relavant repo's you should check out!
 
 - [JaxMARL](https://github.com/FLAIROx/JaxMARL/tree/v0.0.5)
-- [MAVA] (https://github.com/instadeepai/Mava?tab=readme-ov-file)
+- [MAVA](https://github.com/instadeepai/Mava?tab=readme-ov-file)
 - [gymnax](https://github.com/RobertTLange/gymnax)
 - [JaxRobotarium](https://github.com/GT-STAR-Lab/JaxRobotarium)  
 
