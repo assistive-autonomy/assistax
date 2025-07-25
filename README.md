@@ -14,7 +14,7 @@ We use `uv` for environment and package management. We highly recommend using `u
 
 1. Clone the repository
 ```bash
-git clone https://github.com/LeoHink/assistax.git
+git clone https://github.com/assistive-autonomy/assistax.git
 ```
 
 2. Install all packages with uv
