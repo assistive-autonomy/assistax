@@ -1,7 +1,7 @@
 """
 MASAC Ad Hoc Teamwork (AHT) Training for Zero-Shot Generalization
 
-This module implements Ad Hoc Teamwork training using Multi-Agent Soft Actor-Critic (MASAC),
+This module implements Ad Hoc Teamwork training using Soft Actor-Critic (MASAC),
 where agents learn to collaborate effectively with diverse, pre-trained teammates from a zoo.
 The goal is to train agents that can generalize to work with previously unseen partners in
 zero-shot scenarios using continuous control and soft actor-critic learning.
@@ -15,9 +15,11 @@ for each agent, providing stable learning in continuous control AHT scenarios.
 """
 
 import os
+import sys
 import time
 from tqdm import tqdm
 import jax
+import pandas as pd
 import jax.numpy as jnp
 import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
@@ -39,15 +41,18 @@ from assistax.baselines.utils import (
     )
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
 # ================================ MAIN AHT TRAINING FUNCTION ================================
 
-@hydra.main(version_base=None, config_path="config", config_name="masac_aht")
+@hydra.main(version_base=None, config_path="config", config_name="sac_aht")
 def main(config):
     """
-    Main function for Ad Hoc Teamwork training using MASAC with zoo-based partners.
+    Main function for Ad Hoc Teamwork training using SAC with zoo-based partners.
     
-    This function implements a sophisticated training pipeline for zero-shot generalization
-    using Multi-Agent Soft Actor-Critic (MASAC):
+    This function implements a training pipeline for zero-shot cordination
+    using Soft Actor-Critic (SAC):
     1. Loads diverse pre-trained partners from zoo trained with specified algorithm
     2. Creates train/test splits for proper generalization evaluation  
     3. Trains new MASAC agents against the training set of diverse partners
@@ -67,7 +72,7 @@ def main(config):
 
     # ===== ALGORITHM IMPORTS =====
     # MASAC uses feedforward networks with no parameter sharing and separate Q-networks
-    from masac_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
+    from MASAC.masac_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
     print("Using: Multi-Agent Soft Actor-Critic with separate actor and dual Q-networks")
 
  # ===== TRAINING SETUP =====
@@ -100,14 +105,21 @@ def main(config):
         
         # ===== TRAIN/TEST SPLIT FOR GENERALIZATION EVALUATION =====
         # Critical for measuring zero-shot generalization capability
-        print("Creating train/test splits for generalization evaluation...")
+        all_partners = pd.concat(partner_dict.values(), ignore_index=True)
+        print(f"Total partners across all algorithms: {len(all_partners)}")
+   
+        # Do a single 50/50 split across all partners
+        train_partners = all_partners.sample(frac=0.5, random_state=42)  # Set random_state for reproducibility
+        test_partners = all_partners.drop(train_partners.index)
+
+        # Split back into algorithm-specific dictionaries
         train_set = {}
         test_set = {}
+
         for algo in partner_dict.keys():
-            # 50/50 split ensures robust evaluation of generalization
-            train_set[algo] = partner_dict[algo].sample(frac=0.5)
-            test_set[algo] = partner_dict[algo].drop(train_set[algo].index)
-            print(f"  {algo}: {len(train_set[algo])} train, {len(test_set[algo])} test partners")
+            train_set[algo] = train_partners[train_partners['algorithm'] == algo].reset_index(drop=True)
+            test_set[algo] = test_partners[test_partners['algorithm'] == algo].reset_index(drop=True)
+            print(f" {algo}: {len(train_set[algo])} train, {len(test_set[algo])} test partners")
 
         # Create zoo loading dictionaries for training and testing
         load_zoo_dict_train = {algo: {"human": list(train_set[algo].agent_uuid)} for algo in partner_dict.keys()}

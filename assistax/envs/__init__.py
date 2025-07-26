@@ -64,6 +64,7 @@ def create(
     auto_reset: bool = True,
     batch_size: Optional[int] = None,
     disability: Optional[dict[str, Any]] = None,
+    het_reward: Optional[bool] = False,
     **kwargs,
 ) -> Env:
     """Creates an environment from the registry.
