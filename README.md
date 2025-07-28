@@ -104,7 +104,5 @@ TODO add citation for the paper here once uploaded on Arxiv
 ## TODOS 
 
 - [ ] Homogonize the configs e.g. have `rl.gamma` instead of `GAMMA` 
-- [ ] Refactor and rename `ippo_aht.py` to `ppo_aht.py` and perhaps have this in a new drecttory `./baseliens/zsc
-- [ ] Fix train-test split for aht code currently we are splitting each partner agents based on the algorithm. 
 
 
