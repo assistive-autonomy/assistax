@@ -63,10 +63,10 @@ DEVICE: 0
 DETERMINISTIC_EVAL: False
 
 # ZOO SETTINGS
-ZOO_PATH: /home/leo/assistax/zoo
+ZOO_PATH: ./path/to/assistax/zoo
 
 eval: # path to actor all params for eval
-  path: /home/leo/assistax/JaxMARL/baselines/MASAC/outputs/mabrax/scratchitch/2025-01-16/11-52-11/actor_all_params.safetensors
+  path: ./path/to/actor_all_params.safetensors
 
 hydra:
   job:

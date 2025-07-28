@@ -65,7 +65,7 @@ DETERMINISTIC_EVAL: False
 ZOO_PATH: /home/leo/assistax/zoo2
 
 eval: # path to actor all params for eval
-  path: /home/leo/assistax/JaxMARL/baselines/MASAC/outputs/mabrax/scratchitch/2025-01-16/11-52-11/actor_all_params.safetensors
+  path: ./path/to/actor_all_params.safetensors
 
 hydra:
   job:

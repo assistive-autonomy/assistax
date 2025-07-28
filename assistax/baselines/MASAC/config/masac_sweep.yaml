@@ -76,14 +76,8 @@ SWEEP:
     # min: -4.0
     # max: -1.0 
 
-# CROSSPLAY SETTINGS
-crossplay:
-  paths:
-    agent_0: /path/to/agent_0.safetensors
-    agent_1: /path/to/agent_1.safetensors
-
 eval: # path to actor all params for eval
-  path: /home/leo/assistax/JaxMARL/baselines/MASAC/outputs/mabrax/scratchitch/2025-01-16/11-52-11/actor_all_params.safetensors
+  path: ./path/to/all.safetensors/actor_all_params.safetensors
 
 hydra:
   job:

@@ -48,8 +48,7 @@ DISABLE_JIT: False
 DEVICE: 0
 
 # ZOO SETTINGS
-ZOO_PATH: /home/elliot/research/projects/assistax/zoo
-
+ZOO_PATH: ./path/to/zoo
 
 hydra:
   job:

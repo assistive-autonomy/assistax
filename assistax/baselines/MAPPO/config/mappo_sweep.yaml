@@ -44,7 +44,7 @@ DEVICE: 0
 # EVAL SETTINGS
 eval:
   compute_value: false
-  path: /path/to/all_params.safetensors
+  path: ./path/to/all_params.safetensors
 
 # SWEEPER SETTINGS
 SWEEP:
@@ -58,12 +58,6 @@ SWEEP:
   clip_eps: 
     min: -2.0
     max: -0.5
-
-# CROSSPLAY SETTINGS
-crossplay:
-  paths:
-    agent_0: /home/elliot/research/projects/assistax/JaxMARL/baselines/IPPO/outputs/mabrax/walker2d_2x3/2024-10-02/01-06-13/agent_0.safetensors
-    agent_1: /home/elliot/research/projects/assistax/JaxMARL/baselines/IPPO/outputs/mabrax/walker2d_2x3/2024-10-02/01-06-13/agent_1.safetensors
 
 hydra:
   job:

@@ -46,8 +46,8 @@ DEVICE: 0
 eval:
   compute_value: false
   path: 
-    human: /home/leo/assistax/JaxMARL/baselines/MAPPO/outputs/mabrax/pushcoop/2025-05-13/23-41-02/robot1.safetensors
-    robot: /home/leo/assistax/JaxMARL/baselines/MAPPO/outputs/mabrax/pushcoop/2025-05-13/23-41-02/robot2.safetensors
+    human: ./path/to/human.safetensors
+    robot: ./path/to/robot.safetensors
 
 
 # SWEEPER SETTINGS
@@ -58,12 +58,6 @@ sweep:
     max: -3.0
   ent_coef: false
   clip_eps: false
-
-# CROSSPLAY SETTINGS
-crossplay:
-  paths:
-    agent_0: /home/elliot/research/projects/assistax/JaxMARL/baselines/IPPO/outputs/mabrax/walker2d_2x3/2024-10-02/01-06-13/agent_0.safetensors
-    agent_1: /home/elliot/research/projects/assistax/JaxMARL/baselines/IPPO/outputs/mabrax/walker2d_2x3/2024-10-02/01-06-13/agent_1.safetensors
 
 hydra:
   job:
