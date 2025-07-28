@@ -103,6 +103,8 @@ TODO add citation for the paper here once uploaded on Arxiv
 
 ## TODOS 
 
-- [ ] Homogonize the configs e.g. have `rl.gamma` instead of `GAMMA` 
+- [ ] Homogonize the configs e.g. have `rl.gamma` instead of `GAMMA`.
+- [ ] Add more detailed docs to `assistax/baselines`.
+- [ ] Add a **collaborate** section to the docs. 
 
 
