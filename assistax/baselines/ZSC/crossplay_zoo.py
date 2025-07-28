@@ -30,6 +30,10 @@ from omegaconf import OmegaConf
 from assistax.wrappers.aht import ZooManager, extract_uuids_from_eval_results
 from hydra.utils import to_absolute_path
 from typing import Dict, List, Any, Callable, Tuple
+from assistax.baselines.utils import (
+    _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
+    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    )
 
 
 # ================================ DATA STRUCTURES ================================
@@ -48,194 +52,6 @@ class EvalNetworkState:
     """
     apply_fn: Callable = struct.field(pytree_node=False)
     params: Dict
-
-
-# ================================ TREE MANIPULATION UTILITIES ================================
-
-def _tree_take(pytree, indices, axis=None):
-    """
-    Take elements from each leaf of a pytree along a specified axis.
-    
-    Args:
-        pytree: JAX pytree (nested structure of arrays)
-        indices: Indices to take from each array
-        axis: Axis along which to take indices (None for flat indexing)
-        
-    Returns:
-        Pytree with same structure but indexed arrays
-    """
-    return jax.tree.map(lambda x: x.take(indices, axis=axis), pytree)
-
-
-def _tree_shape(pytree):
-    """
-    Get the shape of each leaf in a pytree.
-    
-    Args:
-        pytree: JAX pytree (nested structure of arrays)
-        
-    Returns:
-        Pytree with same structure but shapes instead of arrays
-    """
-    return jax.tree.map(lambda x: x.shape, pytree)
-
-
-def _unstack_tree(pytree):
-    """
-    Unstack a pytree along the first axis, yielding a list of pytrees.
-    
-    Converts a pytree where each leaf has shape (N, ...) into a list of N pytrees
-    where each leaf has shape (...).
-    
-    Args:
-        pytree: JAX pytree with arrays of shape (N, ...)
-        
-    Returns:
-        List of N pytrees, each with arrays of shape (...)
-    """
-    leaves, treedef = jax.tree_util.tree_flatten(pytree)
-    unstacked_leaves = list(zip(*leaves))
-    return [jax.tree_util.tree_unflatten(treedef, leaves)
-            for leaves in unstacked_leaves]
-
-
-def _stack_tree(pytree_list, axis=0):
-    """
-    Stack a list of pytrees along a specified axis.
-    
-    Args:
-        pytree_list: List of pytrees with compatible structures
-        axis: Axis along which to stack
-        
-    Returns:
-        Single pytree with stacked arrays
-    """
-    return jax.tree.map(
-        lambda *leaf: jnp.stack(leaf, axis=axis),
-        *pytree_list
-    )
-
-
-def _concat_tree(pytree_list, axis=0):
-    """
-    Concatenate a list of pytrees along a specified axis.
-    
-    Args:
-        pytree_list: List of pytrees with compatible structures
-        axis: Axis along which to concatenate
-        
-    Returns:
-        Single pytree with concatenated arrays
-    """
-    return jax.tree.map(
-        lambda *leaf: jnp.concat(leaf, axis=axis),
-        *pytree_list
-    )
-
-
-def _tree_split(pytree, n, axis=0):
-    """
-    Split a pytree into n parts along a specified axis.
-    
-    Args:
-        pytree: JAX pytree to split
-        n: Number of parts to split into
-        axis: Axis along which to split
-        
-    Returns:
-        List of n pytrees
-    """
-    leaves, treedef = jax.tree.flatten(pytree)
-    split_leaves = zip(
-        *jax.tree.map(lambda x: jnp.array_split(x, n, axis), leaves)
-    )
-    return [
-        jax.tree.unflatten(treedef, leaves)
-        for leaves in split_leaves
-    ]
-
-
-def _flatten_and_split_trainstate(trainstate, n_sequential_evals=1):
-    """
-    Flatten training states across batch dimensions and split for sequential evaluation.
-    
-    This operation flattens the first two dimensions and splits the result into
-    manageable chunks for memory-efficient evaluation.
-    
-    Args:
-        trainstate: Training state with batch dimensions
-        n_sequential_evals: Number of sequential evaluation chunks
-        
-    Returns:
-        List of flattened training state chunks
-    """
-    flat_trainstate = jax.tree.map(
-        lambda x: x.reshape((x.shape[0] * x.shape[1], *x.shape[2:])),
-        trainstate
-    )
-    return _tree_split(flat_trainstate, n_sequential_evals)
-
-
-# ================================ EPISODE PROCESSING UTILITIES ================================
-
-def _take_episode(pipeline_states, dones, time_idx=-1, eval_idx=0):
-    """
-    Extract a complete episode from evaluation data.
-    
-    Takes the pipeline states for a specific evaluation run and returns only
-    the timesteps before the episode ended (excluding done states).
-    
-    Args:
-        pipeline_states: Environment pipeline states for all timesteps
-        dones: Boolean array indicating episode termination
-        time_idx: Time axis index (default: -1)
-        eval_idx: Which evaluation episode to extract (default: 0)
-        
-    Returns:
-        List of pipeline states for the complete episode
-    """
-    episodes = _tree_take(pipeline_states, time_idx, axis=0)
-    episodes = _tree_take(episodes, eval_idx, axis=1)
-    dones = dones.take(time_idx, axis=0)
-    dones = dones.take(eval_idx, axis=1)
-    return [
-        state
-        for state, done in zip(_unstack_tree(episodes), dones)
-        if not done
-    ]
-
-
-def _compute_episode_returns(eval_info, time_axis=-2):
-    """
-    Compute undiscounted episode returns from evaluation information.
-    
-    Handles episode boundaries correctly by resetting cumulative rewards
-    when episodes end and start new ones.
-    
-    Args:
-        eval_info: Evaluation information containing rewards and done flags
-        time_axis: Axis representing time dimension (default: -2)
-        
-    Returns:
-        Dictionary of undiscounted returns per agent
-    """
-    done_arr = eval_info.done["__all__"]
-    
-    # Create mask for episode boundaries
-    first_timestep = [slice(None) for _ in range(done_arr.ndim)]
-    first_timestep[time_axis] = 0
-    episode_done = jnp.cumsum(done_arr, axis=time_axis, dtype=bool)
-    episode_done = jnp.roll(episode_done, 1, axis=time_axis)
-    episode_done = episode_done.at[tuple(first_timestep)].set(False)
-    
-    # Sum rewards within episodes only
-    undiscounted_returns = jax.tree.map(
-        lambda r: (r * (1 - episode_done)).sum(axis=time_axis),
-        eval_info.reward
-    )
-    
-    return undiscounted_returns
-
 
 # ================================ ALGORITHM LOADING UTILITIES ================================
 
@@ -617,7 +433,7 @@ def run_crossplay_evaluation(
 
 # ================================ MAIN CROSSPLAY ORCHESTRATION ================================
 
-@hydra.main(version_base=None, config_path="crossplay_config", config_name="crossplay_zoo")
+@hydra.main(version_base=None, config_path="config", config_name="crossplay_zoo")
 def main(config):
     """
     Main orchestration function for multi-algorithm crossplay evaluation.

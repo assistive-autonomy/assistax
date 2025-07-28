@@ -12,6 +12,7 @@ diverse agents from multiple algorithms.
 """
 
 import os
+import sys
 import time
 from tqdm import tqdm
 import jax
@@ -36,10 +37,12 @@ from assistax.baselines.utils import (
     )
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 # ================================ MAIN AHT TRAINING FUNCTION ================================
 
-@hydra.main(version_base=None, config_path="config", config_name="ippo_aht")
+@hydra.main(version_base=None, config_path="config", config_name="ppo_aht")
 def main(config):
     """
     Main function for Ad Hoc Teamwork training using IPPO with zoo-based partners.
@@ -64,16 +67,16 @@ def main(config):
     # Import the appropriate IPPO variant based on network architecture configuration
     match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
         case (False, False):
-            from ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Feedforward Networks with No Parameter Sharing")
         case (False, True):
-            from ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Feedforward Networks with Parameter Sharing")
         case (True, False):
-            from ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with No Parameter Sharing")
         case (True, True):
-            from ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with Parameter Sharing")
 
     # ===== TRAINING SETUP =====
@@ -107,13 +110,21 @@ def main(config):
         # ===== TRAIN/TEST SPLIT FOR GENERALIZATION EVALUATION =====
         # Critical for measuring zero-shot generalization capability
         print("Creating train/test splits for generalization evaluation...")
+        all_partners = pd.concat(partner_dict.values(), ignore_index=True)
+        print(f"Total partners across all algorithms: {len(all_partners)}")
+   
+        # Do a single 50/50 split across all partners
+        train_partners = all_partners.sample(frac=0.5, random_state=42)  # Set random_state for reproducibility
+        test_partners = all_partners.drop(train_partners.index)
+
+        # Split back into algorithm-specific dictionaries
         train_set = {}
         test_set = {}
-        for algo in partner_dict.keys(): 
-            # 50/50 split ensures robust evaluation of generalization
-            train_set[algo] = partner_dict[algo].sample(frac=0.5)
-            test_set[algo] = partner_dict[algo].drop(train_set[algo].index)
-            print(f"  {algo}: {len(train_set[algo])} train, {len(test_set[algo])} test partners")
+
+        for algo in partner_dict.keys():
+            train_set[algo] = train_partners[train_partners['algorithm'] == algo].reset_index(drop=True)
+            test_set[algo] = test_partners[test_partners['algorithm'] == algo].reset_index(drop=True)
+            print(f" {algo}: {len(train_set[algo])} train, {len(test_set[algo])} test partners")
 
         # Create zoo loading dictionaries for training and testing
         load_zoo_dict_train = {algo: {"human": list(train_set[algo].agent_uuid)} for algo in partner_dict.keys()}
