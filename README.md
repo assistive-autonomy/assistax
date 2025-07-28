@@ -44,7 +44,7 @@ This will create a `zoo` directory where configs and parameters used during trai
 ### 👯 Training for ZSC
 
 ```bash
-uv run python assistax/baselines/IPPO/ippo_aht.py ENV_NAME=scratchitch
+uv run python assistax/baselines/ZSC/ppo_aht.py ENV_NAME=scratchitch
 ```
 
 This will run a ZSC experiment for a single PPO robot agent against the pre-trained partner policies in the zoo. Check the config `{alg}_aht.yaml`. By default, this will do a 50-50 train-test split of the pre-trained partner agent population.
@@ -65,7 +65,11 @@ uv run python assistax/baselines/IPPO/ippo_sweep.py ENV_NAME=scratchitch
 
 This will generate a sweep for the specified IPPO variant for the scratchitch task. You can run larger sweeps by utilizing Hydra's multirun feature (see the Hydra documentation for more details).
 
-### 🥱 Other information
+## 🦓 Pre-trained partner policies 
+
+The pre-trained partner policies `zoo` can be downloaded on [Hugging Face](https://huggingface.co/datasets/leohink/assistax-zoo/). Downlaod the `zoo.tar.gz` file and change the `ZOO_PATH` config in `assistax/baselines/ZSC/config/ppo_aht.yaml` to train a 50-50 split agains a pre-trained population of "human" agents. 
+
+## 🥱 Other information
 
 - We use Hydra for managing configuration and training runs. For more information, see the [Hydra docs](https://hydra.cc/docs/intro/).
 - We rely on Mujoco's MJX as a physics engine you may wish to tune performance by setting the following XLA environment variable `XLA_FLAGS=--xla_gpu_triton_gemm_any=true` (see [MJX docs](https://mujoco.readthedocs.io/en/stable/mjx.html#gpu-performance))
