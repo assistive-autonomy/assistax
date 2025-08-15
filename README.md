@@ -19,9 +19,7 @@ We use `uv` for environment and package management. We highly recommend using `u
 git clone https://github.com/assistive-autonomy/assistax.git
 ```
 
-2.
-
-Install all packages with uv 
+2. Install all packages with uv 
 
 *If you have a NVIDIA GPU*
 ```bash
