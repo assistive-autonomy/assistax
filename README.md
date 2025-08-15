@@ -1,5 +1,7 @@
 # 🦾 Assistax 
 
+[Paper Link](https://arxiv.org/abs/2507.21638) 
+
 <div style="display: flex; justify-content: space-between;">
   <img src="docs/imgs/scratch.jpeg" alt="Scratching" style="width: 32%;">
   <img src="docs/imgs/bedbath.jpeg" alt="Scratching" style="width: 32%;">
@@ -17,10 +19,19 @@ We use `uv` for environment and package management. We highly recommend using `u
 git clone https://github.com/assistive-autonomy/assistax.git
 ```
 
-2. Install all packages with uv
+2. Install all packages with uv 
+
+*If you have a NVIDIA GPU*
 ```bash
 cd assistax
-uv sync && uv pip install -e .
+uv sync && uv pip install -e ".[cuda]" 
+```
+
+*Otherwise for CPU*
+
+```bash
+cd assistax
+uv sync && uv pip install -e ".[cpu]" 
 ```
 
 ## 🚀 Quick Start
@@ -101,9 +112,21 @@ Some relavant repo's you should check out!
 - [gymnax](https://github.com/RobertTLange/gymnax)
 - [JaxRobotarium](https://github.com/GT-STAR-Lab/JaxRobotarium)  
 
-## Citations 
+## Citation
 
-TODO add citation for the paper here once uploaded on Arxiv
+If you use Assistax in your work please cite it as:
+
+```
+@misc{hinckeldey2025assistaxhardwareacceleratedreinforcementlearning,
+      title={Assistax: A Hardware-Accelerated Reinforcement Learning Benchmark for Assistive Robotics}, 
+      author={Leonard Hinckeldey and Elliot Fosong and Elle Miller and Rimvydas Rubavicius and Trevor McInroe and Patricia Wollstadt and Christiane B. Wiebel-Herboth and Subramanian Ramamoorthy and Stefano V. Albrecht},
+      year={2025},
+      eprint={2507.21638},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2507.21638}, 
+}
+```
 
 ## TODOS 
 
