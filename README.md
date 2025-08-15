@@ -19,10 +19,21 @@ We use `uv` for environment and package management. We highly recommend using `u
 git clone https://github.com/assistive-autonomy/assistax.git
 ```
 
-2. Install all packages with uv
+2.
+
+Install all packages with uv 
+
+*If you have a NVIDIA GPU*
 ```bash
 cd assistax
-uv sync && uv pip install -e .
+uv sync && uv pip install -e ".[cuda]" 
+```
+
+*Otherwise for CPU*
+
+```bash
+cd assistax
+uv sync && uv pip install -e ".[cpu]" 
 ```
 
 ## 🚀 Quick Start
