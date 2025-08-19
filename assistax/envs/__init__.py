@@ -33,30 +33,6 @@ _envs = {
     "pushcoop": pushcoop.PushCoop,
 }
 
-
-# def get_environment(env_name: str, **kwargs) -> Env:
-#     """Returns an environment from the environment registry.
-
-#     Args:
-#       env_name: environment name string
-#       **kwargs: keyword arguments that get passed to the Env class constructor
-
-#     Returns:
-#       env: an environment
-#     """
-#     return _envs[env_name](**kwargs)
-
-
-# def register_environment(env_name: str, env_class: Type[Env]):
-#     """Adds an environment to the registry.
-
-#     Args:
-#       env_name: environment name string
-#       env_class: the Env class to add to the registry
-#     """
-#     _envs[env_name] = env_class
-
-
 def create(
     env_name: str,
     episode_length: int = 1000,
@@ -65,8 +41,10 @@ def create(
     batch_size: Optional[int] = None,
     disability: Optional[dict[str, Any]] = None,
     het_reward: Optional[bool] = False,
+    preference_rewards: Optional[dict[str, Any]] = None,
     **kwargs,
-) -> Env:
+    ) -> Env:
+
     """Creates an environment from the registry.
 
     Args:
@@ -92,6 +70,8 @@ def create(
         env = training.AutoResetWrapper(env)
     if disability:
         env = training.DisabilityWrapper(env, disability)
+    if preference_rewards:
+        env = training.PreferenceRewardWrapper(env, preference_rewards)
 
     return env
 

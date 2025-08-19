@@ -69,6 +69,8 @@ class ScratchItch(PipelineEnv):
                 }
             )
 
+        self.n_agents = 2
+
         self.panda_actuators_ids = []
         self.humanoid_actuators_ids = []
 
@@ -158,7 +160,10 @@ class ScratchItch(PipelineEnv):
                 "arm": scratch_arm,
                 "arm_geom_idx": scratch_arm_geom_idx,
                 "pos": scratch_pos,
-            }
+            },
+            "scratcher_speed": 0.0, # add for preference tracking
+            "scratcher_force": 0.0,
+            "action_magnitude": 0.0,
         }
 
         pipeline_state = self.pipeline_init(qpos, qvel)
@@ -187,7 +192,7 @@ class ScratchItch(PipelineEnv):
         metrics = {
             "reward_dist": zero,
             "reward_ctrl": zero,
-            "reward_scratching": zero
+            "reward_scratching": zero,
         }
         return State(pipeline_state, obs, reward, done, metrics, info)
 
@@ -244,6 +249,12 @@ class ScratchItch(PipelineEnv):
             reward_dist = r_dist,
             reward_ctrl = ctrl_cost,
             reward_scratching = r_scratching
+        )
+
+        state.info.update(
+            scratcher_speed=scratcher_speed,
+            scratcher_force=scratcher_force,
+            action_magnitude=jp.linalg.norm(action),
         )
 
         return state.replace(
@@ -333,3 +344,4 @@ class ScratchItch(PipelineEnv):
             )
         )
         return self.sys.replace(geom_pos=self.sys.geom_pos.at[target_idx].set(new_pos))
+    

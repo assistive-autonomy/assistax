@@ -16,6 +16,23 @@ ENV_KWARGS:
     joint_strength: 1.0
     tremor_magnitude: 0.0
 
+  preference_rewards:
+    preference_weights:
+      speed_preference: 0.25
+      force_preference: 0.35
+      action_efficiency: 0.15
+      touch_penalty: -0.03
+    preference_ranges:
+      speed_range: [0.06, 0.14]
+      force_range: [1.5, 3.5]
+      max_action_magnitude: 0.8
+    touch_threshold: 0.3
+    variable_names:
+      speed: "scratcher_speed"
+      force: "scratcher_force"
+      action_magnitude: "action_magnitude"
+      contact_forces: "contact_forces"  
+
   # pixel_obs:
   #   hw: 64
   #   frame_stack: 3

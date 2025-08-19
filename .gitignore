@@ -19,6 +19,7 @@ multirun/
 *.npy
 *.sh
 *.png
+CLAUDE.md
 
 # Build outputs
 build/
@@ -32,3 +33,4 @@ node_modules/
 # Environment
 .env.local
 .env.production
+.claude 

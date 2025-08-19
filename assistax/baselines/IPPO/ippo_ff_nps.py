@@ -372,6 +372,7 @@ def make_train(config, save_train_state=False, load_zoo=False):
 
                 # Process outputs
                 done_batch = batchify(done, env.agents)
+
                 info = jax.tree_util.tree_map(lambda x: x.swapaxes(0, 1), info)
                 
                 transition = Transition(
@@ -610,7 +611,7 @@ def make_train(config, save_train_state=False, load_zoo=False):
                 "update_step": update_step,
                 "env_step": update_step * config["NUM_STEPS"] * config["NUM_ENVS"],
             }
-            
+
             if save_train_state:
                 metric.update({"train_state": update_state.train_state})
             

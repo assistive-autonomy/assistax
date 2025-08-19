@@ -98,3 +98,8 @@ cpu = ["jax==0.4.37"]
 
 [tool.uv]
 override-dependencies = ["mujoco==3.2.6", "brax==0.10.4"]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.30.1",
+]
