@@ -7,23 +7,34 @@ ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
   backend: mjx
+  het_reward: False
   disability:
     joint_idx: 13
     joint_restriction_factor: 1.0
     joint_strength: 1.0
     tremor_magnitude: 0.0
-  #TOTAL_TIMESTEPS: 30e6
-  #NUM_STEPS: 256
-  #NUM_ENVS: 512
-  #NUM_SEEDS: 1
-  #SEED: 0
-  #NUM_EVAL_EPISODES: 64
-TOTAL_TIMESTEPS: 1e3
+  preference_rewards:
+    preference_weights:
+      speed_preference: 0.25
+      force_preference: 0.35
+      action_efficiency: 0.15
+      touch_penalty: -0.03
+    preference_ranges:
+      speed_range: [0.06, 0.14]
+      force_range: [1.5, 3.5]
+      max_action_magnitude: 0.8
+    touch_threshold: 0.3
+    variable_names:
+      speed: "scratcher_speed"
+      force: "scratcher_force"
+      action_magnitude: "action_magnitude"
+      contact_forces: "contact_forces"  
+TOTAL_TIMESTEPS: 30e6
 NUM_STEPS: 256
-NUM_ENVS: 1
-NUM_SEEDS: 1
+NUM_ENVS: 2048
+NUM_SEEDS: 6
 SEED: 0
-NUM_EVAL_EPISODES: 2
+NUM_EVAL_EPISODES: 12
 
 # RL HYPERPARAMETERS
 ALGORITHM: IPPO
@@ -48,7 +59,7 @@ DISABLE_JIT: False
 DEVICE: 0
 
 # ZOO SETTINGS
-ZOO_PATH: ./path/to/zoo
+ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo
 
 hydra:
   job:

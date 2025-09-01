@@ -44,7 +44,7 @@ DISABLE_JIT: False
 DEVICE: 0
 
 # ZOO SETTINGS
-ZOO_PATH: ./path/to/assistax/zoo
+ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo
 
 hydra:
   job:
