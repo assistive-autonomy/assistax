@@ -59,7 +59,7 @@ DISABLE_JIT: False
 DEVICE: 0
 
 # ZOO SETTINGS
-ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo
+ZOO_PATH: path/to/zoo  # Path to the directory containing the agent zoo
 
 hydra:
   job:

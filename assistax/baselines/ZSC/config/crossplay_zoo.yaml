@@ -40,7 +40,7 @@ crossplay:
 
 PARTNER_ALGORITHMS: ["IPPO"]
 
-ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo
+ZOO_PATH: path/to/zoo  # Path to the directory containing the agent zoo
 
 GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8

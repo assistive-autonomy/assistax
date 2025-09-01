@@ -126,7 +126,6 @@ def main(config):
     # Dictionary to hold functions per algorithm (this is disgusting so needs to be refactored)
     alg_funcs = {}
 
-    print(f"sys path: {sys.path}")
     if "IPPO" in config["crossplay"]["robot_algos"]:
         match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
             case (False, False):
