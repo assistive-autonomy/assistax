@@ -39,4 +39,7 @@ node_modules/
 zoo/
 
 # Configs 
+config/
+*/config/
 **/config/
+**/config/**
