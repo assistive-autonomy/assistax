@@ -1,0 +1,302 @@
+<mujoco model="cooperative_handover">
+    <!-- Compiler settings -->
+    <compiler angle="radian" meshdir="push_assets" autolimits="true"/>
+
+    
+    <!-- Asset definitions -->
+    <asset>
+    <!-- Panda -->
+        <mesh file="link0_0.obj"/>
+        <mesh file="link0_1.obj"/>
+        <mesh file="link0_2.obj"/>
+        <mesh file="link0_3.obj"/>
+        <mesh file="link0_4.obj"/>
+        <mesh file="link0_5.obj"/>
+        <mesh file="link0_7.obj"/>
+        <mesh file="link0_8.obj"/>
+        <mesh file="link0_9.obj"/>
+        <mesh file="link0_10.obj"/>
+        <mesh file="link0_11.obj"/>
+        <mesh file="link1.obj"/>
+        <mesh file="link2.obj"/>
+        <mesh file="link3_0.obj"/>
+        <mesh file="link3_1.obj"/>
+        <mesh file="link3_2.obj"/>
+        <mesh file="link3_3.obj"/>
+        <mesh file="link4_0.obj"/>
+        <mesh file="link4_1.obj"/>
+        <mesh file="link4_2.obj"/>
+        <mesh file="link4_3.obj"/>
+        <mesh file="link5_0.obj"/>
+        <mesh file="link5_1.obj"/>
+        <mesh file="link5_2.obj"/>
+        <mesh file="link6_0.obj"/>
+        <mesh file="link6_1.obj"/>
+        <mesh file="link6_2.obj"/>
+        <mesh file="link6_3.obj"/>
+        <mesh file="link6_4.obj"/>
+        <mesh file="link6_5.obj"/>
+        <mesh file="link6_6.obj"/>
+        <mesh file="link6_7.obj"/>
+        <mesh file="link6_8.obj"/>
+        <mesh file="link6_9.obj"/>
+        <mesh file="link6_10.obj"/>
+        <mesh file="link6_11.obj"/>
+        <mesh file="link6_12.obj"/>
+        <mesh file="link6_13.obj"/>
+        <mesh file="link6_14.obj"/>
+        <mesh file="link6_15.obj"/>
+        <mesh file="link6_16.obj"/>
+        <mesh file="link7_0.obj"/>
+        <mesh file="link7_1.obj"/>
+        <mesh file="link7_2.obj"/>
+        <mesh file="link7_3.obj"/>
+        <mesh file="link7_4.obj"/>
+        <mesh file="link7_5.obj"/>
+        <mesh file="link7_6.obj"/>
+        <mesh file="link7_7.obj"/>
+        <mesh file="hand_0.obj"/>
+        <mesh file="hand_1.obj"/>
+        <mesh file="hand_2.obj"/>
+        <mesh file="hand_3.obj"/>
+        <mesh file="hand_4.obj"/>
+        <mesh file="finger_0.obj"/>
+        <mesh file="finger_1.obj"/>
+        <material name="off_white" rgba="0.101961 0.121569 0.129412 1"/>
+        <material name="white" rgba="1 1 1 1"/>
+        <material name="black" rgba="0.25 0.25 0.25 1"/>
+        <material name="green" rgba="0 1 0 1"/>
+        <material name="light_blue" rgba="0.039216 0.541176 0.780392 1"/>
+        <material name="table" rgba="0.6 0.4 0.2 1"/>
+        <material name="handover_object" rgba="0.8 0.3 0.1 1"/>
+        <material name="obstacle" rgba="0.2 0.2 0.8 1"/>
+        <material name="target" rgba="0.2 0.8 0.2 0.3"/>
+        <material name="side_table" rgba="0.5 0.3 0.15 1"/>
+    </asset>
+
+       
+    <default>
+        <geom contype="0" conaffinity="0"/>
+        
+        <!-- Panda 1 class -->
+        <default class="panda1">
+            <geom contype="0" conaffinity="0"/>
+            <joint armature="0.1" damping="1" axis="0 0 1" range="-2.8973 2.8973"/>
+            <general dyntype="none" biastype="affine" ctrlrange="-1 1" ctrllimited="true" forcerange="-87 87"/>
+            
+            <!-- Finger class definition for panda1 -->
+            <default class="panda1_finger">
+                <joint axis="0 1 0" type="slide" range="0 0.04"/>
+                <general ctrlrange="0 0.04" ctrllimited="true" forcerange="-100 100" gainprm="100" biasprm="0 -100 -10"/>
+            </default>
+            
+            <!-- Tool and hand collision classes for panda1 -->
+            <default class="panda1_c_robot_tool">
+                <geom contype="4" conaffinity="35" rgba="0 0 1 1.0"/>
+            </default>
+            <default class="panda1_c_robot_hand">
+                <geom contype="4" conaffinity="35" group="3" rgba="0 0 1 0.1"/>
+            </default>
+            <default class="panda1_no-c_robot">
+                <geom contype="0" conaffinity="0" group="3" rgba="0 1 0 0.1"/>
+            </default>
+            <default class="panda1_primitive_collision">
+                <geom group="3" type="box" contype="0" conaffinity="0"
+                condim="3" solimp="0.99 0.995 0.01" solref="0.01 1" friction="1 0.005 0.0001"/>
+                <default class="panda1_fingertip_pad_collision_1">
+                    <geom type="box" size="0.011 0.0075 0.01" pos="0 0.0185 0.011"/>
+                </default>
+                <default class="panda1_fingertip_pad_collision_2">
+                    <geom type="box" size="0.011 0.0044 0.0019" pos="0 0.0068 0.0022"/>
+                </default>
+                <default class="panda1_fingertip_pad_collision_3">
+                    <geom type="box" size="0.00875 0.0035 0.01175" pos="0 0.0159 0.02835" quat="1 0.25 0 0"/>
+                </default>
+                <default class="panda1_fingertip_pad_collision_4">
+                    <geom type="box" size="0.00875 0.0076 0.00825" pos="0 0.00758 0.04525" conaffinity="3"/>
+                </default>
+            </default>
+        </default>
+        
+        <!-- Panda 2 class -->
+        <default class="panda2">
+            <geom contype="0" conaffinity="0"/>
+            <joint armature="0.1" damping="1" axis="0 0 1" range="-2.8973 2.8973"/>
+            <general dyntype="none" biastype="affine" ctrlrange="-1 1" ctrllimited="true" forcerange="-87 87"/>
+            
+            <!-- Pusher tool class definition for panda2 -->
+            <default class="panda2_finger">
+                <joint axis="0 1 0" type="slide" range="0 0.04"/>
+                <general ctrlrange="0 0.04" ctrllimited="true" forcerange="-100 100" gainprm="100" biasprm="0 -100 -10"/>
+            </default>
+            
+            <!-- Tool and hand collision classes for panda2 -->
+            <default class="panda2_c_robot_tool">
+                <geom contype="4" conaffinity="35" rgba="0 0 1 1.0"/>
+            </default>
+            <default class="panda2_c_robot_hand">
+                <geom contype="4" conaffinity="35" group="3" rgba="0 0 1 0.1"/>
+            </default>
+            <default class="panda2_no-c_robot">
+                <geom contype="0" conaffinity="0" group="3" rgba="0 1 0 0.1"/>
+            </default>
+
+            <default class="panda2_primitive_collision">
+                <geom group="3" type="box" contype="0" conaffinity="0"
+                condim="3" solimp="0.99 0.995 0.01" solref="0.01 1" friction="1 0.005 0.0001"/>
+                <default class="panda2_fingertip_pad_collision_1">
+                    <geom type="box" size="0.011 0.0075 0.01" pos="0 0.0185 0.011"/>
+                </default>
+                <default class="panda2_fingertip_pad_collision_2">
+                    <geom type="box" size="0.011 0.0044 0.0019" pos="0 0.0068 0.0022"/>
+                </default>
+                <default class="panda2_fingertip_pad_collision_3">
+                    <geom type="box" size="0.00875 0.0035 0.01175" pos="0 0.0159 0.02835" quat="1 0.25 0 0"/>
+                </default>
+                <default class="panda2_fingertip_pad_collision_4">
+                    <geom type="box" size="0.00875 0.0076 0.00825" pos="0 0.00758 0.04525" conaffinity="3"/>
+                </default>
+            </default>
+        </default>
+        
+        <!-- Common classes that can be used by both robots -->
+        <default class="c_robot_tool">
+            <geom contype="4" conaffinity="35" rgba="0 0 1 1.0"/>
+        </default>
+        <default class="c_robot_hand">
+            <geom contype="4" conaffinity="35" group="3" rgba="0 0 1 0.1"/>
+        </default>
+        <default class="no-c_robot">
+            <geom contype="0" conaffinity="0" group="3" rgba="0 1 0 0.1"/>
+        </default>
+        <default class="finger">
+            <joint axis="0 1 0" type="slide" range="0 0.04"/>
+            <general ctrlrange="0 0.04" ctrllimited="true" forcerange="-100 100" gainprm="100" biasprm="0 -100 -10"/>
+        </default>
+        
+        <!-- Visual class -->
+        <default class="visual">
+            <geom type="mesh" contype="0" conaffinity="0" group="2"/>
+        </default>
+        <default class="disabled_collision">
+            <geom contype="0" conaffinity="0" group="0" rgba="0.0 0.5 0.0 0.1"/>
+        </default>
+        <!-- Objects class -->
+        <default class="object">
+            <geom contype="1" conaffinity="1" condim="4" friction="0.8 0.1 0.1" solimp="0.99 0.99 0.01" solref="0.01 1"/>
+        </default>
+        <default class="table">
+            <geom contype="2" conaffinity="3" friction="0.5 0.005 0.0001" condim="3"/>
+        </default>
+    </default>
+    
+
+    <visual>
+        <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+        <rgba haze="0.15 0.25 0.35 1"/>
+        <global azimuth="120" elevation="-20"/>
+    </visual>
+    
+    <asset>
+        <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+        <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+        markrgb="0.8 0.8 0.8" width="300" height="300"/>
+        <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    </asset>
+
+
+    <!-- World body definition -->
+    <worldbody>
+        <!-- Lighting -->
+        <light name="light1" pos="0 0 3" dir="0 0 -1" diffuse="0.8 0.8 0.8" specular="0.3 0.3 0.3" castshadow="true"/>
+        <light name="light2" pos="3 3 3" dir="-1 -1 -1" diffuse="0.4 0.4 0.4" specular="0.1 0.1 0.1"/>
+        <camera name="default" pos="-1.102 2.367 1.930" xyaxes="-0.907 -0.421 0.000 0.231 -0.496 0.837"/>
+        
+        <!-- Environment -->
+        <geom name="floor" type="plane" pos="0 0 0" size="5 5 .1" material="groundplane" conaffinity="1"/>
+        
+        <!-- Small table on the left (for panda1) -->
+        <body name="table_left" pos="-0.6 0 0.15">
+            <geom name="table_left_top" type="box" size="0.15 0.15 0.015" pos="0 0 0" material="side_table" class="table"/>
+            <geom name="table_left_leg1" type="box" size="0.02 0.02 0.15" pos="0.12 0.12 -0.075" material="side_table" class="table"/>
+            <geom name="table_left_leg2" type="box" size="0.02 0.02 0.15" pos="0.12 -0.12 -0.075" material="side_table" class="table"/>
+            <geom name="table_left_leg3" type="box" size="0.02 0.02 0.15" pos="-0.12 0.12 -0.075" material="side_table" class="table"/>
+            <geom name="table_left_leg4" type="box" size="0.02 0.02 0.15" pos="-0.12 -0.12 -0.075" material="side_table" class="table"/>
+        </body>
+        
+        <!-- Small table on the right (for panda2) -->
+        <body name="table_right" pos="0.6 0 0.15">
+            <geom name="table_right_top" type="box" size="0.15 0.15 0.015" pos="0 0 0" material="side_table" class="table"/>
+            <geom name="table_right_leg1" type="box" size="0.02 0.02 0.15" pos="0.12 0.12 -0.075" material="side_table" class="table"/>
+            <geom name="table_right_leg2" type="box" size="0.02 0.02 0.15" pos="0.12 -0.12 -0.075" material="side_table" class="table"/>
+            <geom name="table_right_leg3" type="box" size="0.02 0.02 0.15" pos="-0.12 0.12 -0.075" material="side_table" class="table"/>
+            <geom name="table_right_leg4" type="box" size="0.02 0.02 0.15" pos="-0.12 -0.12 -0.075" material="side_table" class="table"/>
+        </body>
+        
+        <!-- Box object to handover (starts on left table, stable) -->
+        <body name="handover_object" pos="-0.6 0 0.275">
+            <freejoint name="handover_object_joint"/>
+            <geom name="box_object" type="box" size="0.025 0.025 0.055" pos="0 0 0" material="handover_object" class="object" mass="0.15" friction="0.8 0.1 0.1"/>
+            <site name="handover_object_site" pos="0 0 0" size="0.01"/>
+        </body>
+                
+        <!-- Goal sites for visualization -->
+        <site name="pickup_goal" pos="-0.6 0 0.3" size="0.03" rgba="0 1 0 0.5" type="sphere"/>
+        <site name="handover_goal" pos="0 0 0.35" size="0.04" rgba="1 1 0 0.5" type="sphere"/>
+        <site name="place_goal" pos="0.6 0 0.21" size="0.03" rgba="0 0 1 0.5" type="box"/>
+
+        <!-- First Panda Robot (positioned at -0.8, 0, 0) -->
+        <body name="panda1_base" pos="-0.8 0 0">
+            <include file="handover_assets/panda1_bare.xml"/>
+        </body>
+        
+        <!-- Second Panda Robot (positioned at 0.8, 0, 0, rotated 180 degrees) -->
+        <body name="panda2_base" pos="0.8 0 0" quat="0 0 0 1">
+            <include file="handover_assets/panda2_bare.xml"/>
+        </body>
+    </worldbody>
+
+    <equality>
+     <joint joint1="panda1_finger_joint1" joint2="panda1_finger_joint2" solimp="0.95 0.99 0.001" solref="0.005 1"/>
+     <joint joint1="panda2_finger_joint1" joint2="panda2_finger_joint2" solimp="0.95 0.99 0.001" solref="0.005 1"/>
+    </equality>
+    
+    <!-- Actuator definitions -->
+    <actuator>
+        <!-- Actuators for Panda 1 -->
+        <general class="panda1" name="panda1_actuator1" joint="panda1_joint1" gainprm="4500" biasprm="0 -1433 -450" ctrlrange="-0.9222 0.9222"/>
+        <general class="panda1" name="panda1_actuator2" joint="panda1_joint2" gainprm="4500" biasprm="0 -1433 -450" ctrlrange="-0.5611 0.5611"/>
+        <general class="panda1" name="panda1_actuator3" joint="panda1_joint3" gainprm="3500" biasprm="0 -1115 -350" ctrlrange="-0.9222 0.9222"/>
+        <general class="panda1" name="panda1_actuator4" joint="panda1_joint4" gainprm="3500" biasprm="0 -1115 -350" ctrlrange="-0.9778 -0.0222"/>
+        <general class="panda1" name="panda1_actuator5" joint="panda1_joint5" gainprm="2000" biasprm="0 -637 -200" ctrlrange="-0.9222 0.9222" forcerange="-12 12"/>
+        <general class="panda1" name="panda1_actuator6" joint="panda1_joint6" gainprm="2000" biasprm="0 -637 -200" ctrlrange="-0.0056 1.1945" forcerange="-12 12"/>
+        <general class="panda1" name="panda1_actuator7" joint="panda1_joint7" gainprm="2000" biasprm="0 -637 -200" ctrlrange="-0.9222 0.9222" forcerange="-12 12"/>
+        <general class="panda1" name="panda1_actuator8" joint="panda1_finger_joint1" ctrlrange="0 0.04" gainprm="350 0 0" biasprm="0 -350 -10" forcerange="-200 200"/>
+        
+        <!-- Actuators for Panda 2 -->
+        <general class="panda2" name="panda2_actuator1" joint="panda2_joint1" gainprm="4500" biasprm="0 -1433 -450" ctrlrange="-0.9222 0.9222"/>
+        <general class="panda2" name="panda2_actuator2" joint="panda2_joint2" gainprm="4500" biasprm="0 -1433 -450" ctrlrange="-0.5611 0.5611"/>
+        <general class="panda2" name="panda2_actuator3" joint="panda2_joint3" gainprm="3500" biasprm="0 -1115 -350" ctrlrange="-0.9222 0.9222"/>
+        <general class="panda2" name="panda2_actuator4" joint="panda2_joint4" gainprm="3500" biasprm="0 -1115 -350" ctrlrange="-0.9778 -0.0222"/>
+        <general class="panda2" name="panda2_actuator5" joint="panda2_joint5" gainprm="2000" biasprm="0 -637 -200" ctrlrange="-0.9222 0.9222" forcerange="-12 12"/>
+        <general class="panda2" name="panda2_actuator6" joint="panda2_joint6" gainprm="2000" biasprm="0 -637 -200" ctrlrange="-0.0056 1.1945" forcerange="-12 12"/>
+        <general class="panda2" name="panda2_actuator7" joint="panda2_joint7" gainprm="2000" biasprm="0 -637 -200" ctrlrange="-0.9222 0.9222" forcerange="-12 12"/>
+        <general class="panda2" name="panda2_actuator8" joint="panda2_finger_joint1" ctrlrange="0 0.04" gainprm="350 0 0" biasprm="0 -350 -10" forcerange="-200 200"/>
+    </actuator>
+    
+    <!-- Contact definitions for better grasping -->
+    <contact>
+        <!-- Contacts between fingers and object -->
+        <exclude body1="panda1_base" body2="handover_object"/>
+        <exclude body1="panda2_base" body2="handover_object"/>
+    </contact>
+    
+    <!-- Initial configuration keyframe - commented out until we determine correct DOF count -->
+    <!-- 
+    <keyframe>
+        <key name="init" qpos='-0.6 0 0.265 1 0 0 0 0 -0.785 0 -2.356 0 1.571 0.785 0.02 0.02 0 0.785 0 -2.356 0 1.571 -0.785 0.02 0.02'/>
+        <key name="init_right" qpos='0.6 0 0.265 1 0 0 0 0 -0.785 0 -2.356 0 1.571 0.785 0.02 0.02 0 0.785 0 -2.356 0 1.571 -0.785 0.02 0.02'/>
+    </keyframe>
+    -->
+
+</mujoco>

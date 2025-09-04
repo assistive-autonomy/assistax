@@ -32,3 +32,5 @@ node_modules/
 # Environment
 .env.local
 .env.production
+
+zoo/
