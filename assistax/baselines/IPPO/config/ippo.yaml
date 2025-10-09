@@ -8,16 +8,16 @@ ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
   backend: mjx
-  het_reward: False # TODO Has to be true for pushcoop otherwise false, but would be better to set this automatically based on the env. 
+  het_reward: False # TODO Has to be true for pushcoop otherwise false, but would be better to set this automatically based on the env.
   episode_length: 1000
   #disability:
   #  joint_idx: 13 # 13 = right shoulder, 14 = right elbow ; 12 = right shoulder but which direction?
   #  joint_restriction_factor: 0.7
   #  joint_strength: 0.7
   #  tremor_magnitude: 0.0
-#  sparse_rewards: 
+#  sparse_rewards:
 #    mode: periodic
-#    period: 100 
+#    period: 100
 #    accumulate: True
   #preference_rewards:
   #  preference_weights:
@@ -28,14 +28,14 @@ ENV_KWARGS:
   #    speed_range: [0.06, 0.14]
   #    force_range: [1.5, 3.5]
   #  touch_threshold: 0.1
-  #  reward_budget: 1 
+  #  reward_budget: 1
   #  overall_weight: 1
   #  normalization_mode: "budget"
   #  variable_names:
   #    speed: "ee_speed"
   #    force: "ee_force"
   #    action_magnitude: "action_magnitude"
-  #    contact_forces: "contact_forces"  
+  #    contact_forces: "contact_forces"
 
 
 TOTAL_TIMESTEPS: 4e7 
@@ -87,7 +87,7 @@ sweep:
 
 # Visualization settings
 SAVE_MUJOCO_TRAJECTORIES: True  # Always save trajectories (minimal overhead)
-SAVE_HTML_RENDER: False 
+SAVE_HTML_RENDER: False
 RENDER_VIDEOS: True  # Set to True for important runs
 VIDEO_FPS: 30  # Frames per second for videos
 VIDEO_WIDTH: 1920 # Video width in pixels
@@ -96,7 +96,7 @@ VIDEO_QUALITY: "high"  # "low", "medium", or "high"
 EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}   # Unique experiment identifier based on timestamp
 
 # WandB Params
-ENTITY: "lh-from-kb" 
+ENTITY: "lh-from-kb"
 PROJECT: "assistax-dev"
 WANDB_MODE: "online" # "disabled" or "online"
 EXP_TAGS: ["IPPO","FF","NoPS","Vectorized", "NoPref"]

@@ -48,6 +48,7 @@ def create(
     disability: Optional[dict[str, Any]] = None,
     het_reward: Optional[bool] = False,
     preference_rewards: Optional[dict[str, Any]] = None,
+    sparse_rewards: Optional[dict[str, Any]] = None,
     **kwargs,
     ) -> Env:
 
@@ -78,6 +79,8 @@ def create(
         env = training.DisabilityWrapper(env, disability)
     if preference_rewards:
         env = training.PreferenceRewardWrapper(env, preference_rewards)
+    if sparse_rewards:
+        env = training.SparseRewardWrapper(env, sparse_rewards)
 
     return env
 
