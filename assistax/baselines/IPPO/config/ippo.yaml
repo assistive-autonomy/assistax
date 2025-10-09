@@ -3,7 +3,7 @@ defaults:
   - _self_
 
 ENV_NAME: scratchitch 
-
+ALG: IPPO
 ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
@@ -15,23 +15,26 @@ ENV_KWARGS:
     joint_restriction_factor: 1.0
     joint_strength: 1.0
     tremor_magnitude: 0.0
-
-  preference_rewards:
-    preference_weights:
-      speed_preference: 0.25
-      force_preference: 0.35
-      action_efficiency: 0.15
-      touch_penalty: -0.03
-    preference_ranges:
-      speed_range: [0.06, 0.14]
-      force_range: [1.5, 3.5]
-      max_action_magnitude: 0.8
-    touch_threshold: 0.3
-    variable_names:
-      speed: "scratcher_speed"
-      force: "scratcher_force"
-      action_magnitude: "action_magnitude"
-      contact_forces: "contact_forces"  
+  sparse_rewards: 
+    mode: periodic
+    period: 100 
+    accumulate: True
+  # preference_rewards:
+  #   preference_weights:
+  #     speed_preference: 0.25:
+  #     force_preference: 0.35
+  #     action_efficiency: 0.15
+  #     touch_penalty: -0.03
+  #   preference_ranges:
+  #     speed_range: [0.06, 0.14]
+  #     force_range: [1.5, 3.5]
+  #     max_action_magnitude: 0.8
+  #   touch_threshold: 0.3
+  #   variable_names:
+  #     speed: "scratcher_speed"
+  #     force: "scratcher_force"
+  #     action_magnitude: "action_magnitude"
+  #     contact_forces: "contact_forces"  
 
   # pixel_obs:
   #   hw: 64
@@ -87,7 +90,7 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/${ENV_NAME}/${ALG}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: seed_${SEED}

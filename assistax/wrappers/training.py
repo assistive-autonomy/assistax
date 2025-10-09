@@ -428,3 +428,122 @@ class PreferenceRewardWrapper(Wrapper):
         # Note: penalty weight should be negative to make this a penalty
         new_touch = (prev_contact_force < self.touch_threshold) & (current_contact_force >= self.touch_threshold)
         return jp.where(new_touch, 1.0, 0.0)
+    
+class SparseRewardWrapper(Wrapper):
+    """Wrapper that makes rewards sparse based on configurable criteria.
+    
+    Supports multiple sparsity modes:
+    - 'periodic': Give rewards every N steps
+    - 'probabilistic': Give rewards with probability P
+    - 'terminal': Only give rewards at episode end
+    - 'mixed': Combine multiple criteria
+    """
+    
+    def __init__(
+        self,
+        env,
+        sparse_config: Dict[str, Any] = None,
+    ):
+        super().__init__(env)
+        
+        # Default configuration
+        default_config = {
+            'mode': 'periodic',  # 'periodic', 'probabilistic', 'mixed', 'terminal'
+            'period': 10,        # For periodic mode
+            'probability': 0.1,  # For probabilistic mode
+            'accumulate': True,  # Whether to accumulate masked rewards
+            'seed': 0,          # Random seed for probabilistic modes
+        }
+        
+        # Merge with provided config
+        config = default_config.copy()
+        if sparse_config:
+            config.update(sparse_config)
+        
+        # Set attributes from config
+        self.mode = config['mode']
+        self.period = config['period']
+        self.probability = config['probability']
+        self.accumulate = config['accumulate']
+        
+        # Initialize RNG for probabilistic modes
+        if self.mode in ['probabilistic', 'mixed']:
+            self.rng_key = jax.random.PRNGKey(config['seed'])
+        
+    def reset(self, rng: jax.Array) -> State:
+        state = self.env.reset(rng)
+        # Initialize tracking
+        state.info.update({
+            'step_count': 0,
+            'accumulated_reward': 0.0,
+            'original_reward': 0.0,
+            'reward_given': False,
+            'sparse_reward': 0.0,
+        })
+        return state
+    
+    def step(self, rng: jax.Array, state: State, action: jax.Array) -> State:
+        # Get state from wrapped environment
+        next_state = self.env.step(rng, state, action)
+        
+        # Update step count
+        step_count = state.info.get('step_count', 0) + 1
+        accumulated = state.info.get('accumulated_reward', 0.0)
+        
+        # Determine if we should give reward
+        should_give_reward = self._should_give_reward(
+            rng, step_count, next_state.done
+        )
+        
+        # Calculate sparse reward
+        if self.accumulate:
+            accumulated += next_state.reward
+            sparse_reward = jp.where(
+                should_give_reward,
+                accumulated,
+                0.0
+            )
+            # Reset accumulator when reward is given
+            accumulated = jp.where(should_give_reward, 0.0, accumulated)
+        else:
+            sparse_reward = jp.where(
+                should_give_reward,
+                next_state.reward,
+                0.0
+            )
+        
+        # Update info
+        next_state.info.update({
+            'step_count': step_count,
+            'accumulated_reward': accumulated,
+            'original_reward': next_state.reward,
+            'reward_given': should_give_reward,
+            'sparse_reward': sparse_reward,
+        })
+        
+        return next_state.replace(reward=sparse_reward)
+    
+    def _should_give_reward(
+        self, rng: jax.Array, step_count: int, done: bool
+    ) -> bool:
+        """Determine if reward should be given based on mode."""
+        
+        if self.mode == 'periodic':
+            return (step_count % self.period) == 0
+            
+        elif self.mode == 'probabilistic':
+            self.rng_key, subkey = jax.random.split(self.rng_key)
+            return jax.random.uniform(subkey) < self.probability
+            
+        elif self.mode == 'mixed':
+            # Combine periodic and probabilistic
+            periodic_check = (step_count % self.period) == 0
+            self.rng_key, subkey = jax.random.split(self.rng_key)
+            prob_check = jax.random.uniform(subkey) < self.probability
+            return periodic_check | prob_check
+            
+        elif self.mode == 'terminal':
+            return done
+            
+        else:
+            raise ValueError(f"Unknown mode: {self.mode}")
