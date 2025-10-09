@@ -38,8 +38,8 @@ class ArmManipulation(PipelineEnv):
         # wiping_reward_weight: float = 1.0,
         reset_noise_scale=5e-3,
         backend="mjx",
-        n_targets: int = 52,
-        target_threshold: float = 0.05,
+        # n_targets: int = 52,
+        # target_threshold: float = 0.05,
         **kwargs
     ):
         """Creates a BedBathing Environment.
