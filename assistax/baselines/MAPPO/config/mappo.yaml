@@ -8,24 +8,29 @@ ENV_KWARGS:
   homogenisation_method: max
   backend: mjx
   het_reward: False # needs to be true for pushcoop
-  episode_length: 1000
+  # episode_length: 1000
   disability:
     joint_idx: 13
     joint_restriction_factor: 1.0
     joint_strength: 1.0
     tremor_magnitude: 0.0
-TOTAL_TIMESTEPS: 30e6
-NUM_STEPS: 256
-NUM_ENVS: 512
-NUM_SEEDS: 4
+  sparse_rewards: 
+    mode: periodic
+    period: 100 
+    accumulate: True
+
+TOTAL_TIMESTEPS: 1e8
+NUM_STEPS: 128 
+NUM_ENVS: 1024
+NUM_SEEDS: 5 
 SEED: 0
-NUM_EVAL_EPISODES: 1
+NUM_EVAL_EPISODES: 16
 
 # RL HYPERPARAMETERS
 UPDATE_EPOCHS: 4
 NUM_MINIBATCHES: 4
 ANNEAL_LR: False
-LR: 2.5e-4
+LR: 4.4e-3
 ENT_COEF: 1e-4
 CLIP_EPS: 0.2
 SCALE_CLIP_EPS: False
@@ -63,7 +68,7 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED}
+    dir: multirun/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: seed_${SEED}_timesteps_${TOTAL_TIMESTEPS}$
