@@ -8,6 +8,7 @@ ENV_KWARGS:
   homogenisation_method: max
   backend: mjx
   het_reward: False
+  het_reward: False
   disability:
     joint_idx: 13
     joint_restriction_factor: 1.0
@@ -30,10 +31,30 @@ ENV_KWARGS:
       action_magnitude: "action_magnitude"
       contact_forces: "contact_forces"  
 TOTAL_TIMESTEPS: 30e6
+  preference_rewards:
+    preference_weights:
+      speed_preference: 0.25
+      force_preference: 0.35
+      action_efficiency: 0.15
+      touch_penalty: -0.03
+    preference_ranges:
+      speed_range: [0.06, 0.14]
+      force_range: [1.5, 3.5]
+      max_action_magnitude: 0.8
+    touch_threshold: 0.3
+    variable_names:
+      speed: "scratcher_speed"
+      force: "scratcher_force"
+      action_magnitude: "action_magnitude"
+      contact_forces: "contact_forces"  
+TOTAL_TIMESTEPS: 30e6
 NUM_STEPS: 256
 NUM_ENVS: 2048
 NUM_SEEDS: 6
+NUM_ENVS: 2048
+NUM_SEEDS: 6
 SEED: 0
+NUM_EVAL_EPISODES: 12
 NUM_EVAL_EPISODES: 12
 
 # RL HYPERPARAMETERS
@@ -59,7 +80,7 @@ DISABLE_JIT: False
 DEVICE: 0
 
 # ZOO SETTINGS
-ZOO_PATH: path/to/zoo  # Path to the directory containing the agent zoo
+ZOO_PATH: /home/lhin/assistax/zoo
 
 hydra:
   job:
