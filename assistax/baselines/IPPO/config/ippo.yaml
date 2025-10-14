@@ -46,9 +46,10 @@ ENV_KWARGS:
 TOTAL_TIMESTEPS: 1e8
 NUM_STEPS: 64
 NUM_ENVS: 1024 
-NUM_SEEDS: 5 
+NUM_SEEDS: 1 
 SEED: 0
-NUM_EVAL_EPISODES: 16
+NUM_EVAL_EPISODES: 8 
+
 
 # RL HYPERPARAMETERS
 UPDATE_EPOCHS: 4
@@ -93,4 +94,4 @@ hydra:
     dir: outputs/${ENV_NAME}/${ALG}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
     dir: multirun/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: ${SEED}
+    subdir: seed_${SEED}_reward_period_${ENV_KWARGS.sparse_rewards.period}
