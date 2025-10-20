@@ -114,7 +114,7 @@
                       <geom name="panda1_left_finger_pad" class="panda1_fingertip_pad_collision_4"/>
                     </body>
                     
-                    <!-- Right finger with sliding joint (passive) -->
+                    <!-- Right finger with sliding joint (pa/ssive) -->
                     <body name="panda1_right_finger" pos="0 0 0.0584" quat="0 0 0 1">
                       <inertial mass="0.015" pos="0 0 0" diaginertia="2.375e-6 2.375e-6 7.5e-7"/>
                       <joint name="panda1_finger_joint2" class="panda1_finger" damping="10"/>

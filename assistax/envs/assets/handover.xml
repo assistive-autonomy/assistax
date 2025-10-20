@@ -241,9 +241,9 @@
         </body>
                 
         <!-- Goal sites for visualization -->
-        <site name="pickup_goal" pos="-0.6 0 0.3" size="0.03" rgba="0 1 0 0.5" type="sphere"/>
-        <site name="handover_goal" pos="0 0 0.35" size="0.04" rgba="1 1 0 0.5" type="sphere"/>
-        <site name="place_goal" pos="0.6 0 0.21" size="0.03" rgba="0 0 1 0.5" type="box"/>
+        <site name="pickup_goal" pos="-0.6 0 0.21" size="0.03" rgba="0 1 0 0.5" type="sphere"/>
+        <site name="handover_goal" pos="0 0 0.5" size="0.04" rgba="1 1 0 0.5" type="sphere"/>
+        <site name="place_goal" pos="0.6 0 0.167" size="0.03 0.03 0.001" rgba="0 0 1 0.5" type="box"/>
 
         <!-- First Panda Robot (positioned at -0.8, 0, 0) -->
         <body name="panda1_base" pos="-0.8 0 0">
