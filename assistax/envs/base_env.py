@@ -3,7 +3,7 @@
 
 from typing import Dict, Literal, Optional, Tuple
 import chex
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
+from assistax.envs.multi_agent_env import MultiAgentEnv
 from gymnax.environments import spaces
 # from brax import envs
 from assistax import envs 

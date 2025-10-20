@@ -18,7 +18,7 @@
 import functools
 from typing import Dict, Optional, Type, Any
 
-
+from assistax.envs.multi_agent_env import MultiAgentEnv, State
 from assistax.envs import scratchitch
 from assistax.envs import bedbathing
 from assistax.envs import armmanipulation

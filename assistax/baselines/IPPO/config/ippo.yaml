@@ -23,7 +23,7 @@ ENV_KWARGS:
   #   cache_objects: False
   #   n_envs: 2  # if cachinig same as NUM_ENVS
 
-TOTAL_TIMESTEPS: 10e5
+TOTAL_TIMESTEPS: 3e7
 NUM_STEPS: 64
 NUM_ENVS: 256
 NUM_SEEDS: 3
@@ -70,7 +70,7 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/IPPO/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/IPPO/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: seed_${SEED}
