@@ -136,8 +136,10 @@ class CooperativeHandover(PipelineEnv):
         self.panda2_right_outer_touch_idx = 7
 
         # Contact IDs 
-        self.object_floor_contact_ids = jp.array([440, 441, 442, 443])  # Example contact IDs between object and floor
-        
+        self.object_floor_contact_id1 = 484
+        self.object_floor_contact_id2 = 485
+        self.object_floor_contact_id3 = 486
+        self.object_floor_contact_id4 = 487
         # Store reward weights
         self._dist_reward_weight = dist_reward_weight
         self._grasp_reward_weight = grasp_reward_weight
@@ -359,7 +361,7 @@ class CooperativeHandover(PipelineEnv):
         ctrl_reward = -self._ctrl_cost_weight * jp.sum(jp.square(action))
         
         # Drop penalty (check if object fell)
-        dropped = self._get_object_dropped(pipeline_state, self.object_floor_contact_ids) # Object below minimum height
+        dropped = self._get_object_dropped(pipeline_state, self.object_floor_contact_id1, self.object_floor_contact_id2, self.object_floor_contact_id3, self.object_floor_contact_id4) # Object below minimum height
         drop_reward = jp.where(dropped, self._drop_penalty, 0.0)
         
         # Collision penalty between robots
@@ -723,11 +725,16 @@ class CooperativeHandover(PipelineEnv):
         done = placed_successfully | dropped | severe_collision
         
         return done.astype(jp.float32)
-    
-    def _get_object_dropped(self, pipeline_state, object_floor_contact_ids):
+
+    def _get_object_dropped(self, pipeline_state, object_floor_contact_id1, object_floor_contact_id2, object_floor_contact_id3, object_floor_contact_id4) -> bool:
         """Check if the object has made contact with the floor."""
-        contact_forces = jax.vmap(lambda cid: contact_force(self.sys, pipeline_state, cid))(object_floor_contact_ids)
-        total_contact_force = jp.sum(contact_forces)
+
+        contact_force1 = contact_force(self.sys, pipeline_state, object_floor_contact_id1)
+        contact_force2 = contact_force(self.sys, pipeline_state, object_floor_contact_id2)
+        contact_force3 = contact_force(self.sys, pipeline_state, object_floor_contact_id3)
+        contact_force4 = contact_force(self.sys, pipeline_state, object_floor_contact_id4)
+
+        total_contact_force = jp.sum(jp.vstack([contact_force1, contact_force2, contact_force3, contact_force4]))
         return total_contact_force > 0.0  # Threshold could change based on what we consider "dropped"
 
     @property
