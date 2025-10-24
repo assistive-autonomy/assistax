@@ -116,6 +116,14 @@
                     <geom type="box" size="0.00875 0.0076 0.00825" pos="0 0.00758 0.04525" conaffinity="3"/>
                 </default>
             </default>
+
+            <default class="panda1_inner_touch_site">
+                <site type="box" size="0.00875 0.003 0.00825" pos="0 0.001 0.04525" rgba="1 1 0 0.8"/>
+            </default>
+            <default class="panda1_outer_touch_site">
+                <site type="box" size="0.00875 0.003 0.00825" pos="0 0.016 0.04525" rgba="1 0 0 0.8"/>
+            </default>
+
         </default>
         
         <!-- Panda 2 class -->
@@ -157,7 +165,15 @@
                     <geom type="box" size="0.00875 0.0076 0.00825" pos="0 0.00758 0.04525" conaffinity="3"/>
                 </default>
             </default>
-        </default>
+
+             <default class="panda2_inner_touch_site">
+                <site type="box" size="0.00875 0.003 0.00825" pos="0 0.001 0.04525" rgba="1 1 0 0.8"/>
+            </default>
+            <default class="panda2_outer_touch_site">
+                <site type="box" size="0.00875 0.003 0.00825" pos="0 0.016 0.04525" rgba="1 0 0 0.8"/>
+            </default>
+
+       </default>
         
         <!-- Common classes that can be used by both robots -->
         <default class="c_robot_tool">
@@ -213,7 +229,7 @@
         <camera name="default" pos="-1.102 2.367 1.930" xyaxes="-0.907 -0.421 0.000 0.231 -0.496 0.837"/>
         
         <!-- Environment -->
-        <geom name="floor" type="plane" pos="0 0 0" size="5 5 .1" material="groundplane" conaffinity="1"/>
+        <geom name="floor" type="plane" pos="0 0 0" size="5 5 .1" material="groundplane" contype="1" conaffinity="1"/>
         
         <!-- Small table on the left (for panda1) -->
         <body name="table_left" pos="-0.6 0 0.15">
@@ -290,7 +306,17 @@
         <exclude body1="panda1_base" body2="handover_object"/>
         <exclude body1="panda2_base" body2="handover_object"/>
     </contact>
-    
+    <sensor>
+        <touch name="panda1_left_inner_touch" site="panda1_left_inner_touch_site"/>
+        <touch name="panda1_right_inner_touch" site="panda1_right_inner_touch_site"/>
+        <touch name="panda1_left_outer_touch" site="panda1_left_outer_touch_site"/>
+        <touch name="panda1_right_outer_touch" site="panda1_right_outer_touch_site"/>
+
+        <touch name="panda2_left_inner_touch" site="panda2_left_inner_touch_site"/>
+        <touch name="panda2_right_inner_touch" site="panda2_right_inner_touch_site"/>
+        <touch name="panda2_left_outer_touch" site="panda2_left_outer_touch_site"/>
+        <touch name="panda2_right_outer_touch" site="panda2_right_outer_touch_site"/>
+    </sensor>
     <!-- Initial configuration keyframe - commented out until we determine correct DOF count -->
     <!-- 
     <keyframe>

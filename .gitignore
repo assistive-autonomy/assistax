@@ -35,3 +35,6 @@ node_modules/
 
 zoo/
 */zoo/
+
+MUJOCO_LOG.TXT
+MUJOCO_LOG.txt

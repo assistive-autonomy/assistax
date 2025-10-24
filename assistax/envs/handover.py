@@ -1,77 +1,74 @@
-from typing import Tuple, Dict, Optional
+from typing import Tuple
 from enum import IntEnum
-import jax
-from jax import numpy as jp
-import numpy as np
+
 from brax import base
 from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
 from etils import epath
-import mujoco
-from mujoco import mj_name2id
+import jax
+from jax import numpy as jp
+import mujoco 
+from mujoco import mj_id2name, mj_name2id
 from mujoco.mjx._src.support import contact_force
 
 
 class HandoverPhase(IntEnum):
-    """Phases of the handover task"""
-    APPROACH = 0      # Panda1 approaching object
-    GRASP = 1        # Panda1 grasping object
-    LIFT = 2         # Panda1 lifting object
-    TRANSFER = 3     # Moving to handover location
-    HANDOVER = 4     # Actual handover happening
-    RECEIVE = 5      # Panda2 receiving object
-    RETREAT = 6      # Panda1 retreating after handover
-    PLACE = 7        # Panda2 placing object
-    COMPLETE = 8     # Task complete
+    """Enumeration of handover task phases."""
+    APPROACH = 0
+    GRASP = 1
+    TRANSFER = 2
+    HANDOVER = 3
+    RETREAT = 4
+    PLACE = 5
 
 
 class CooperativeHandover(PipelineEnv):
     """
-    Cooperative handover task between two Franka Panda robots.
+    Cooperative handover environment where two Panda robots pass an object.
     
-    Task Description:
-    - Panda1 (left) picks up an object from the left table
-    - Both robots coordinate to meet at a handover point
-    - Panda1 transfers the object to Panda2
-    - Panda2 places the object on the right table
-    
-    The reward function encourages:
-    - Smooth, coordinated motion
-    - Stable grasping and handover
-    - Minimal forces during transfer
-    - Task completion
+    The task involves six phases:
+    1. APPROACH: Panda1 moves towards the object
+    2. GRASP: Panda1 grasps the object
+    3. TRANSFER: Panda1 lifts and moves object to handover location
+    4. HANDOVER: Panda2 approaches and both robots grip object
+    5. RETREAT: Panda2 takes object while Panda1 releases
+    6. PLACE: Panda2 places object at goal location
     """
-    
+
     def __init__(
         self,
-        # Task weights
-        phase_progress_weight: float = 2.0,
-        coordination_weight: float = 1.5,
-        grasp_stability_weight: float = 1.0,
-        smoothness_weight: float = 0.5,
-        force_penalty_weight: float = 0.3,
+        # Reward weights
+        dist_reward_weight: float = 1.0,
+        grasp_reward_weight: float = 2.0,
+        maintain_grip_weight: float = 1.0,
+        handover_reward_weight: float = 3.0,
+        place_reward_weight: float = 2.0,
         ctrl_cost_weight: float = 1e-4,
+        drop_penalty: float = -10.0,
+        collision_penalty: float = -5.0,
+        phase_transition_bonus: float = 5.0,
         
-        # Task parameters
-        grasp_threshold: float = 0.02,
-        handover_zone_radius: float = 0.1,
-        place_threshold: float = 0.05,
-        max_contact_force: float = 50.0,
-        gripper_force_range: Tuple[float, float] = (5.0, 30.0),
+        # Scaling factors
+        dist_scale: float = 0.1,
+        force_scale: float = 0.01,
         
         # Phase transition thresholds
-        lift_height: float = 0.1,
-        handover_height: float = 0.35,
-        coordination_distance: float = 0.15,
+        phase1_dist_threshold: float = 0.05,  # Distance for approach->grasp
+        phase2_force_threshold: float = 0.5,   # Force for grasp->transfer
+        phase3_dist_threshold: float = 0.15,   # Distance for transfer->handover
+        phase4_dual_grip_threshold: float = 0.5, # Both gripping for handover->retreat
+        phase5_dist_threshold: float = 0.08,   # Distance for retreat->place
+        place_contact_threshold: float = 0.02, # Contact with table for completion
         
-        # Simulation parameters
+        # General parameters
         reset_noise_scale: float = 5e-3,
         backend: str = "mjx",
         **kwargs
     ):
-        """Initialize the handover environment."""
+        """Creates a CooperativeHandover Environment."""
         
-        self.path = epath.resource_path("assistax") / "envs/assets/cooperative_handover.xml"
+        # Load XML model
+        self.path = epath.resource_path("assistax") / "envs/assets/handover.xml"
         mjmodel = mujoco.MjModel.from_xml_path(str(self.path))
         self.sys = mjcf.load_model(mjmodel)
         
@@ -82,552 +79,671 @@ class CooperativeHandover(PipelineEnv):
                 "opt.iterations": 1,
                 "opt.ls_iterations": 4,
             })
+
+        # MuJoCo object type indices
+        GEOM_IDX = mujoco.mjtObj.mjOBJ_GEOM
+        BODY_IDX = mujoco.mjtObj.mjOBJ_BODY
+        SITE_IDX = mujoco.mjtObj.mjOBJ_SITE
         
-        # Store weights
-        self._phase_progress_weight = phase_progress_weight
-        self._coordination_weight = coordination_weight
-        self._grasp_stability_weight = grasp_stability_weight
-        self._smoothness_weight = smoothness_weight
-        self._force_penalty_weight = force_penalty_weight
+        # Panda1 (left robot) indices
+        self.panda1_grip_site_idx = mj_name2id(mjmodel, SITE_IDX, "panda1_grip_site")
+        self.panda1_hand_body_idx = mj_name2id(mjmodel, BODY_IDX, "panda1_hand")
+        self.panda1_left_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda1_leftfinger_collision1")
+        self.panda1_right_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda1_rightfinger_collision1")
+        
+        # Panda2 (right robot) indices
+        self.panda2_grip_site_idx = mj_name2id(mjmodel, SITE_IDX, "panda2_grip_site")
+        self.panda2_hand_body_idx = mj_name2id(mjmodel, BODY_IDX, "panda2_hand")
+        self.panda2_left_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda2_leftfinger_collision1")
+        self.panda2_right_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda2_rightfinger_collision1")
+        
+        # Object indices
+        self.object_body_idx = mj_name2id(mjmodel, BODY_IDX, "handover_object")
+        self.object_geom_idx = mj_name2id(mjmodel, GEOM_IDX, "box_object")
+        
+        # Goal location indices
+        self.handover_goal_idx = mj_name2id(mjmodel, SITE_IDX, "handover_goal")
+        self.place_goal_idx = mj_name2id(mjmodel, SITE_IDX, "place_goal")
+        self.pickup_goal_idx = mj_name2id(mjmodel, SITE_IDX, "pickup_goal")
+        
+        # Table indices for place detection
+        self.table_right_geom = mj_name2id(mjmodel, GEOM_IDX, "table_right_top")
+
+        # Floor geom index for contact detection
+        self.floor_geom_idx = mj_name2id(mjmodel, GEOM_IDX, "floor")
+
+        # Joint indices for observations
+        # Object has 7 DOFs (3 pos + 4 quat) starting at index 0
+        self.object_joint_start = 0
+        self.object_joint_end = 7
+        
+        # Panda1 joints (7 arm + 2 fingers)
+        self.panda1_joint_start = 7
+        self.panda1_joint_end = 16  # 7 arm + 2 fingers
+        
+        # Panda2 joints (7 arm + 2 fingers)
+        self.panda2_joint_start = 16
+        self.panda2_joint_end = 25
+        
+        # Touch sensor indices
+        self.panda1_left_inner_touch_idx = 0
+        self.panda1_right_inner_touch_idx = 1
+        self.panda1_left_outer_touch_idx = 2
+        self.panda1_right_outer_touch_idx = 3
+        self.panda2_left_inner_touch_idx = 4
+        self.panda2_right_inner_touch_idx = 5
+        self.panda2_left_outer_touch_idx = 6
+        self.panda2_right_outer_touch_idx = 7
+
+        # Contact IDs 
+        self.object_floor_contact_ids = jp.array([440, 441, 442, 443])  # Example contact IDs between object and floor
+        
+        # Store reward weights
+        self._dist_reward_weight = dist_reward_weight
+        self._grasp_reward_weight = grasp_reward_weight
+        self._maintain_grip_weight = maintain_grip_weight
+        self._handover_reward_weight = handover_reward_weight
+        self._place_reward_weight = place_reward_weight
         self._ctrl_cost_weight = ctrl_cost_weight
+        self._drop_penalty = drop_penalty
+        self._collision_penalty = collision_penalty
+        self._phase_transition_bonus = phase_transition_bonus
         
-        # Store parameters
-        self._grasp_threshold = grasp_threshold
-        self._handover_zone_radius = handover_zone_radius
-        self._place_threshold = place_threshold
-        self._max_contact_force = max_contact_force
-        self._gripper_force_range = gripper_force_range
-        self._lift_height = lift_height
-        self._handover_height = handover_height
-        self._coordination_distance = coordination_distance
+        # Store scaling factors
+        self._dist_scale = dist_scale
+        self._force_scale = force_scale
+        
+        # Store thresholds
+        self._phase1_dist_threshold = phase1_dist_threshold
+        self._phase2_force_threshold = phase2_force_threshold
+        self._phase3_dist_threshold = phase3_dist_threshold
+        self._phase4_dual_grip_threshold = phase4_dual_grip_threshold
+        self._phase5_dist_threshold = phase5_dist_threshold
+        self._place_contact_threshold = place_contact_threshold
+        
         self._reset_noise_scale = reset_noise_scale
-        
-        # Get model indices
-        self._setup_indices(mjmodel)
         
         n_frames = 4
         kwargs["n_frames"] = kwargs.get("n_frames", n_frames)
         
         super().__init__(sys=self.sys, backend=backend, **kwargs)
-    
-    def _setup_indices(self, mjmodel):
-        """Setup all necessary model indices."""
-        GEOM_IDX = mujoco.mjtObj.mjOBJ_GEOM
-        BODY_IDX = mujoco.mjtObj.mjOBJ_BODY
-        SITE_IDX = mujoco.mjtObj.mjOBJ_SITE
-        JOINT_IDX = mujoco.mjtObj.mjOBJ_JOINT
-        ACTUATOR_IDX = mujoco.mjtObj.mjOBJ_ACTUATOR
-        
-        # Handover object indices (we probably dont need all of these)
-        self.object_bod_idx = mj_name2id(mjmodel, BODY_IDX, "handover_object")
-        self.object_geom_idx = mj_name2id(mjmodel, GEOM_IDX, "box_object")
-        self.object_site_idx = mj_name2id(mjmodel, SITE_IDX, "handover_object_site")
-        
-        # Panda1 indices
-        self.panda1_rfinger_bod_idx = mj_name2id(mjmodel, BODY_IDX, "panda1_right_finger")
-        self.panda1_lfinger_bod_idx = mj_name2id(mjmodel, BODY_IDX, "panda1_left_finger")
-        self.panda1_rfinger_col_idx = mj_name2id(mjmodel, GEOM_IDX, "panda1_right_finger_pad") 
-        self.panda1_lfinger_col_idx = mj_name2id(mjmodel, GEOM_IDX, "panda1_left_finger_pad")
-        self.panda1_hand_bod_idx = mj_name2id(mjmodel, BODY_IDX, "panda1_hand")
-        self.panda1_grip_site_idx = mj_name2id(mjmodel, SITE_IDX, "panda1_grip_site")
-        # Panda2 indices  
-        self.panda2_rfinger_bod_idx = mj_name2id(mjmodel, BODY_IDX, "panda2_right_finger")
-        self.panda2_lfinger_bod_idx = mj_name2id(mjmodel, BODY_IDX, "panda2_left_finger")
-        self.panda2_rfinger_col_idx = mj_name2id(mjmodel, GEOM_IDX, "panda2_right_finger_pad") 
-        self.panda2_lfinger_col_idx = mj_name2id(mjmodel, GEOM_IDX, "panda2_left_finger_pad")
-        self.panda2_hand_bod_idx = mj_name2id(mjmodel, BODY_IDX, "panda2_hand")
-        self.panda2_grip_site_idx = mj_name2id(mjmodel, SITE_IDX, "panda2_grip_site")       
-        # Goal sites
-        self.pickup_goal_idx = mj_name2id(mjmodel, SITE_IDX, "pickup_goal")
-        self.handover_goal_idx = mj_name2id(mjmodel, SITE_IDX, "handover_goal")
-        self.place_goal_idx = mj_name2id(mjmodel, SITE_IDX, "place_goal")
-        
-        # (Check these) probably not correct. Joint indices for both robots
-        self.panda1_joint_start = 7  # After object's freejoint
-        self.panda1_joint_end = 15   # 7 arm joints + 1 gripper
-        self.panda2_joint_start = 15
-        self.panda2_joint_end = 23
-        
-        # (Check these) Actuator indices
-        self.panda1_actuators = list(range(0, 8))
-        self.panda2_actuators = list(range(8, 16))
-    
+
     def reset(self, rng: jax.Array) -> State:
-        """Reset the environment to initial state."""
+        """Resets the environment to an initial state."""
         rng_pos, rng_vel = jax.random.split(rng, 2)
-        
+
         low, hi = -self._reset_noise_scale, self._reset_noise_scale
-        init_q = self.sys.mj_model.keyframe("init").qpos
+        init_q = self.sys.mj_model.keyframe("init").qpos if "init" in [
+            self.sys.mj_model.key(i).name for i in range(self.sys.mj_model.nkey)
+        ] else self.sys.init_q
         
-        # Add noise to positions
         qpos = init_q + jax.random.uniform(
             rng_pos, (self.sys.q_size(),), minval=low, maxval=hi
         )
         qvel = jax.random.uniform(
             rng_vel, (self.sys.qd_size(),), minval=low, maxval=hi
         )
-        
+
         pipeline_state = self.pipeline_init(qpos, qvel)
         
-        # Initial observations
-        obs = self._get_obs(pipeline_state)
+        obs = self._get_obs(pipeline_state, HandoverPhase.APPROACH)
         
-        # Initialize metrics
         reward, done = jp.zeros(2)
         metrics = {
-            "phase": HandoverPhase.APPROACH,
-            "reward_phase": 0.0,
-            "reward_coordination": 0.0,
+            "reward_dist": 0.0,
             "reward_grasp": 0.0,
-            "reward_smooth": 0.0,
-            "reward_force": 0.0,
+            "reward_maintain_grip": 0.0,
+            "reward_handover": 0.0,
+            "reward_place": 0.0,
             "reward_ctrl": 0.0,
-            "grasp_stability": 0.0,
-            "handover_progress": 0.0,
+            "penalty_drop": 0.0,
+            "penalty_collision": 0.0,
+            "phase_transition_bonus": 0.0,
+            "phase": HandoverPhase.APPROACH,
         }
         
         info = {
             "phase": HandoverPhase.APPROACH,
-            "prev_action": jp.zeros(16),  # Store for smoothness calculation
-            "handover_initiated": False,
-            "object_transferred": False,
+            "prev_object_pos": pipeline_state.xpos[self.object_body_idx],
+            "panda1_gripping": False,
+            "panda2_gripping": False,
         }
         
         return State(pipeline_state, obs, reward, done, metrics, info)
-    
-    def step(self, rng: jax.Array, state: State, action: jax.Array) -> State:
-        """Execute one environment step."""
+
+    def step(self, state: State, action: jax.Array) -> State:
+        """Runs one timestep of the environment's dynamics."""
         pipeline_state0 = state.pipeline_state
-        assert pipeline_state0 is not None
-        
-        # Apply action
         pipeline_state = self.pipeline_step(pipeline_state0, action)
         
-        # Get observations
-        obs = self._get_obs(pipeline_state)
+        # Get current phase
+        current_phase = state.info["phase"]
         
-        # Determine current phase
-        phase = self._determine_phase(pipeline_state, state.info)
+        # Compute phase-specific rewards
+        rewards_dict = self._compute_rewards(pipeline_state, action, current_phase, state.info)
         
-        # Calculate reward components
-        rewards = self._calculate_rewards(
-            pipeline_state, action, state.info, phase
+        # Check for phase transitions
+        new_phase, phase_transition_reward = self._check_phase_transition(
+            pipeline_state, current_phase, state.info
         )
         
         # Total reward
-        reward = (
-            self._phase_progress_weight * rewards["phase_progress"] +
-            self._coordination_weight * rewards["coordination"] +
-            self._grasp_stability_weight * rewards["grasp_stability"] +
-            self._smoothness_weight * rewards["smoothness"] +
-            self._force_penalty_weight * rewards["force_penalty"] +
-            self._ctrl_cost_weight * rewards["ctrl_cost"]
+        total_reward = (
+            rewards_dict["dist"] +
+            rewards_dict["grasp"] +
+            rewards_dict["maintain_grip"] +
+            rewards_dict["handover"] +
+            rewards_dict["place"] +
+            rewards_dict["ctrl"] +
+            rewards_dict["drop"] +
+            rewards_dict["collision"] +
+            phase_transition_reward
         )
         
-        # Check if done
-        done = self._check_done(pipeline_state, phase)
+        # Check termination conditions
+        done = self._check_done(pipeline_state, new_phase, rewards_dict)
+        
+        # Get observations
+        obs = self._get_obs(pipeline_state, new_phase)
+        
+        # Update info
+        panda1_gripping = self._check_gripper_contact(pipeline_state, robot_id=1)
+        panda2_gripping = self._check_gripper_contact(pipeline_state, robot_id=2)
+        
+        new_info = {
+            "phase": new_phase,
+            "prev_object_pos": pipeline_state.xpos[self.object_body_idx],
+            "panda1_gripping": panda1_gripping,
+            "panda2_gripping": panda2_gripping,
+        }
         
         # Update metrics
         state.metrics.update(
-            phase=phase,
-            reward_phase=rewards["phase_progress"],
-            reward_coordination=rewards["coordination"],
-            reward_grasp=rewards["grasp_stability"],
-            reward_smooth=rewards["smoothness"],
-            reward_force=rewards["force_penalty"],
-            reward_ctrl=rewards["ctrl_cost"],
-            grasp_stability=rewards["grasp_stability"],
-            handover_progress=rewards["handover_progress"],
+            reward_dist=rewards_dict["dist"],
+            reward_grasp=rewards_dict["grasp"],
+            reward_maintain_grip=rewards_dict["maintain_grip"],
+            reward_handover=rewards_dict["handover"],
+            reward_place=rewards_dict["place"],
+            reward_ctrl=rewards_dict["ctrl"],
+            penalty_drop=rewards_dict["drop"],
+            penalty_collision=rewards_dict["collision"],
+            phase_transition_bonus=phase_transition_reward,
+            phase=new_phase,
         )
-        
-        # Update info
-        new_info = state.info.copy()
-        new_info["phase"] = phase
-        new_info["prev_action"] = action
-        new_info.update(self._update_task_flags(pipeline_state, phase, state.info)) # This upadates the True flags whether handover has happened or not.
         
         return state.replace(
             pipeline_state=pipeline_state,
             obs=obs,
-            reward=reward,
+            reward=total_reward,
             done=done,
             info=new_info,
         )
-    
-    def _get_obs(self, pipeline_state: base.State) -> jax.Array:
-        """Get observation vector."""
-        # Object state
+
+    def _get_obs(self, pipeline_state: base.State, phase: int) -> jax.Array:
+        """Constructs observation vector."""
+        
+        # Panda1 observations
+        panda1_joint_pos = pipeline_state.qpos[self.panda1_joint_start:self.panda1_joint_end]
+        panda1_joint_vel = pipeline_state.qvel[self.panda1_joint_start-7:self.panda1_joint_end-7]
+        panda1_ee_pos = pipeline_state.site_xpos[self.panda1_grip_site_idx]
+        panda1_hand_quat = pipeline_state.xquat[self.panda1_hand_body_idx]
+        
+        # Panda2 observations
+        panda2_joint_pos = pipeline_state.qpos[self.panda2_joint_start:self.panda2_joint_end]
+        panda2_joint_vel = pipeline_state.qvel[self.panda2_joint_start-7:self.panda2_joint_end-7]
+        panda2_ee_pos = pipeline_state.site_xpos[self.panda2_grip_site_idx]
+        panda2_hand_quat = pipeline_state.xquat[self.panda2_hand_body_idx]
+        
+        # Object observations
         object_pos = pipeline_state.xpos[self.object_body_idx]
         object_quat = pipeline_state.xquat[self.object_body_idx]
-        object_vel = pipeline_state.qvel[0:6]  # First 6 DOF for freejoint
+        object_vel = pipeline_state.qvel[self.object_joint_start:self.object_joint_start+3]
+        object_angvel = pipeline_state.qvel[self.object_joint_start+3:self.object_joint_end]
         
-        # Panda1 state
-        panda1_ee_pos = pipeline_state.site_xpos[self.panda1_ee_site_idx]
-        panda1_joints = pipeline_state.qpos[self.panda1_joint_start:self.panda1_joint_end]
-        panda1_joint_vel = pipeline_state.qvel[self.panda1_joint_start:self.panda1_joint_end]
+        # Touch sensor readings
+        panda1_touch = jp.array([
+            pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
+            pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
+            pipeline_state.sensordata[self.panda1_left_outer_touch_idx],
+            pipeline_state.sensordata[self.panda1_right_outer_touch_idx],
+        ])
         
-        # Panda2 state
-        panda2_ee_pos = pipeline_state.site_xpos[self.panda2_ee_site_idx]
-        panda2_joints = pipeline_state.qpos[self.panda2_joint_start:self.panda2_joint_end]
-        panda2_joint_vel = pipeline_state.qvel[self.panda2_joint_start:self.panda2_joint_end]
+        panda2_touch = jp.array([
+            pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
+            pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
+            pipeline_state.sensordata[self.panda2_left_outer_touch_idx],
+            pipeline_state.sensordata[self.panda2_right_outer_touch_idx],
+        ])
         
         # Goal positions
-        pickup_goal = pipeline_state.site_xpos[self.pickup_goal_idx]
-        handover_goal = pipeline_state.site_xpos[self.handover_goal_idx]
-        place_goal = pipeline_state.site_xpos[self.place_goal_idx]
+        handover_goal_pos = pipeline_state.site_xpos[self.handover_goal_idx]
+        place_goal_pos = pipeline_state.site_xpos[self.place_goal_idx]
         
-        # Relative positions
-        panda1_to_object = object_pos - panda1_ee_pos
-        panda2_to_object = object_pos - panda2_ee_pos
-        ee_to_ee = panda2_ee_pos - panda1_ee_pos
+        # Phase as one-hot encoding
+        phase_onehot = jp.zeros(6)
+        phase_onehot = phase_onehot.at[phase].set(1.0)
         
-        # Contact forces
-        panda1_contact_force = self._get_gripper_contact_force(pipeline_state, 1)
-        panda2_contact_force = self._get_gripper_contact_force(pipeline_state, 2)
-        
-        return jp.concatenate([
-            object_pos,              # 3
-            object_quat,             # 4
-            object_vel,              # 6
-            panda1_ee_pos,           # 3
-            panda1_joints,           # 8
-            panda1_joint_vel,        # 8
-            panda2_ee_pos,           # 3
-            panda2_joints,           # 8
-            panda2_joint_vel,        # 8
-            pickup_goal,             # 3
-            handover_goal,           # 3
-            place_goal,              # 3
-            panda1_to_object,        # 3
-            panda2_to_object,        # 3
-            ee_to_ee,                # 3
-            panda1_contact_force,    # 6
-            panda2_contact_force,    # 6
+        # Concatenate all observations
+        obs = jp.concatenate([
+            panda1_joint_pos,
+            panda1_joint_vel,
+            panda1_ee_pos,
+            panda1_hand_quat,
+            panda2_joint_pos,
+            panda2_joint_vel,
+            panda2_ee_pos,
+            panda2_hand_quat,
+            object_pos,
+            object_quat,
+            object_vel,
+            object_angvel,
+            panda1_touch,
+            panda2_touch,
+            handover_goal_pos,
+            place_goal_pos,
+            phase_onehot,
         ])
-    
-    def _determine_phase(self, pipeline_state: base.State, info: Dict) -> HandoverPhase:
-        """Determine current phase of handover task."""
-        object_pos = pipeline_state.pos[self.object_bod_idx]
-        object_height = object_pos[2]
         
-        panda1_ee_pos = pipeline_state.site_xpos[self.panda1_grip_site_idx]
-        panda2_ee_pos = pipeline_state.site_xpos[self.panda2_grip_site_idx]
-        
-        # Check distances
-        panda1_to_object = jp.linalg.norm(object_pos - panda1_ee_pos)
-        panda2_to_object = jp.linalg.norm(object_pos - panda2_ee_pos)
-        ee_distance = jp.linalg.norm(panda2_ee_pos - panda1_ee_pos)
-        
-        handover_pos = pipeline_state.site_xpos[self.handover_goal_idx]
-        place_pos = pipeline_state.site_xpos[self.place_goal_idx]
-        
-        dist_to_handover = jp.linalg.norm(object_pos - handover_pos)
-        dist_to_place = jp.linalg.norm(object_pos - place_pos)
-        
-        current_phase = info["phase"]
-        
-        # Phase transition logic
-        if current_phase == HandoverPhase.APPROACH:
-            if panda1_to_object < self._grasp_threshold:
-                return HandoverPhase.GRASP
-                
-        elif current_phase == HandoverPhase.GRASP:
-            panda1_grasp = self._check_grasp(pipeline_state, 1)
-            if panda1_grasp and object_height > 0.2:
-                return HandoverPhase.LIFT
-                
-        elif current_phase == HandoverPhase.LIFT:
-            if object_height > self._handover_height - 0.05:
-                return HandoverPhase.TRANSFER
-                
-        elif current_phase == HandoverPhase.TRANSFER:
-            if dist_to_handover < self._handover_zone_radius:
-                return HandoverPhase.HANDOVER
-                
-        elif current_phase == HandoverPhase.HANDOVER:
-            panda2_grasp = self._check_grasp(pipeline_state, 2)
-            if panda2_grasp and panda2_to_object < panda1_to_object:
-                return HandoverPhase.RECEIVE
-                
-        elif current_phase == HandoverPhase.RECEIVE:
-            panda1_grasp = self._check_grasp(pipeline_state, 1)
-            if not panda1_grasp and ee_distance > self._coordination_distance:
-                return HandoverPhase.RETREAT
-                
-        elif current_phase == HandoverPhase.RETREAT:
-            if dist_to_place < self._handover_zone_radius:
-                return HandoverPhase.PLACE
-                
-        elif current_phase == HandoverPhase.PLACE:
-            if dist_to_place < self._place_threshold and object_height < 0.25:
-                return HandoverPhase.COMPLETE
-        
-        return current_phase
-    
-    def _calculate_rewards(
+        return obs
+
+    def _compute_rewards(
         self, 
-        pipeline_state: base.State,
+        pipeline_state: base.State, 
         action: jax.Array,
-        info: Dict,
-        phase: HandoverPhase
-    ) -> Dict[str, float]:
-        """Calculate all reward components."""
+        phase: int,
+        info: dict
+        ) -> dict:
+        """Computes phase-specific rewards."""
         
-        rewards = {}
+        # Control cost (always applied)
+        ctrl_reward = -self._ctrl_cost_weight * jp.sum(jp.square(action))
         
-        # 1. Phase Progress Reward
-        rewards["phase_progress"] = self._calculate_phase_reward(pipeline_state, phase)
+        # Drop penalty (check if object fell)
+        dropped = self._get_object_dropped(pipeline_state, self.object_floor_contact_ids) # Object below minimum height
+        drop_reward = jp.where(dropped, self._drop_penalty, 0.0)
         
-        # 2. Coordination Reward
-        rewards["coordination"] = self._calculate_coordination_reward(pipeline_state, phase)
+        # Collision penalty between robots
+        robot_collision = self._check_robot_collision(pipeline_state)
+        collision_reward = jp.where(robot_collision, self._collision_penalty, 0.0)
         
-        # 3. Grasp Stability Reward
-        rewards["grasp_stability"] = self._calculate_grasp_stability_reward(pipeline_state, phase)
+        # Compute all possible phase-specific rewards
+        approach_reward = self._reward_approach(pipeline_state)
+        grasp_reward = self._reward_grasp(pipeline_state, robot_id=1)
+        transfer_reward = self._reward_transfer(pipeline_state)
+        handover_reward = self._reward_handover(pipeline_state)
+        retreat_reward = self._reward_retreat(pipeline_state)
+        place_reward = self._reward_place(pipeline_state)
         
-        # 4. Smoothness Reward (penalizes jerky movements)
-        prev_action = info.get("prev_action", jp.zeros_like(action))
-        action_diff = jp.linalg.norm(action - prev_action)
-        rewards["smoothness"] = -action_diff
+        maintain_grip_1 = self._reward_maintain_grip(pipeline_state, info, robot_id=1)
+        maintain_grip_2 = self._reward_maintain_grip(pipeline_state, info, robot_id=2)
         
-        # 5. Force Penalty (penalizes excessive forces)
-        rewards["force_penalty"] = self._calculate_force_penalty(pipeline_state)
+        # Use jax.lax.switch to select rewards based on phase
+        # Phase 0 (APPROACH): dist only
+        # Phase 1 (GRASP): dist + grasp
+        # Phase 2 (TRANSFER): maintain_grip_1 + transfer
+        # Phase 3 (HANDOVER): maintain_grip_1 + handover
+        # Phase 4 (RETREAT): maintain_grip_2 + retreat
+        # Phase 5 (PLACE): maintain_grip_2 + place
         
-        # 6. Control Cost
-        rewards["ctrl_cost"] = -jp.sum(jp.square(action))
-        
-        # 7. Handover Progress (for metrics)
-        rewards["handover_progress"] = phase / HandoverPhase.COMPLETE
-        
-        return rewards
-    
-    def _calculate_phase_reward(self, pipeline_state: base.State, phase: HandoverPhase) -> float:
-        """Calculate reward based on phase-specific objectives."""
-        
-        object_pos = pipeline_state.xpos[self.object_body_idx]
-        panda1_ee_pos = pipeline_state.site_xpos[self.panda1_ee_site_idx]
-        panda2_ee_pos = pipeline_state.site_xpos[self.panda2_ee_site_idx]
-        
-        if phase == HandoverPhase.APPROACH:
-            # Reward for getting close to object
-            dist = jp.linalg.norm(object_pos - panda1_ee_pos)
-            return jp.exp(-5 * dist)
-            
-        elif phase == HandoverPhase.GRASP:
-            # Reward for maintaining grasp
-            grasp_quality = self._get_grasp_quality(pipeline_state, 1)
-            return grasp_quality
-            
-        elif phase == HandoverPhase.LIFT:
-            # Reward for lifting to correct height
-            target_height = self._handover_height
-            height_error = jp.abs(object_pos[2] - target_height)
-            return jp.exp(-10 * height_error)
-            
-        elif phase == HandoverPhase.TRANSFER:
-            # Reward for moving to handover zone
-            handover_pos = pipeline_state.site_xpos[self.handover_goal_idx]
-            dist = jp.linalg.norm(object_pos - handover_pos)
-            return jp.exp(-5 * dist)
-            
-        elif phase == HandoverPhase.HANDOVER:
-            # Reward for coordinated handover
-            ee_dist = jp.linalg.norm(panda2_ee_pos - panda1_ee_pos)
-            optimal_dist = 0.1  # Optimal distance for handover
-            return jp.exp(-10 * jp.abs(ee_dist - optimal_dist))
-            
-        elif phase == HandoverPhase.RECEIVE:
-            # Reward for stable transfer
-            grasp2 = self._get_grasp_quality(pipeline_state, 2)
-            grasp1 = self._get_grasp_quality(pipeline_state, 1)
-            return grasp2 * (1 - grasp1)  # Panda2 grips while Panda1 releases
-            
-        elif phase == HandoverPhase.RETREAT:
-            # Reward for Panda1 moving away
-            ee_dist = jp.linalg.norm(panda2_ee_pos - panda1_ee_pos)
-            return jp.minimum(ee_dist / 0.5, 1.0)
-            
-        elif phase == HandoverPhase.PLACE:
-            # Reward for placing at target
-            place_pos = pipeline_state.site_xpos[self.place_goal_idx]
-            dist = jp.linalg.norm(object_pos - place_pos)
-            return jp.exp(-5 * dist)
-            
-        elif phase == HandoverPhase.COMPLETE:
-            # Large bonus for task completion
-            return 10.0
-            
-        return 0.0
-    
-    def _calculate_coordination_reward(self, pipeline_state: base.State, phase: HandoverPhase) -> float:
-        """Reward coordinated motion between robots."""
-        
-        panda1_ee_pos = pipeline_state.site_xpos[self.panda1_ee_site_idx]
-        panda2_ee_pos = pipeline_state.site_xpos[self.panda2_ee_site_idx]
-        
-        # During handover phases, robots should coordinate their positions
-        if phase in [HandoverPhase.TRANSFER, HandoverPhase.HANDOVER, HandoverPhase.RECEIVE]:
-            # Both end-effectors should be near the handover zone
-            handover_pos = pipeline_state.site_xpos[self.handover_goal_idx]
-            
-            dist1 = jp.linalg.norm(panda1_ee_pos - handover_pos)
-            dist2 = jp.linalg.norm(panda2_ee_pos - handover_pos)
-            
-            # Reward when both are close to handover zone
-            coordination = jp.exp(-3 * dist1) * jp.exp(-3 * dist2)
-            
-            # Also reward appropriate relative positioning
-            ee_dist = jp.linalg.norm(panda2_ee_pos - panda1_ee_pos)
-            relative_reward = jp.exp(-10 * jp.abs(ee_dist - 0.1))
-            
-            return coordination * relative_reward
-        
-        return 0.0
-    
-    def _calculate_grasp_stability_reward(self, pipeline_state: base.State, phase: HandoverPhase) -> float:
-        """Reward stable grasping during critical phases."""
-        
-        if phase in [HandoverPhase.GRASP, HandoverPhase.LIFT, HandoverPhase.TRANSFER]:
-            # Panda1 should maintain stable grasp
-            grasp_quality = self._get_grasp_quality(pipeline_state, 1)
-            object_vel = jp.linalg.norm(pipeline_state.qvel[0:3])  # Linear velocity
-            stability = grasp_quality * jp.exp(-object_vel)
-            return stability
-            
-        elif phase in [HandoverPhase.HANDOVER, HandoverPhase.RECEIVE]:
-            # Both robots involved in grasp
-            grasp1 = self._get_grasp_quality(pipeline_state, 1)
-            grasp2 = self._get_grasp_quality(pipeline_state, 2)
-            
-            # During handover, want smooth transition
-            total_grasp = grasp1 + grasp2
-            return jp.minimum(total_grasp, 1.0)
-            
-        elif phase in [HandoverPhase.RETREAT, HandoverPhase.PLACE]:
-            # Panda2 should maintain stable grasp
-            grasp_quality = self._get_grasp_quality(pipeline_state, 2)
-            object_vel = jp.linalg.norm(pipeline_state.qvel[0:3])
-            stability = grasp_quality * jp.exp(-object_vel)
-            return stability
-            
-        return 0.0
-    
-    def _calculate_force_penalty(self, pipeline_state: base.State) -> float:
-        """Penalize excessive contact forces."""
-        
-        # Get contact forces for both grippers
-        force1 = self._get_gripper_contact_force(pipeline_state, 1)
-        force2 = self._get_gripper_contact_force(pipeline_state, 2)
-        
-        # Penalize forces above threshold
-        force_magnitude1 = jp.linalg.norm(force1[:3])  # Only consider linear forces
-        force_magnitude2 = jp.linalg.norm(force2[:3])
-        
-        penalty1 = jp.maximum(0, force_magnitude1 - self._max_contact_force)
-        penalty2 = jp.maximum(0, force_magnitude2 - self._max_contact_force)
-        
-        return -(penalty1 + penalty2) / self._max_contact_force
-    
-    def _check_grasp(self, pipeline_state: base.State, robot_id: int) -> bool:
-        """Check if robot has grasped the object."""
-        
-        # Get contact force between gripper and object
-        force = self._get_gripper_contact_force(pipeline_state, robot_id)
-        force_magnitude = jp.linalg.norm(force[:3])
-        
-        # Check if force is within grasp range
-        in_range = jp.logical_and(
-            force_magnitude > self._gripper_force_range[0],
-            force_magnitude < self._gripper_force_range[1]
+        dist_reward = jax.lax.switch(
+            phase,
+            [
+                lambda: approach_reward,  # APPROACH
+                lambda: approach_reward,  # GRASP
+                lambda: transfer_reward,  # TRANSFER
+                lambda: 0.0,              # HANDOVER
+                lambda: retreat_reward,   # RETREAT
+                lambda: 0.0,              # PLACE
+            ]
         )
         
-        # Also check gripper closure
-        if robot_id == 1:
-            gripper_pos = pipeline_state.qpos[self.panda1_joint_end - 1]
-        else:
-            gripper_pos = pipeline_state.qpos[self.panda2_joint_end - 1]
+        grasp_reward_final = jax.lax.switch(
+            phase,
+            [
+                lambda: 0.0,          # APPROACH
+                lambda: grasp_reward, # GRASP
+                lambda: 0.0,          # TRANSFER
+                lambda: 0.0,          # HANDOVER
+                lambda: 0.0,          # RETREAT
+                lambda: 0.0,          # PLACE
+            ]
+        )
+        
+        maintain_grip_reward = jax.lax.switch(
+            phase,
+            [
+                lambda: 0.0,            # APPROACH
+                lambda: 0.0,            # GRASP
+                lambda: maintain_grip_1, # TRANSFER
+                lambda: maintain_grip_1, # HANDOVER
+                lambda: maintain_grip_2, # RETREAT
+                lambda: maintain_grip_2, # PLACE
+            ]
+        )
+        
+        handover_reward_final = jax.lax.switch(
+            phase,
+            [
+                lambda: 0.0,             # APPROACH
+                lambda: 0.0,             # GRASP
+                lambda: 0.0,             # TRANSFER
+                lambda: handover_reward, # HANDOVER
+                lambda: 0.0,             # RETREAT
+                lambda: 0.0,             # PLACE
+            ]
+        )
+        
+        place_reward_final = jax.lax.switch(
+            phase,
+            [
+                lambda: 0.0,          # APPROACH
+                lambda: 0.0,          # GRASP
+                lambda: 0.0,          # TRANSFER
+                lambda: 0.0,          # HANDOVER
+                lambda: 0.0,          # RETREAT
+                lambda: place_reward, # PLACE
+            ]
+        )
+        
+        rewards = {
+            "dist": dist_reward,
+            "grasp": grasp_reward_final,
+            "maintain_grip": maintain_grip_reward,
+            "handover": handover_reward_final,
+            "place": place_reward_final,
+            "ctrl": ctrl_reward,
+            "drop": drop_reward,
+            "collision": collision_reward,
+        }
+        
+        return rewards
+
+    def _reward_approach(self, pipeline_state: base.State) -> float: # Cururently this seems to be only used for robot1 
+        """Reward for approaching object with Panda1."""
+        ee_pos = pipeline_state.site_xpos[self.panda1_grip_site_idx]
+        obj_pos = pipeline_state.xpos[self.object_body_idx]
+        dist = jp.linalg.norm(ee_pos - obj_pos)
+        return self._dist_reward_weight * jp.exp(-dist**2 / self._dist_scale)
+
+    def _reward_grasp(self, pipeline_state: base.State, robot_id: int) -> float:
+        """Reward for grasping with appropriate force."""
+        # Select touch sensors based on robot_id using jax.lax.switch
+        touch_sensors = jax.lax.switch(
+            robot_id - 1,  # Convert to 0-indexed
+            [
+                lambda: jp.array([
+                    pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
+                    pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
+                ]),
+                lambda: jp.array([
+                    pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
+                    pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
+                ])
+            ]
+        )
+        
+        # Reward for contact on both fingers
+        both_touching = jp.all(touch_sensors > 0.01)
+        
+        # Reward for appropriate force (not too weak, not too strong)
+        mean_force = jp.mean(touch_sensors)
+        force_in_range = (mean_force > 0.1) & (mean_force < 5.0)
+        
+        return self._grasp_reward_weight * (
+            both_touching.astype(jp.float32) + force_in_range.astype(jp.float32)
+        )
+
+    def _reward_maintain_grip( # I don't thnk I like this definition currently. 
+        self, 
+        pipeline_state: base.State, 
+        info: dict,
+        robot_id: int
+    ) -> float:
+        """Reward for maintaining grip on object."""
+        gripping = jax.lax.switch(
+            robot_id - 1,
+            [
+                lambda: info["panda1_gripping"],
+                lambda: info["panda2_gripping"]
+            ]
+        )
+        
+        # Select end effector position based on robot_id
+        ee_pos = jax.lax.switch(
+            robot_id - 1,
+            [
+                lambda: pipeline_state.site_xpos[self.panda1_grip_site_idx],
+                lambda: pipeline_state.site_xpos[self.panda2_grip_site_idx]
+            ]
+        )
             
-        gripper_closed = gripper_pos < 0.03  # Gripper mostly closed
+        obj_pos = pipeline_state.xpos[self.object_body_idx]
+        relative_motion = jp.linalg.norm(obj_pos - ee_pos) # I don't think this is correct. 
+        stable = relative_motion < 0.1
         
-        return jp.logical_and(in_range, gripper_closed)
+        return self._maintain_grip_weight * (
+            gripping.astype(jp.float32) + stable.astype(jp.float32)
+        )
+
+    def _reward_transfer(self, pipeline_state: base.State) -> float:
+        """Reward for moving object to handover location."""
+        obj_pos = pipeline_state.xpos[self.object_body_idx]
+        handover_pos = pipeline_state.site_xpos[self.handover_goal_idx]
+        dist = jp.linalg.norm(obj_pos - handover_pos)
+        return self._dist_reward_weight * jp.exp(-dist**2 / self._dist_scale)
+
+    def _reward_handover(self, pipeline_state: base.State) -> float:
+        """Reward for successful handover."""
+        # Panda2 approaching object
+        ee2_pos = pipeline_state.site_xpos[self.panda2_grip_site_idx]
+        obj_pos = pipeline_state.xpos[self.object_body_idx]
+        dist = jp.linalg.norm(ee2_pos - obj_pos)
+        approach_reward = jp.exp(-dist**2 / self._dist_scale)
+        
+        # Both robots gripping
+        panda1_touch = jp.mean(jp.array([
+            pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
+            pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
+        ]))
+        panda2_touch = jp.mean(jp.array([
+            pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
+            pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
+        ]))
+        
+        dual_grip_reward = (panda1_touch > 0.1).astype(jp.float32) * (panda2_touch > 0.1).astype(jp.float32)
+        
+        return self._handover_reward_weight * (approach_reward + dual_grip_reward)
+
+    def _reward_retreat(self, pipeline_state: base.State) -> float:
+        """Reward for moving object to place location."""
+        obj_pos = pipeline_state.xpos[self.object_body_idx]
+        place_pos = pipeline_state.site_xpos[self.place_goal_idx]
+        dist = jp.linalg.norm(obj_pos - place_pos)
+        return self._dist_reward_weight * jp.exp(-dist**2 / self._dist_scale)
+
+    def _reward_place(self, pipeline_state: base.State) -> float:
+        """Reward for placing object at goal."""
+        obj_pos = pipeline_state.xpos[self.object_body_idx]
+        place_pos = pipeline_state.site_xpos[self.place_goal_idx]
+        
+        # Distance reward
+        dist = jp.linalg.norm(obj_pos - place_pos)
+        dist_reward = jp.exp(-dist**2 / self._dist_scale)
+        
+        # Contact with table reward
+        obj_z = obj_pos[2]
+        table_z = 0.165  # Approximate table height
+        on_table = jp.abs(obj_z - table_z) < self._place_contact_threshold
+        
+        # Upright orientation bonus
+        obj_quat = pipeline_state.xquat[self.object_body_idx]
+        upright = jp.abs(obj_quat[0]) > 0.9  # Close to no rotation
+        
+        return self._place_reward_weight * (
+            dist_reward + 
+            on_table.astype(jp.float32) + 
+            upright.astype(jp.float32)
+        )
+
+    def _check_phase_transition(
+        self, 
+        pipeline_state: base.State,
+        current_phase: int,
+        info: dict
+    ) -> Tuple[int, float]:
+        """Checks and executes phase transitions."""
+        
+        # Compute all transition conditions
+        # APPROACH -> GRASP
+        ee_pos = pipeline_state.site_xpos[self.panda1_grip_site_idx]
+        obj_pos = pipeline_state.xpos[self.object_body_idx]
+        dist_to_obj = jp.linalg.norm(ee_pos - obj_pos)
+        approach_complete = dist_to_obj < self._phase1_dist_threshold
+        
+        # GRASP -> TRANSFER
+        panda1_touch = jp.mean(jp.array([
+            pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
+            pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
+        ]))
+        grasp_complete = panda1_touch > self._phase2_force_threshold
+        
+        # TRANSFER -> HANDOVER
+        handover_pos = pipeline_state.site_xpos[self.handover_goal_idx]
+        dist_to_handover = jp.linalg.norm(obj_pos - handover_pos)
+        transfer_complete = dist_to_handover < self._phase3_dist_threshold
+        
+        # HANDOVER -> RETREAT
+        panda2_touch = jp.mean(jp.array([
+            pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
+            pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
+        ]))
+        both_gripping = (panda1_touch > self._phase4_dual_grip_threshold) & (
+            panda2_touch > self._phase4_dual_grip_threshold
+        )
+        handover_complete = both_gripping
+        
+        # RETREAT -> PLACE
+        place_pos = pipeline_state.site_xpos[self.place_goal_idx]
+        dist_to_place = jp.linalg.norm(obj_pos - place_pos)
+        retreat_complete = dist_to_place < self._phase5_dist_threshold
+        
+        # Use jax.lax.switch to determine new phase and bonus based on current phase
+        def phase_0_transition():  # APPROACH
+            return jp.where(approach_complete, HandoverPhase.GRASP, HandoverPhase.APPROACH), \
+                   jp.where(approach_complete, self._phase_transition_bonus, 0.0)
+        
+        def phase_1_transition():  # GRASP
+            return jp.where(grasp_complete, HandoverPhase.TRANSFER, HandoverPhase.GRASP), \
+                   jp.where(grasp_complete, self._phase_transition_bonus, 0.0)
+        
+        def phase_2_transition():  # TRANSFER
+            return jp.where(transfer_complete, HandoverPhase.HANDOVER, HandoverPhase.TRANSFER), \
+                   jp.where(transfer_complete, self._phase_transition_bonus, 0.0)
+        
+        def phase_3_transition():  # HANDOVER
+            return jp.where(handover_complete, HandoverPhase.RETREAT, HandoverPhase.HANDOVER), \
+                   jp.where(handover_complete, self._phase_transition_bonus, 0.0)
+        
+        def phase_4_transition():  # RETREAT
+            return jp.where(retreat_complete, HandoverPhase.PLACE, HandoverPhase.RETREAT), \
+                   jp.where(retreat_complete, self._phase_transition_bonus, 0.0)
+        
+        def phase_5_transition():  # PLACE
+            return HandoverPhase.PLACE, 0.0  # Stay in PLACE phase
+        
+        new_phase, transition_bonus = jax.lax.switch(
+            current_phase,
+            [
+                phase_0_transition,
+                phase_1_transition,
+                phase_2_transition,
+                phase_3_transition,
+                phase_4_transition,
+                phase_5_transition,
+            ]
+        )
+        
+        return new_phase, transition_bonus
+
+    def _check_gripper_contact(self, pipeline_state: base.State, robot_id: int) -> bool:
+        """Checks if gripper is in contact with object."""
+        touch = jax.lax.switch(
+            robot_id - 1,
+            [
+                lambda: jp.mean(jp.array([
+                    pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
+                    pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
+                ])),
+                lambda: jp.mean(jp.array([
+                    pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
+                    pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
+                ]))
+            ]
+        )
+        
+        return touch > 0.1
+
+    def _check_robot_collision(self, pipeline_state: base.State) -> bool:
+        """Checks if robots are colliding with each other."""
+        # Check distance between robot hands
+        ee1_pos = pipeline_state.site_xpos[self.panda1_grip_site_idx]
+        ee2_pos = pipeline_state.site_xpos[self.panda2_grip_site_idx]
+        dist = jp.linalg.norm(ee1_pos - ee2_pos)
+        
+        # Collision if hands too close (excluding handover phase)
+        collision_threshold = 0.08
+        return dist < collision_threshold
+
+    def _check_done(
+        self, 
+        pipeline_state: base.State, 
+        phase: int,
+        rewards: dict
+    ) -> float:
+        """Checks termination conditions."""
+        
+        # Check success condition (object placed at goal)
+        obj_pos = pipeline_state.xpos[self.object_body_idx]
+        place_pos = pipeline_state.site_xpos[self.place_goal_idx]
+        dist = jp.linalg.norm(obj_pos - place_pos)
+        obj_z = obj_pos[2]
+        table_z = 0.165
+        
+        placed_successfully = (dist < self._place_contact_threshold) & (
+            jp.abs(obj_z - table_z) < self._place_contact_threshold
+        ) & (phase == HandoverPhase.PLACE)
+        
+        # Check failure conditions
+
+
+        dropped = obj_z < 0.1  # Object dropped
+        severe_collision = rewards["collision"] < -2.0  # Severe robot collision
+        
+        # Any termination condition met
+        done = placed_successfully | dropped | severe_collision
+        
+        return done.astype(jp.float32)
     
-    def _get_grasp_quality(self, pipeline_state: base.State, robot_id: int) -> float:
-        """Get grasp quality score [0, 1]."""
-        
-        # Get contact force
-        force = self._get_gripper_contact_force(pipeline_state, robot_id)
-        force_magnitude = jp.linalg.norm(force[:3])
-        
-        # Normalize force to [0, 1] based on ideal range
-        min_force, max_force = self._gripper_force_range
-        quality = jp.clip((force_magnitude - min_force) / (max_force - min_force), 0, 1)
-        
-        # Also consider gripper closure
-        if robot_id == 1:
-            gripper_pos = pipeline_state.qpos[self.panda1_joint_end - 1]
-        else:
-            gripper_pos = pipeline_state.qpos[self.panda2_joint_end - 1]
-            
-        closure_quality = 1 - (gripper_pos / 0.04)  # Normalized gripper closure
-        
-        return quality * closure_quality
-    
-    def _get_gripper_contact_force(self, pipeline_state: base.State, robot_id: int) -> jax.Array:
-        """Get contact force between gripper and object."""
-        
-        # Find contact between gripper fingers and object
-        if robot_id == 1:
-            finger_indices = [self.panda1_finger1_idx, self.panda1_finger2_idx]
-        else:
-            finger_indices = [self.panda2_finger1_idx, self.panda2_finger2_idx]
-        
-        total_force = jp.zeros(6)
-        
-        for finger_idx in finger_indices:
-            # Find contact ID between finger and object
-            for contact_id in range(len(pipeline_state.contact.geom)):
-                geoms = pipeline_state.contact.geom[contact_id]
-                if (geoms[0] == finger_idx and geoms[1] == self.object_geom_idx) or \
-                   (geoms[1] == finger_idx and geoms[0] == self.object_geom_idx):
-                    force = contact_force(self.sys, pipeline_state, contact_id, False)
-                    total_force += force
-        
-        return total_force
-    
-    def _update_task_flags(self, pipeline_state: base.State, phase: HandoverPhase, info: Dict) -> Dict:
-        """Update task completion flags."""
-        
-        updates = {}
-        
-        # Check if handover has been initiated
-        if phase >= HandoverPhase.HANDOVER and not info.get("handover_initiated", False):
-            updates["handover_initiated"] = True
-        
-        # Check if object has been transferred
-        if phase >= HandoverPhase.RECEIVE and not info.get("object_transferred", False):
-            panda1_grasp = self._check_grasp(pipeline_state, 1)
-            panda2_grasp = self._check_grasp(pipeline_state, 2)
-            if panda2_grasp and not panda1_grasp:
-                updates["object_transferred"] = True
-        
-        return updates
-    
-    def _check_done(self, pipeline_state: base.State, phase: HandoverPhase) -> float:
-        """Check if episode is done."""
-        
-        # Success: task completed
-        if phase == HandoverPhase.COMPLETE:
-            return 1.0
-        
-        # Failure: object dropped
-        object_height = pipeline_state.xpos[self.object_body_idx][2]
-        if object_height < 0.1 and phase not in [HandoverPhase.APPROACH, HandoverPhase.GRASP]:
-            return 1.0
-        
-        # Failure: robots collision (simplified check - distance too close)
-        panda1_ee_pos = pipeline_state.site_xpos[self.panda1_ee_site_idx]
-        panda2_ee_pos = pipeline_state.site_xpos[self.panda2_ee_site_idx]
-        ee_distance = jp.linalg.norm(panda2_ee_pos - panda1_ee_pos)
-        if ee_distance < 0.05 and phase not in [HandoverPhase.HANDOVER, HandoverPhase.RECEIVE]:
-            return 1.0
-        
-        return 0.0
+    def _get_object_dropped(self, pipeline_state, object_floor_contact_ids):
+        """Check if the object has made contact with the floor."""
+        contact_forces = jax.vmap(lambda cid: contact_force(self.sys, pipeline_state, cid))(object_floor_contact_ids)
+        total_contact_force = jp.sum(contact_forces)
+        return total_contact_force > 0.0  # Threshold could change based on what we consider "dropped"
+
+    @property
+    def action_size(self) -> int:
+        """Returns the size of the action space."""
+        # 8 actuators per robot (7 arm joints + 1 gripper)
+        return 16
+
+    @property  
+    def observation_size(self) -> int:
+        """Returns the size of the observation space."""
+        # Panda1: 9 joint pos + 9 joint vel + 3 ee pos + 4 hand quat = 25
+        # Panda2: 9 joint pos + 9 joint vel + 3 ee pos + 4 hand quat = 25
+        # Object: 3 pos + 4 quat + 3 vel + 4 angvel = 14
+        # Touch sensors: 4 (panda1) + 4 (panda2) = 8
+        # Goal positions: 3 (handover) + 3 (place) = 6
+        # Phase one-hot: 6
+        # Total: 25 + 25 + 14 + 8 + 6 + 6 = 84
+        return 84

@@ -90,6 +90,9 @@ dependencies = [
 [project.optional-dependencies]
 cuda = []
 cpu = []
+notebooks = [
+    "jupyter>=1.1.1",
+]
 
 [tool.uv]
 override-dependencies = ["mujoco>=3.2.6", "brax>=0.10.4"]
