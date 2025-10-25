@@ -46,7 +46,7 @@ class CooperativeHandover(PipelineEnv):
         ctrl_cost_weight: float = 1e-4,
         drop_penalty: float = -10.0,
         collision_penalty: float = -5.0,
-        phase_transition_bonus: float = 5.0,
+        phase_transition_bonus: float = 5.0, # Maybe we tune this for sparse rewards?  
         
         # Scaling factors
         dist_scale: float = 0.1,
@@ -286,7 +286,7 @@ class CooperativeHandover(PipelineEnv):
         
         # Panda1 observations
         panda1_joint_pos = pipeline_state.qpos[self.panda1_joint_start:self.panda1_joint_end]
-        panda1_joint_vel = pipeline_state.qvel[self.panda1_joint_start-7:self.panda1_joint_end-7]
+        panda1_joint_vel = pipeline_state.qvel[self.panda1_joint_start-7:self.panda1_joint_end-7] # Why don't we just double check this as well (or we might not need this actually)
         panda1_ee_pos = pipeline_state.site_xpos[self.panda1_grip_site_idx]
         panda1_hand_quat = pipeline_state.xquat[self.panda1_hand_body_idx]
         
@@ -323,7 +323,7 @@ class CooperativeHandover(PipelineEnv):
         
         # Phase as one-hot encoding
         phase_onehot = jp.zeros(6)
-        phase_onehot = phase_onehot.at[phase].set(1.0)
+        phase_onehot = phase_onehot.at[phase].set(1.0) # This is interesting as well. 
         
         # Concatenate all observations
         obs = jp.concatenate([
@@ -344,7 +344,7 @@ class CooperativeHandover(PipelineEnv):
             handover_goal_pos,
             place_goal_pos,
             phase_onehot,
-        ])
+        ]) # These are actually also wrong (I need duplicates to split them up correctly (or actually maybe I could have them overlap somehow))
         
         return obs
 
@@ -597,17 +597,18 @@ class CooperativeHandover(PipelineEnv):
         
         # Compute all transition conditions
         # APPROACH -> GRASP
-        ee_pos = pipeline_state.site_xpos[self.panda1_grip_site_idx]
+        panda1_ee_pos = pipeline_state.site_xpos[self.panda1_grip_site_idx]
         obj_pos = pipeline_state.xpos[self.object_body_idx]
-        dist_to_obj = jp.linalg.norm(ee_pos - obj_pos)
-        approach_complete = dist_to_obj < self._phase1_dist_threshold
-        
+        panda1_dist_to_obj = jp.linalg.norm(panda1_ee_pos - obj_pos)
+
+        approach_complete = panda1_dist_to_obj < self._phase1_dist_threshold
+
         # GRASP -> TRANSFER
         panda1_touch = jp.mean(jp.array([
             pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
             pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
         ]))
-        grasp_complete = panda1_touch > self._phase2_force_threshold
+        grasp_complete = (panda1_touch > self._phase2_force_threshold) & (panda1_dist_to_obj > 0.05) # or should I replace this with the check contact function?
         
         # TRANSFER -> HANDOVER
         handover_pos = pipeline_state.site_xpos[self.handover_goal_idx]
@@ -615,12 +616,17 @@ class CooperativeHandover(PipelineEnv):
         transfer_complete = dist_to_handover < self._phase3_dist_threshold
         
         # HANDOVER -> RETREAT
+        panda2_ee_pos = pipeline_state.site_xpos[self.panda2_grip_site_idx]
+        panda2_dist_to_obj = jp.linalg.norm(panda2_ee_pos - obj_pos)
+        # Here we should actually just use self._check_gripper_contact function. 
         panda2_touch = jp.mean(jp.array([
             pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
             pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
         ]))
         both_gripping = (panda1_touch > self._phase4_dual_grip_threshold) & (
             panda2_touch > self._phase4_dual_grip_threshold
+        ) & (
+            panda2_dist_to_obj < 0.05
         )
         handover_complete = both_gripping
         
@@ -682,8 +688,20 @@ class CooperativeHandover(PipelineEnv):
                 ]))
             ]
         )
+
+        dist = jax.lax.switch(
+            robot_id - 1,
+            [
+                lambda: jp.linalg.norm(
+                    pipeline_state.site_xpos[self.panda1_grip_site_idx] - pipeline_state.xpos[self.object_body_idx]
+                ),
+                lambda: jp.linalg.norm(
+                    pipeline_state.site_xpos[self.panda2_grip_site_idx] - pipeline_state.xpos[self.object_body_idx]
+                )
+            ]
+        )
         
-        return touch > 0.1
+        return (touch > 0.1) & dist <0.05
 
     def _check_robot_collision(self, pipeline_state: base.State) -> bool:
         """Checks if robots are colliding with each other."""
