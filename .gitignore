@@ -43,3 +43,6 @@ config/
 */config/
 **/config/
 **/config/**
+
+slurm/
+*/slurm/

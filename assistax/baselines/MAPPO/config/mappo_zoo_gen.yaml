@@ -32,9 +32,9 @@ ENV_KWARGS:
 TOTAL_TIMESTEPS: 30e6
 NUM_STEPS: 256
 NUM_ENVS: 2048
-NUM_SEEDS: 6
+NUM_SEEDS: 1 
 SEED: 0
-NUM_EVAL_EPISODES: 12
+NUM_EVAL_EPISODES: 5
 
 # RL HYPERPARAMETERS
 ALGORITHM: MAPPO
@@ -66,7 +66,7 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/mabrax/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED}
+    dir: multirun/mabrax/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: prefrew_s${ENV_KWARGS.preference_rewards.preference_weights.speed_preference}_f${ENV_KWARGS.preference_rewards.preference_weights.force_preference}_a${ENV_KWARGS.preference_rewards.preference_weights.action_efficiency}_t${ENV_KWARGS.preference_rewards.preference_weights.touch_penalty}
