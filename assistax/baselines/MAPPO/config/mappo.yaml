@@ -3,6 +3,7 @@ defaults:
   - _self_
 
 ENV_NAME: scratchitch 
+ALG: MAPPO
 ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max

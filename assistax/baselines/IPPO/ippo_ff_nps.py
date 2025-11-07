@@ -641,7 +641,7 @@ def make_train(config, save_train_state=False, load_zoo=False):
             _update_step, runner_state, None, config["NUM_UPDATES"]
         )
         
-        return {"runner_state": runner_state, "metrics": metric}
+        return {"runner_state": runner_state, "metrics": metric} # Might be able to acces env metrics fro debuggin from runner_state
 
     return train
 

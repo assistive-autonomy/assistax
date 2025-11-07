@@ -110,13 +110,20 @@
                     <geom type="box" size="0.011 0.0044 0.0019" pos="0 0.0068 0.0022"/>
                 </default>
                 <default class="panda1_fingertip_pad_collision_3">
-                    <geom type="box" size="0.00875 0.0035 0.01175" pos="0 0.0159 0.02835" quat="1 0.25 0 0" rgba="1 0 0 0.5"/>
+                    <geom type="box" size="0.00875 0.0035 0.01175" pos="0 0.0159 0.02835" quat="1 0.25 0 0"/>
                 </default>
                 <default class="panda1_fingertip_pad_collision_4">
-                    <geom type="box" size="0.00875 0.0076 0.00825" pos="0 0.00758 0.04525" conaffinity="3" rgba="0 0 1 0.5"/>
+                    <geom type="box" size="0.00875 0.0076 0.00825" pos="0 0.00758 0.04525" conaffinity="3"/>
                 </default>
             </default>
-            
+
+            <default class="panda1_inner_touch_site">
+                <site type="box" size="0.00875 0.003 0.00825" pos="0 0.001 0.04525" rgba="1 1 0 0.8"/>
+            </default>
+            <default class="panda1_outer_touch_site">
+                <site type="box" size="0.00875 0.003 0.00825" pos="0 0.016 0.04525" rgba="1 0 0 0.8"/>
+            </default>
+
         </default>
         
         <!-- Panda 2 class -->
@@ -152,11 +159,18 @@
                     <geom type="box" size="0.011 0.0044 0.0019" pos="0 0.0068 0.0022"/>
                 </default>
                 <default class="panda2_fingertip_pad_collision_3">
-                    <geom type="box" size="0.00875 0.0035 0.01175" pos="0 0.0159 0.02835" quat="1 0.25 0 0" rgba="1 0 0 0.5"/>
+                    <geom type="box" size="0.00875 0.0035 0.01175" pos="0 0.0159 0.02835" quat="1 0.25 0 0"/>
                 </default>
                 <default class="panda2_fingertip_pad_collision_4">
-                    <geom type="box" size="0.00875 0.0076 0.00825" pos="0 0.00758 0.04525" conaffinity="3" rgba="0 0 1 0.5"/>
+                    <geom type="box" size="0.00875 0.0076 0.00825" pos="0 0.00758 0.04525" conaffinity="3"/>
                 </default>
+            </default>
+
+             <default class="panda2_inner_touch_site">
+                <site type="box" size="0.00875 0.003 0.00825" pos="0 0.001 0.04525" rgba="1 1 0 0.8"/>
+            </default>
+            <default class="panda2_outer_touch_site">
+                <site type="box" size="0.00875 0.003 0.00825" pos="0 0.016 0.04525" rgba="1 0 0 0.8"/>
             </default>
 
        </default>
@@ -218,7 +232,7 @@
         <geom name="floor" type="plane" pos="0 0 0" size="5 5 .1" material="groundplane" contype="1" conaffinity="1"/>
         
         <!-- Small table on the left (for panda1) -->
-        <body name="table_left" pos="-0.4 0 0.15">
+        <body name="table_left" pos="-0.6 0 0.15">
             <geom name="table_left_top" type="box" size="0.15 0.15 0.015" pos="0 0 0" material="side_table" class="table"/>
             <geom name="table_left_leg1" type="box" size="0.02 0.02 0.15" pos="0.12 0.12 -0.075" material="side_table" class="table"/>
             <geom name="table_left_leg2" type="box" size="0.02 0.02 0.15" pos="0.12 -0.12 -0.075" material="side_table" class="table"/>
@@ -227,7 +241,7 @@
         </body>
         
         <!-- Small table on the right (for panda2) -->
-        <body name="table_right" pos="0.4 0 0.15">
+        <body name="table_right" pos="0.6 0 0.15">
             <geom name="table_right_top" type="box" size="0.15 0.15 0.015" pos="0 0 0" material="side_table" class="table"/>
             <geom name="table_right_leg1" type="box" size="0.02 0.02 0.15" pos="0.12 0.12 -0.075" material="side_table" class="table"/>
             <geom name="table_right_leg2" type="box" size="0.02 0.02 0.15" pos="0.12 -0.12 -0.075" material="side_table" class="table"/>
@@ -236,16 +250,16 @@
         </body>
         
         <!-- Box object to handover (starts on left table, stable) -->
-        <body name="handover_object" pos="-0.4 0 0.275">
+        <body name="handover_object" pos="-0.6 0 0.275">
             <freejoint name="handover_object_joint"/>
             <geom name="box_object" type="box" size="0.025 0.025 0.055" pos="0 0 0" material="handover_object" class="object" mass="0.15" friction="0.8 0.1 0.1"/>
             <site name="handover_object_site" pos="0 0 0" size="0.01"/>
         </body>
                 
         <!-- Goal sites for visualization -->
-        <site name="pickup_goal" pos="-0.4 0 0.21" size="0.03" rgba="0 1 0 0.5" type="sphere"/>
+        <site name="pickup_goal" pos="-0.6 0 0.21" size="0.03" rgba="0 1 0 0.5" type="sphere"/>
         <site name="handover_goal" pos="0 0 0.5" size="0.04" rgba="1 1 0 0.5" type="sphere"/>
-        <site name="place_goal" pos="0.4 0 0.167" size="0.03 0.03 0.001" rgba="0 0 1 0.5" type="box"/>
+        <site name="place_goal" pos="0.6 0 0.167" size="0.03 0.03 0.001" rgba="0 0 1 0.5" type="box"/>
 
         <!-- First Panda Robot (positioned at -0.8, 0, 0) -->
         <body name="panda1_base" pos="-0.8 0 0">
@@ -286,10 +300,29 @@
         <general class="panda2" name="panda2_actuator8" joint="panda2_finger_joint1" ctrlrange="0 0.04" gainprm="350 0 0" biasprm="0 -350 -10" forcerange="-200 200"/>
     </actuator>
     
-    <!-- Initial configuration keyframe - commented out until we determine correct DOF count -->
+    <!-- Contact definitions for better grasping -->
+    <contact>
+        <!-- Contacts between fingers and object -->
+        <exclude body1="panda1_base" body2="handover_object"/>
+        <exclude body1="panda2_base" body2="handover_object"/>
+    </contact>
+    <sensor>
+        <touch name="panda1_left_inner_touch" site="panda1_left_inner_touch_site"/>
+        <touch name="panda1_right_inner_touch" site="panda1_right_inner_touch_site"/>
+        <touch name="panda1_left_outer_touch" site="panda1_left_outer_touch_site"/>
+        <touch name="panda1_right_outer_touch" site="panda1_right_outer_touch_site"/>
 
+        <touch name="panda2_left_inner_touch" site="panda2_left_inner_touch_site"/>
+        <touch name="panda2_right_inner_touch" site="panda2_right_inner_touch_site"/>
+        <touch name="panda2_left_outer_touch" site="panda2_left_outer_touch_site"/>
+        <touch name="panda2_right_outer_touch" site="panda2_right_outer_touch_site"/>
+    </sensor>
+    <!-- Initial configuration keyframe - commented out until we determine correct DOF count -->
+    <!-- 
     <keyframe>
-    <key name="init" qpos="-0.4 1.01819e-16 0.219978 1 1.20568e-16 6.74095e-17 1.40998e-15 -0.0452263 -0.627738 0.0209469 -2.39996 0.146657 1.85469 0.858496 0.0399999 0.0399996 -0.0949661 0.211837 -0.0379679 -0.940697 -0.00574128 1.61251 0.857712 0.0400002 0.0399998"/>
+        <key name="init" qpos='-0.6 0 0.265 1 0 0 0 0 -0.785 0 -2.356 0 1.571 0.785 0.02 0.02 0 0.785 0 -2.356 0 1.571 -0.785 0.02 0.02'/>
+        <key name="init_right" qpos='0.6 0 0.265 1 0 0 0 0 -0.785 0 -2.356 0 1.571 0.785 0.02 0.02 0 0.785 0 -2.356 0 1.571 -0.785 0.02 0.02'/>
     </keyframe>
+    -->
 
 </mujoco>

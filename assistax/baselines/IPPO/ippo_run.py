@@ -35,6 +35,11 @@ from assistax.baselines.utils import (
     _tree_shape, _stack_tree, _concat_tree, _tree_split
     )
 
+os.environ['XLA_FLAGS'] = (
+    '--xla_gpu_triton_gemm_any=True ' # As recommended by MJX for better performance on NVIDIA GPUs
+)
+
+
 # ================================ MAIN ORCHESTRATION FUNCTION ================================
 
 @hydra.main(version_base=None, config_path="config", config_name="ippo")
@@ -111,6 +116,7 @@ def main(config):
         all_train_states = out["metrics"]["train_state"]
         final_train_state = out["runner_state"].train_state
 
+        
         # Save all training states (for analysis across training)
         safetensors.flax.save_file(
             flatten_dict(all_train_states.params, sep='/'),
@@ -203,6 +209,7 @@ def main(config):
 
         # Save evaluation results
         jnp.save("returns.npy", mean_episode_returns)
+
         print(f"Mean episode return: {mean_episode_returns.mean():.2f} ± {mean_episode_returns.std():.2f}")
 
         # ===== VISUALIZATION AND RENDERING =====

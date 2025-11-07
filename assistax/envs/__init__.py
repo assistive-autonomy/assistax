@@ -23,6 +23,7 @@ from assistax.envs import scratchitch
 from assistax.envs import bedbathing
 from assistax.envs import armmanipulation
 from assistax.envs import pushcoop
+from assistax.envs import handover
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from assistax.wrappers import training
 
@@ -31,6 +32,7 @@ _envs = {
     "bedbathing": bedbathing.BedBathing,
     "armmanipulation": armmanipulation.ArmManipulation,
     "pushcoop": pushcoop.PushCoop,
+    "handover": handover.CooperativeHandover,
 }
 
 

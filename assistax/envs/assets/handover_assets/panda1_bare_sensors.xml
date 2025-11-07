@@ -112,6 +112,8 @@
                       <geom class="panda1_fingertip_pad_collision_2"/>
                       <geom class="panda1_fingertip_pad_collision_3"/>
                       <geom name="panda1_left_finger_pad" class="panda1_fingertip_pad_collision_4"/>
+                      <site name="panda1_left_inner_touch_site" class="panda1_inner_touch_site"/>
+                      <site name="panda1_left_outer_touch_site" class="panda1_outer_touch_site"/>
                     </body>
                     
                     <!-- Right finger with sliding joint (pa/ssive) -->
@@ -125,6 +127,8 @@
                       <geom class="panda1_fingertip_pad_collision_2"/>
                       <geom class="panda1_fingertip_pad_collision_3"/>
                       <geom name="panda1_right_finger_pad" class="panda1_fingertip_pad_collision_4"/>
+                      <site name="panda1_right_inner_touch_site" class="panda1_inner_touch_site"/>
+                      <site name="panda1_right_outer_touch_site" class="panda1_outer_touch_site"/>
                     </body>
                   </body>
                 </body>

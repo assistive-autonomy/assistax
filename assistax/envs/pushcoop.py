@@ -128,7 +128,7 @@ class PushCoop(PipelineEnv):
         # self.t_main_obs4 = [336, 337, 338, 339]
         # self.t_main_obs5 = [340, 341, 342, 343]
 
-        n_frames = 4
+        n_frames = 5 
         kwargs["n_frames"] = kwargs.get("n_frames", n_frames)
 
         super().__init__(sys=self.sys, backend=backend, **kwargs)

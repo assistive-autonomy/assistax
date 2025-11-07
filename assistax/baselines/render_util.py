@@ -81,6 +81,8 @@ def render_episodes(path: str):
     config = OmegaConf.to_container(
         OmegaConf.load(config_path), resolve=True
     )
+
+    config["ALG"] = "MAPPO" # short fix remove later
     
     # Dynamically import the correct module based on config
     if config["ALG"] == "IPPO":
@@ -139,22 +141,32 @@ def render_episodes(path: str):
         raise ValueError(f"Unknown algorithm: {config['ALG']}")
     
     # Set number of evaluation episodes
-    config["NUM_EVAL_EPISODES"] = 5
+    config["NUM_EVAL_EPISODES"] = 3 
     rng = jax.random.PRNGKey(config["SEED"])
     rng, eval_rng = jax.random.split(rng)
     
     print(f"Loading parameters from {path}")
     
     # TODO: make this general to cases where the params are called differently e.g. robot1 and robot2
-    all_params_path = os.path.join(path, "final_params.safetensors")
-    if not config["network"]["agent_param_sharing"]:
-        human_path = os.path.join(path, config["eval"]["path"]["human"])
-        robot_path = os.path.join(path, config["eval"]["path"]["robot"])
+    final_params_name = "final_params.safetensors" if config["network"]["agent_param_sharing"] else "all_params.safetensors"
+    all_params_path = os.path.join(path, final_params_name) 
+    if not config["network"]["agent_param_sharing"] and config["ENV_NAME"] not in ["pushcoop", "handover"]:
+        human_path = os.path.join(path, "human.safetensors")
+        robot_path = os.path.join(path, "robot.safetensors")
     
         if not os.path.exists(human_path):
             raise FileNotFoundError(f"Human parameters not found at {human_path}")
         if not os.path.exists(robot_path):
             raise FileNotFoundError(f"Robot parameters not found at {robot_path}")
+    
+    elif not config["network"]["agent_param_sharing"] and config["ENV_NAME"] in ["pushcoop", "handover"]:
+        robot1_path = os.path.join(path, "robot1.safetensors")
+        robot2_path = os.path.join(path, "robot2.safetensors")
+    
+        if not os.path.exists(robot1_path):
+            raise FileNotFoundError(f"Robot1 parameters not found at {robot1_path}")
+        if not os.path.exists(robot2_path):
+            raise FileNotFoundError(f"Robot2 parameters not found at {robot2_path}")
 
     if not os.path.exists(all_params_path):
         raise FileNotFoundError(f"All parameters not found at {all_params_path}")
@@ -167,16 +179,25 @@ def render_episodes(path: str):
         )
     
         else:
-            human_params = unflatten_dict(
-                safetensors.flax.load_file(human_path), sep='/'
-            )
-            robot_params = unflatten_dict(
-                safetensors.flax.load_file(robot_path), sep='/'
-            )
-        
+                    
             if config["ENV_NAME"] in ["pushcoop", "handover"]: # TODO double check the naming here
-                agent_params = {'robot1': robot_params, 'robot2': human_params}
+
+                robot1_params = unflatten_dict(
+                    safetensors.flax.load_file(robot1_path), sep='/'
+                )
+                robot2_params = unflatten_dict(
+                    safetensors.flax.load_file(robot2_path), sep='/'
+                )
+                agent_params = {'robot1': robot1_params, 'robot2': robot2_params}
+           
             else:
+                
+                human_params = unflatten_dict(
+                safetensors.flax.load_file(human_path), sep='/'
+                )
+                robot_params = unflatten_dict(
+                    safetensors.flax.load_file(robot_path), sep='/'
+                )
                 agent_params = {'human': human_params, 'robot': robot_params}
         
         # Create evaluation environment

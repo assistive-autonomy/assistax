@@ -7,6 +7,7 @@ from brax.io import mjcf
 from etils import epath
 import jax
 from jax import numpy as jp
+from jax import Array
 import mujoco 
 from mujoco import mj_id2name, mj_name2id
 from mujoco.mjx._src.support import contact_force
@@ -46,14 +47,14 @@ class CooperativeHandover(PipelineEnv):
         ctrl_cost_weight: float = 1e-4,
         drop_penalty: float = -10.0,
         collision_penalty: float = -5.0,
-        phase_transition_bonus: float = 5.0, # Maybe we tune this for sparse rewards?  
+        phase_transition_bonus: float = 10.0, # Maybe we tune this for sparse rewards?  
         
         # Scaling factors
         dist_scale: float = 0.1,
         force_scale: float = 0.01,
         
         # Phase transition thresholds
-        phase1_dist_threshold: float = 0.05,  # Distance for approach->grasp
+        phase1_dist_threshold: float = 0.10,  # Distance for approach->grasp
         phase2_force_threshold: float = 0.5,   # Force for grasp->transfer
         phase3_dist_threshold: float = 0.15,   # Distance for transfer->handover
         phase4_dual_grip_threshold: float = 0.5, # Both gripping for handover->retreat
@@ -63,6 +64,7 @@ class CooperativeHandover(PipelineEnv):
         # General parameters
         reset_noise_scale: float = 5e-3,
         backend: str = "mjx",
+        dense_rewards: bool = True,
         **kwargs
     ):
         """Creates a CooperativeHandover Environment."""
@@ -80,6 +82,8 @@ class CooperativeHandover(PipelineEnv):
                 "opt.ls_iterations": 4,
             })
 
+        self.dense_rewards = dense_rewards
+
         # MuJoCo object type indices
         GEOM_IDX = mujoco.mjtObj.mjOBJ_GEOM
         BODY_IDX = mujoco.mjtObj.mjOBJ_BODY
@@ -88,15 +92,30 @@ class CooperativeHandover(PipelineEnv):
         # Panda1 (left robot) indices
         self.panda1_grip_site_idx = mj_name2id(mjmodel, SITE_IDX, "panda1_grip_site")
         self.panda1_hand_body_idx = mj_name2id(mjmodel, BODY_IDX, "panda1_hand")
-        self.panda1_left_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda1_leftfinger_collision1")
-        self.panda1_right_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda1_rightfinger_collision1")
-        
+        self.panda1_left_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda1_left_finger_pad")
+        self.panda1_right_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda1_right_finger_pad")
+        self.panda1_left_finger_pad_contact1 = 528
+        self.panda1_left_finger_pad_contact2 = 529
+        self.panda1_left_finger_pad_contact3 = 530
+        self.panda1_left_finger_pad_contact4 = 531
+        self.panda1_right_finger_pad_contact1 = 532
+        self.panda1_right_finger_pad_contact2 = 533
+        self.panda1_right_finger_pad_contact3 = 534
+        self.panda1_right_finger_pad_contact4 = 535       
         # Panda2 (right robot) indices
         self.panda2_grip_site_idx = mj_name2id(mjmodel, SITE_IDX, "panda2_grip_site")
         self.panda2_hand_body_idx = mj_name2id(mjmodel, BODY_IDX, "panda2_hand")
-        self.panda2_left_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda2_leftfinger_collision1")
-        self.panda2_right_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda2_rightfinger_collision1")
-        
+        self.panda2_left_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda2_left_finger_pad")
+        self.panda2_right_finger_geom = mj_name2id(mjmodel, GEOM_IDX, "panda2_right_finger_pad")
+        self.panda2_left_finger_pad_contact1 = 536
+        self.panda2_left_finger_pad_contact2 = 537
+        self.panda2_left_finger_pad_contact3 = 538
+        self.panda2_left_finger_pad_contact4 = 539
+        self.panda2_right_finger_pad_contact1 = 540
+        self.panda2_right_finger_pad_contact2 = 541
+        self.panda2_right_finger_pad_contact3 = 542
+        self.panda2_right_finger_pad_contact4 = 543
+
         # Object indices
         self.object_body_idx = mj_name2id(mjmodel, BODY_IDX, "handover_object")
         self.object_geom_idx = mj_name2id(mjmodel, GEOM_IDX, "box_object")
@@ -207,15 +226,16 @@ class CooperativeHandover(PipelineEnv):
         info = {
             "phase": HandoverPhase.APPROACH,
             "prev_object_pos": pipeline_state.xpos[self.object_body_idx],
-            "panda1_gripping": False,
-            "panda2_gripping": False,
+            "panda1_gripping": jp.array(False,dtype=jp.bool_),
+            "panda2_gripping": jp.array(False,dtype=jp.bool_),
         }
         
         return State(pipeline_state, obs, reward, done, metrics, info)
 
-    def step(self, state: State, action: jax.Array) -> State:
+    def step(self, rng: jax.Array, state: State, action: jax.Array) -> State:
         """Runs one timestep of the environment's dynamics."""
         pipeline_state0 = state.pipeline_state
+        assert pipeline_state0 is not None
         pipeline_state = self.pipeline_step(pipeline_state0, action)
         
         # Get current phase
@@ -230,18 +250,21 @@ class CooperativeHandover(PipelineEnv):
         )
         
         # Total reward
-        total_reward = (
-            rewards_dict["dist"] +
-            rewards_dict["grasp"] +
-            rewards_dict["maintain_grip"] +
-            rewards_dict["handover"] +
-            rewards_dict["place"] +
-            rewards_dict["ctrl"] +
-            rewards_dict["drop"] +
-            rewards_dict["collision"] +
-            phase_transition_reward
-        )
-        
+        if self.dense_rewards:
+            total_reward = (
+                rewards_dict["dist"] +
+                rewards_dict["grasp"] +
+                rewards_dict["maintain_grip"] +
+                rewards_dict["handover"] +
+                rewards_dict["place"] +
+                rewards_dict["ctrl"] +
+                rewards_dict["drop"] +
+                rewards_dict["collision"] +
+                phase_transition_reward
+            )
+        else:
+            total_reward = phase_transition_reward
+
         # Check termination conditions
         done = self._check_done(pipeline_state, new_phase, rewards_dict)
         
@@ -278,7 +301,7 @@ class CooperativeHandover(PipelineEnv):
             obs=obs,
             reward=total_reward,
             done=done,
-            info=new_info,
+            info=state.info | new_info, # this is required as our wrappers create additional keys to this state.info dict during reset.
         )
 
     def _get_obs(self, pipeline_state: base.State, phase: int) -> jax.Array:
@@ -303,20 +326,24 @@ class CooperativeHandover(PipelineEnv):
         object_angvel = pipeline_state.qvel[self.object_joint_start+3:self.object_joint_end]
         
         # Touch sensor readings
-        panda1_touch = jp.array([
-            pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
-            pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
-            pipeline_state.sensordata[self.panda1_left_outer_touch_idx],
-            pipeline_state.sensordata[self.panda1_right_outer_touch_idx],
-        ])
-        
-        panda2_touch = jp.array([
-            pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
-            pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
-            pipeline_state.sensordata[self.panda2_left_outer_touch_idx],
-            pipeline_state.sensordata[self.panda2_right_outer_touch_idx],
-        ])
-        
+#        panda1_touch = jp.array([
+#            pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
+#            pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
+#            pipeline_state.sensordata[self.panda1_left_outer_touch_idx],
+#            pipeline_state.sensordata[self.panda1_right_outer_touch_idx],
+#        ])
+#        
+#        panda2_touch = jp.array([
+#            pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
+#            pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
+#            pipeline_state.sensordata[self.panda2_left_outer_touch_idx],
+#            pipeline_state.sensordata[self.panda2_right_outer_touch_idx],
+#        ])
+
+        panda1_left_forces, panda1_right_forces = self._get_touch_vals(pipeline_state, robot_id=1)
+
+        panda2_left_forces, panda2_right_forces = self._get_touch_vals(pipeline_state, robot_id=2)
+
         # Goal positions
         handover_goal_pos = pipeline_state.site_xpos[self.handover_goal_idx]
         place_goal_pos = pipeline_state.site_xpos[self.place_goal_idx]
@@ -324,28 +351,94 @@ class CooperativeHandover(PipelineEnv):
         # Phase as one-hot encoding
         phase_onehot = jp.zeros(6)
         phase_onehot = phase_onehot.at[phase].set(1.0) # This is interesting as well. 
-        
+
         # Concatenate all observations
         obs = jp.concatenate([
-            panda1_joint_pos,
+            panda1_joint_pos, 
             panda1_joint_vel,
             panda1_ee_pos,
             panda1_hand_quat,
+            panda1_left_forces,
+            panda1_right_forces,
             panda2_joint_pos,
             panda2_joint_vel,
             panda2_ee_pos,
             panda2_hand_quat,
+            panda2_left_forces,
+            panda2_right_forces,
             object_pos,
             object_quat,
             object_vel,
             object_angvel,
-            panda1_touch,
-            panda2_touch,
-            handover_goal_pos,
+            handover_goal_pos, # Need to consider getting rid of this - feels like cheating and would be harder to do this IRL. 
             place_goal_pos,
-            phase_onehot,
+            phase_onehot, # Also ideally get rid of this. 
         ]) # These are actually also wrong (I need duplicates to split them up correctly (or actually maybe I could have them overlap somehow))
-        
+
+        #print(f"Total obs shape: {obs.shape}")
+        #print(f"""
+        #        Panda1 joint pos shape: {panda1_joint_pos.shape} \n 
+        #        Panda1 joint vel shape: {panda1_joint_vel.shape} \n
+        #        Panda1 ee pos shape: {panda1_ee_pos.shape} \n
+        #        Panda1 hand quat shape: {panda1_hand_quat.shape} \n
+        #        Panda1 left forces shape: {panda1_left_forces.shape} \n
+        #        Panda1 right forces shape: {panda1_right_forces.shape} \n
+        #        Panda2 joint pos shape: {panda2_joint_pos.shape} \n
+        #        Panda2 joint vel shape: {panda2_joint_vel.shape} \n
+        #        Panda2 ee pos shape: {panda2_ee_pos.shape} \n
+        #        Panda2 hand quat shape: {panda2_hand_quat.shape} \n
+        #        Panda2 left forces shape: {panda2_left_forces.shape} \n
+        #        Panda2 right forces shape: {panda2_right_forces.shape} \n
+        #        Object pos shape: {object_pos.shape} \n
+        #        Object quat shape: {object_quat.shape} \n
+        #        Object vel shape: {object_vel.shape} \n
+        #        Object angvel shape: {object_angvel.shape} \n
+        #        Handover goal pos shape: {handover_goal_pos.shape} \n
+        #        Place goal pos shape: {place_goal_pos.shape} \n
+        #        Phase onehot shape: {phase_onehot.shape} \n
+        #    """ ) 
+        #print(f"Panda1 forces test shapes: {type(panda1_left_forces.shape[0])}, {type(panda1_joint_pos.shape[0])}")
+        #print(f"Panda1 forces test values: {panda1_left_forces}, {panda1_right_forces}")
+        #print(f"Panda1 forces types: {type(panda1_left_forces)}, {type(panda1_right_forces)}")
+        #print(f"Panda2 forces test shapes: {panda2_left_forces.shape}, {panda2_right_forces.shape}")
+        #print(f"Panda2 forces test values: {panda2_left_forces}, {panda2_right_forces}")
+        #print(f"Panda2 forces types: {type(panda2_left_forces)}, {type(panda2_right_forces)}")
+        #panda1_obs_size = sum([
+        #    panda1_joint_pos.shape[0],
+        #    panda1_joint_vel.shape[0],
+        #    panda1_ee_pos.shape[0],
+        #    panda1_hand_quat.shape[0],
+        #    panda1_left_forces.shape[0],
+        #    panda1_right_forces.shape[0],]) 
+
+        #panda2_obs_size = sum([
+        #    panda2_joint_pos.shape[0],
+        #    panda2_joint_vel.shape[0],
+        #    panda2_ee_pos.shape[0],
+        #    panda2_hand_quat.shape[0],
+        #    panda2_left_forces.shape[0],
+        #    panda2_right_forces.shape[0],]) 
+        #
+        #env_obs_size = sum([
+        #    object_pos.shape[0],
+        #    object_quat.shape[0],
+        #    object_vel.shape[0],
+        #    object_angvel.shape[0],
+        #    handover_goal_pos.shape[0],
+        #    place_goal_pos.shape[0],
+        #    phase_onehot.shape[0]
+        #])
+
+        #print(f"Panda1 obs: 0 — {panda1_obs_size}")
+        #print(f"Panda2 obs: {panda1_obs_size} — {panda1_obs_size + panda2_obs_size}")
+        #print(f"Env obs: {panda1_obs_size + panda2_obs_size} — {panda1_obs_size + panda2_obs_size + env_obs_size}")
+        #print(f"""
+        #      Panda1 obs size all: {panda1_obs_size + env_obs_size} \n
+        #      Panda1 obs size (private): {panda1_obs_size}
+        #      Panda2 obs size all: {panda2_obs_size + env_obs_size} \n
+        #      Panda2 obs size (private): {panda2_obs_size}
+        #      Env obs size: {env_obs_size} \n
+        #    """)
         return obs
 
     def _compute_rewards(
@@ -460,42 +553,27 @@ class CooperativeHandover(PipelineEnv):
         
         return rewards
 
-    def _reward_approach(self, pipeline_state: base.State) -> float: # Cururently this seems to be only used for robot1 
+    def _reward_approach(self, pipeline_state: base.State) -> Array: # Cururently this seems to be only used for robot1 
         """Reward for approaching object with Panda1."""
         ee_pos = pipeline_state.site_xpos[self.panda1_grip_site_idx]
         obj_pos = pipeline_state.xpos[self.object_body_idx]
         dist = jp.linalg.norm(ee_pos - obj_pos)
         return self._dist_reward_weight * jp.exp(-dist**2 / self._dist_scale)
 
-    def _reward_grasp(self, pipeline_state: base.State, robot_id: int) -> float:
+    def _reward_grasp(self, pipeline_state: base.State, robot_id: int) -> Array:
         """Reward for grasping with appropriate force."""
         # Select touch sensors based on robot_id using jax.lax.switch
-        touch_sensors = jax.lax.switch(
-            robot_id - 1,  # Convert to 0-indexed
-            [
-                lambda: jp.array([
-                    pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
-                    pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
-                ]),
-                lambda: jp.array([
-                    pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
-                    pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
-                ])
-            ]
-        )
+        left_touch, right_touch = self._get_touch_vals(pipeline_state, robot_id) 
         
-        # Reward for contact on both fingers
-        both_touching = jp.all(touch_sensors > 0.01)
-        
-        # Reward for appropriate force (not too weak, not too strong)
-        mean_force = jp.mean(touch_sensors)
-        force_in_range = (mean_force > 0.1) & (mean_force < 5.0)
-        
+        both_touching = (left_touch[2] > 0.1) & (right_touch[2] > 0.1) # Normal force components
+        total_force = left_touch[2] + right_touch[2]
+        force_in_range = (total_force > self._phase2_force_threshold).astype(jp.bool_) & (total_force < 2.0 / self._force_scale).astype(jp.bool_)
+
         return self._grasp_reward_weight * (
             both_touching.astype(jp.float32) + force_in_range.astype(jp.float32)
         )
 
-    def _reward_maintain_grip( # I don't thnk I like this definition currently. 
+    def _reward_maintain_grip( # I don't thnk I like this definition currently especially the relative motion part.
         self, 
         pipeline_state: base.State, 
         info: dict,
@@ -527,14 +605,14 @@ class CooperativeHandover(PipelineEnv):
             gripping.astype(jp.float32) + stable.astype(jp.float32)
         )
 
-    def _reward_transfer(self, pipeline_state: base.State) -> float:
+    def _reward_transfer(self, pipeline_state: base.State) -> Array:
         """Reward for moving object to handover location."""
         obj_pos = pipeline_state.xpos[self.object_body_idx]
         handover_pos = pipeline_state.site_xpos[self.handover_goal_idx]
         dist = jp.linalg.norm(obj_pos - handover_pos)
         return self._dist_reward_weight * jp.exp(-dist**2 / self._dist_scale)
 
-    def _reward_handover(self, pipeline_state: base.State) -> float:
+    def _reward_handover(self, pipeline_state: base.State) -> Array:
         """Reward for successful handover."""
         # Panda2 approaching object
         ee2_pos = pipeline_state.site_xpos[self.panda2_grip_site_idx]
@@ -543,27 +621,32 @@ class CooperativeHandover(PipelineEnv):
         approach_reward = jp.exp(-dist**2 / self._dist_scale)
         
         # Both robots gripping
-        panda1_touch = jp.mean(jp.array([
-            pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
-            pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
-        ]))
-        panda2_touch = jp.mean(jp.array([
-            pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
-            pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
-        ]))
+        #panda1_touch = jp.mean(jp.array([
+        #    pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
+        #    pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
+        #]))
+        #panda2_touch = jp.mean(jp.array([
+        #    pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
+        #    pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
+        #]))
+
+        panda1_left_touch, panda1_right_touch = self._get_touch_vals(pipeline_state, robot_id=1)
+        panda2_left_touch, panda2_right_touch = self._get_touch_vals(pipeline_state, robot_id=2)
+        panda1_touch = (panda1_left_touch[2] + panda1_right_touch[2]) / 2.0
+        panda2_touch = (panda2_left_touch[2] + panda2_right_touch[2]) / 2.0
         
         dual_grip_reward = (panda1_touch > 0.1).astype(jp.float32) * (panda2_touch > 0.1).astype(jp.float32)
         
         return self._handover_reward_weight * (approach_reward + dual_grip_reward)
 
-    def _reward_retreat(self, pipeline_state: base.State) -> float:
+    def _reward_retreat(self, pipeline_state: base.State) -> Array:
         """Reward for moving object to place location."""
         obj_pos = pipeline_state.xpos[self.object_body_idx]
         place_pos = pipeline_state.site_xpos[self.place_goal_idx]
         dist = jp.linalg.norm(obj_pos - place_pos)
         return self._dist_reward_weight * jp.exp(-dist**2 / self._dist_scale)
 
-    def _reward_place(self, pipeline_state: base.State) -> float:
+    def _reward_place(self, pipeline_state: base.State) -> Array:
         """Reward for placing object at goal."""
         obj_pos = pipeline_state.xpos[self.object_body_idx]
         place_pos = pipeline_state.site_xpos[self.place_goal_idx]
@@ -604,10 +687,7 @@ class CooperativeHandover(PipelineEnv):
         approach_complete = panda1_dist_to_obj < self._phase1_dist_threshold
 
         # GRASP -> TRANSFER
-        panda1_touch = jp.mean(jp.array([
-            pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
-            pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
-        ]))
+        panda1_touch = self._check_gripper_contact(pipeline_state, robot_id=1)  
         grasp_complete = (panda1_touch > self._phase2_force_threshold) & (panda1_dist_to_obj > 0.05) # or should I replace this with the check contact function?
         
         # TRANSFER -> HANDOVER
@@ -618,11 +698,11 @@ class CooperativeHandover(PipelineEnv):
         # HANDOVER -> RETREAT
         panda2_ee_pos = pipeline_state.site_xpos[self.panda2_grip_site_idx]
         panda2_dist_to_obj = jp.linalg.norm(panda2_ee_pos - obj_pos)
-        # Here we should actually just use self._check_gripper_contact function. 
-        panda2_touch = jp.mean(jp.array([
-            pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
-            pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
-        ]))
+        # TODO here we should actually just use self._check_gripper_contact function. 
+        panda1_touch = self._check_gripper_contact(pipeline_state, robot_id=1)
+        panda2_touch = self._check_gripper_contact(pipeline_state, robot_id=2)
+        
+        
         both_gripping = (panda1_touch > self._phase4_dual_grip_threshold) & (
             panda2_touch > self._phase4_dual_grip_threshold
         ) & (
@@ -673,22 +753,11 @@ class CooperativeHandover(PipelineEnv):
         
         return new_phase, transition_bonus
 
-    def _check_gripper_contact(self, pipeline_state: base.State, robot_id: int) -> bool:
+    def _check_gripper_contact(self, pipeline_state: base.State, robot_id: int) -> Array:
         """Checks if gripper is in contact with object."""
-        touch = jax.lax.switch(
-            robot_id - 1,
-            [
-                lambda: jp.mean(jp.array([
-                    pipeline_state.sensordata[self.panda1_left_inner_touch_idx],
-                    pipeline_state.sensordata[self.panda1_right_inner_touch_idx],
-                ])),
-                lambda: jp.mean(jp.array([
-                    pipeline_state.sensordata[self.panda2_left_inner_touch_idx],
-                    pipeline_state.sensordata[self.panda2_right_inner_touch_idx],
-                ]))
-            ]
-        )
-
+        left_touch, right_touch = self._get_touch_vals(pipeline_state, robot_id)
+        touch = (left_touch[2] + right_touch[2]) / 2.0  # Average normal force
+        
         dist = jax.lax.switch(
             robot_id - 1,
             [
@@ -701,7 +770,7 @@ class CooperativeHandover(PipelineEnv):
             ]
         )
         
-        return (touch > 0.1) & dist <0.05
+        return (touch > 0.1) & (dist < 0.05)
 
     def _check_robot_collision(self, pipeline_state: base.State) -> bool:
         """Checks if robots are colliding with each other."""
@@ -755,6 +824,56 @@ class CooperativeHandover(PipelineEnv):
         total_contact_force = jp.sum(jp.vstack([contact_force1, contact_force2, contact_force3, contact_force4]))
         return total_contact_force > 0.0  # Threshold could change based on what we consider "dropped"
 
+
+    def _get_touch_vals(self, pipeline_state, robot_id: int) -> Tuple[jp.ndarray, jp.ndarray]:
+        """Get aggregated touch forces for left and right fingers.
+        
+        Returns:
+            left_force: Total forces on left finger (f_x, f_y, f_z)
+            right_force: Total forces on right finger (f_x, f_y, f_z)
+        """
+        
+        def get_panda1_forces():
+            left_forces = jp.array([
+                contact_force(self.sys, pipeline_state, self.panda1_left_finger_pad_contact1)[:3],
+                contact_force(self.sys, pipeline_state, self.panda1_left_finger_pad_contact2)[:3],
+                contact_force(self.sys, pipeline_state, self.panda1_left_finger_pad_contact3)[:3],
+                contact_force(self.sys, pipeline_state, self.panda1_left_finger_pad_contact4)[:3],
+            ])
+            right_forces = jp.array([
+                contact_force(self.sys, pipeline_state, self.panda1_right_finger_pad_contact1)[:3],
+                contact_force(self.sys, pipeline_state, self.panda1_right_finger_pad_contact2)[:3],
+                contact_force(self.sys, pipeline_state, self.panda1_right_finger_pad_contact3)[:3],
+                contact_force(self.sys, pipeline_state, self.panda1_right_finger_pad_contact4)[:3],
+            ])
+
+            return jp.sum(jp.vstack(left_forces), axis=0), jp.sum(jp.vstack(right_forces), axis=0)                  
+
+        def get_panda2_forces():
+            left_forces = jp.array([
+                contact_force(self.sys, pipeline_state, self.panda2_left_finger_pad_contact1)[:3],
+                contact_force(self.sys, pipeline_state, self.panda2_left_finger_pad_contact2)[:3],
+                contact_force(self.sys, pipeline_state, self.panda2_left_finger_pad_contact3)[:3],
+                contact_force(self.sys, pipeline_state, self.panda2_left_finger_pad_contact4)[:3],
+            ])
+            right_forces = jp.array([
+                contact_force(self.sys, pipeline_state, self.panda2_right_finger_pad_contact1)[:3],
+                contact_force(self.sys, pipeline_state, self.panda2_right_finger_pad_contact2)[:3],
+                contact_force(self.sys, pipeline_state, self.panda2_right_finger_pad_contact3)[:3],
+                contact_force(self.sys, pipeline_state, self.panda2_right_finger_pad_contact4)[:3],
+            ])
+
+            return jp.sum(jp.vstack(left_forces), axis=0), jp.sum(jp.vstack(right_forces), axis=0)
+        
+        # Select robot
+        left_force, right_force = jax.lax.switch(
+            robot_id - 1,
+            [get_panda1_forces, get_panda2_forces]
+        )
+        
+        return left_force, right_force
+
+    
     @property
     def action_size(self) -> int:
         """Returns the size of the action space."""
