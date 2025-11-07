@@ -92,6 +92,10 @@ class PushCoop(PipelineEnv):
         self.t_shape_geom_idx2 = mj_name2id(mjmodel, GEOM_IDX, "t_cross")
         self.t_shape_body_idx = mj_name2id(mjmodel, BODY_IDX, "t_object")
 
+        self.table_geom_idx = mj_name2id(mjmodel, GEOM_IDX, "table_top")
+
+        self.staging_area_site_idx = mj_name2id(mjmodel, SITE_IDX, "staging_area")
+
         self.obstacle1_idx = mj_name2id(mjmodel, GEOM_IDX, "obs1")
         self.obstacle2_idx = mj_name2id(mjmodel, GEOM_IDX, "obs2")
         self.obstacle3_idx = mj_name2id(mjmodel, GEOM_IDX, "obs3")
@@ -239,10 +243,11 @@ class PushCoop(PipelineEnv):
         pipeline_state0 = state.pipeline_state
         assert pipeline_state0 is not None
         pipeline_state = self.pipeline_step(pipeline_state0, action)
-
         ctrl_cost = -jp.sum(jp.square(action))
+        
         robo1_obs = self._get_robo1_obs(pipeline_state, state.info["target_pos"])
         robo2_obs = self._get_robo2_obs(pipeline_state, state.info["target_pos"])
+        
         obs = jp.concatenate((
             robo1_obs["target_pos"],
             robo1_obs["pusher_pos"],
@@ -251,65 +256,91 @@ class PushCoop(PipelineEnv):
             robo1_obs["t_location"],
             robo1_obs["robo1_joint_angles"],
             robo1_obs["robot1_ee_dist"].reshape((1,)),
-            # robo1_obs["obs1_forces"],
-            # robo1_obs["obs2_forces"],
-            # robo1_obs["obs4_forces"],
-            # robo1_obs["obs5_forces"],
             robo1_obs["other_agent_ee_pos"],
             robo2_obs["target_pos"],
             robo2_obs["pusher_pos"],
             robo2_obs["pusher_rot"],
-            robo2_obs["pusher_forces"], # .reshape((1,))
+            robo2_obs["pusher_forces"],
             robo2_obs["t_location"],
             robo2_obs["robo2_joint_angles"],
             robo2_obs["robot2_ee_dist"].reshape((1,)),
-            # robo2_obs["obs1_forces"],
-            # robo2_obs["obs2_forces"],
-            # robo2_obs["obs4_forces"],
-            # robo2_obs["obs5_forces"],
             robo2_obs["other_agent_ee_pos"],
         ))
         
-        dist_target = - self._get_dist_target(pipeline_state, state.info)
-        target_dist_reward = jp.exp(-dist_target**2 / self._t_dist_scale) 
-        # dist1, dist2 = self._ee_dist_to_t(pipeline_state)
-        dist1 = - robo1_obs["robot1_ee_dist"]
-        dist2 = - robo2_obs["robot2_ee_dist"]
+        # Get distances
+        dist1 = -robo1_obs["robot1_ee_dist"]
+        dist2 = -robo2_obs["robot2_ee_dist"]
+        dist_target = -self._get_dist_target(pipeline_state, state.info)
+        
+        # Calculate rewards
+        target_dist_reward = jp.exp(-dist_target**2 / self._t_dist_scale)
         dist1_reward = jp.exp(-dist1**2 / self._ee_dist_scale)
         dist2_reward = jp.exp(-dist2**2 / self._ee_dist_scale)
-
-        # robo1_contact = jp.sum(robo1_obs["pusher_forces"]) > 0
-        # robo2_contact = jp.sum(robo2_obs["pusher_forces"]) > 0
-
-        # print(f"dist1: {dist1}, dist2: {dist2}, dist_target: {dist_target} \n target_dist_reward: {target_dist_reward}, dist1_reward: {dist1_reward}, dist2_reward: {dist2_reward}")
-
-        # jax.debug.breakpoint()
         
-        # print(f"t_at_target_reward: {t_at_target_reward}")
-
-        # TODO: contact between the two robots should be penalized
-
-        # done = self._get_t_floor_contact(pipeline_state) or (self._get_dist_target(pipeline_state, state.info) < 0.1) # add termination condition
+        # Phase determination: Check if T-object is near middle of table
+        t_pos = pipeline_state.geom_xpos[self._t_shape_geom_idx][:2]  # x, y position
         
         
-        t_at_target_reward = (self._get_dist_target(pipeline_state, state.info) < 0.1) * 10
-        failed_reward = self._get_t_floor_contact(pipeline_state) * -10
-
-        done = ((t_at_target_reward + failed_reward) != 0)*1.0
-
-        reward_robo1 = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist1_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward # took out this component 1.0 * robo1_contact
-        reward_robo2 = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist2_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward
+        middle_pos = pipeline_state.geom_xpos[self.table_geom_idx][:2] # Middle of table
+        dist_to_middle = jp.linalg.norm(t_pos - middle_pos)
+        
+        # Phase 1: T-object not yet at middle (pushing phase)
+        # Phase 2: T-object at middle (dragging phase)
+        phase_threshold = 0.15  # meters - adjust based on your needs
+        in_drag_phase = dist_to_middle < phase_threshold
+        
+        # Robot 2 staging position reward (only in push phase)
+        staging_pos = pipeline_state.site_xpos[self.staging_area_site_idx]
+        robo2_ee_pos = robo2_obs["pusher_pos"] 
+        dist_to_staging = jp.linalg.norm(robo2_ee_pos - staging_pos)
+        staging_reward = jp.exp(-dist_to_staging**2 / self._ee_dist_scale)
+        
+        # Terminal conditions
+        t_at_target = self._get_dist_target(pipeline_state, state.info) < 0.1
+        t_fell = self._get_t_floor_contact(pipeline_state)
+        t_at_target_reward = t_at_target * 10.0
+        failed_reward = t_fell * -10.0
+        done = (t_at_target | t_fell) * 1.0
+        
+        # PHASE-BASED REWARD STRUCTURE
+        
+        # Robot 1: Always tries to push T toward middle/target
+        reward_robo1 = (
+            self._dist_reward_weight * target_dist_reward +
+            self._t_dist_weight * dist1_reward +
+            self._ctrl_cost * ctrl_cost +
+            failed_reward +
+            t_at_target_reward
+        )
+        
+        # Robot 2: Different rewards based on phase
+        # Phase 1 (pushing): Stay at staging position, don't interfere
+        push_phase_reward = (
+            self._dist_reward_weight * target_dist_reward * 0.5 +  # Still care about progress
+            2.0 * staging_reward +  # Strong incentive to stay at staging
+            self._ctrl_cost * ctrl_cost +
+            failed_reward
+        )
+        
+        # Phase 2 (dragging): Get close to T and drag to goal
+        drag_phase_reward = (
+            self._dist_reward_weight * target_dist_reward +
+            self._t_dist_weight * dist2_reward +
+            self._ctrl_cost * ctrl_cost +
+            failed_reward +
+            t_at_target_reward
+        )
+        
+        # Smooth transition between phases using sigmoid
+        # This prevents abrupt reward changes
+        phase_weight = jax.nn.sigmoid((dist_to_middle - phase_threshold) / 0.05)
+        reward_robo2 = phase_weight * push_phase_reward + (1 - phase_weight) * drag_phase_reward
+        
         reward = jp.array([reward_robo1, reward_robo2])
         
-        # metrics = {
-        #     "robo1_reward_dist": dist1_reward,
-        #     "robo2_reward_dist": dist2_reward,
-        #     "robo1_reward_ctrl": ctrl_cost,
-        #     "robo2_reward_ctrl": ctrl_cost,
-        #     "robo1_reward_t_contact": robo1_contact,
-        #     "robo2_reward_t_contact": robo2_contact,
-        #     "reward_t_dist": target_dist_reward,
-        # }
+        # Optional: Add phase info to state for debugging
+        state.info["phase"] = in_drag_phase
+        state.info["dist_to_middle"] = dist_to_middle
         
         return state.replace(
             pipeline_state=pipeline_state,
@@ -317,6 +348,90 @@ class PushCoop(PipelineEnv):
             reward=reward,
             done=done,
         )
+    #def step(self, rng: jax.Array, state: State, action: jax.Array) -> State:
+
+    #    
+    #    pipeline_state0 = state.pipeline_state
+    #    assert pipeline_state0 is not None
+    #    pipeline_state = self.pipeline_step(pipeline_state0, action)
+
+    #    ctrl_cost = -jp.sum(jp.square(action))
+    #    robo1_obs = self._get_robo1_obs(pipeline_state, state.info["target_pos"])
+    #    robo2_obs = self._get_robo2_obs(pipeline_state, state.info["target_pos"])
+    #    obs = jp.concatenate((
+    #        robo1_obs["target_pos"],
+    #        robo1_obs["pusher_pos"],
+    #        robo1_obs["pusher_rot"],
+    #        robo1_obs["pusher_forces"],
+    #        robo1_obs["t_location"],
+    #        robo1_obs["robo1_joint_angles"],
+    #        robo1_obs["robot1_ee_dist"].reshape((1,)),
+    #        # robo1_obs["obs1_forces"],
+    #        # robo1_obs["obs2_forces"],
+    #        # robo1_obs["obs4_forces"],
+    #        # robo1_obs["obs5_forces"],
+    #        robo1_obs["other_agent_ee_pos"],
+    #        robo2_obs["target_pos"],
+    #        robo2_obs["pusher_pos"],
+    #        robo2_obs["pusher_rot"],
+    #        robo2_obs["pusher_forces"], # .reshape((1,))
+    #        robo2_obs["t_location"],
+    #        robo2_obs["robo2_joint_angles"],
+    #        robo2_obs["robot2_ee_dist"].reshape((1,)),
+    #        # robo2_obs["obs1_forces"],
+    #        # robo2_obs["obs2_forces"],
+    #        # robo2_obs["obs4_forces"],
+    #        # robo2_obs["obs5_forces"],
+    #        robo2_obs["other_agent_ee_pos"],
+    #    ))
+    #    
+    #    dist_target = - self._get_dist_target(pipeline_state, state.info)
+    #    target_dist_reward = jp.exp(-dist_target**2 / self._t_dist_scale) 
+    #    # dist1, dist2 = self._ee_dist_to_t(pipeline_state)
+    #    dist1 = - robo1_obs["robot1_ee_dist"]
+    #    dist2 = - robo2_obs["robot2_ee_dist"]
+    #    dist1_reward = jp.exp(-dist1**2 / self._ee_dist_scale)
+    #    dist2_reward = jp.exp(-dist2**2 / self._ee_dist_scale)
+
+    #    # robo1_contact = jp.sum(robo1_obs["pusher_forces"]) > 0
+    #    # robo2_contact = jp.sum(robo2_obs["pusher_forces"]) > 0
+
+    #    # print(f"dist1: {dist1}, dist2: {dist2}, dist_target: {dist_target} \n target_dist_reward: {target_dist_reward}, dist1_reward: {dist1_reward}, dist2_reward: {dist2_reward}")
+
+    #    # jax.debug.breakpoint()
+    #    
+    #    # print(f"t_at_target_reward: {t_at_target_reward}")
+
+    #    # TODO: contact between the two robots should be penalized
+
+    #    # done = self._get_t_floor_contact(pipeline_state) or (self._get_dist_target(pipeline_state, state.info) < 0.1) # add termination condition
+    #    
+    #    
+    #    t_at_target_reward = (self._get_dist_target(pipeline_state, state.info) < 0.1) * 10
+    #    failed_reward = self._get_t_floor_contact(pipeline_state) * -10
+
+    #    done = ((t_at_target_reward + failed_reward) != 0)*1.0
+
+    #    reward_robo1 = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist1_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward # took out this component 1.0 * robo1_contact
+    #    reward_robo2 = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist2_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward
+    #    reward = jp.array([reward_robo1, reward_robo2])
+    #    
+    #    # metrics = {
+    #    #     "robo1_reward_dist": dist1_reward,
+    #    #     "robo2_reward_dist": dist2_reward,
+    #    #     "robo1_reward_ctrl": ctrl_cost,
+    #    #     "robo2_reward_ctrl": ctrl_cost,
+    #    #     "robo1_reward_t_contact": robo1_contact,
+    #    #     "robo2_reward_t_contact": robo2_contact,
+    #    #     "reward_t_dist": target_dist_reward,
+    #    # }
+    #    
+    #    return state.replace(
+    #        pipeline_state=pipeline_state,
+    #        obs=obs,
+    #        reward=reward,
+    #        done=done,
+    #    )
 
     def _get_robo1_obs(self, pipeline_state: base.State, target_pos) -> jax.Array:
         """Get the observation for robot 1."""
