@@ -86,11 +86,18 @@ sweep:
   ent_coef: false
   clip_eps: false
 
-hydra:
-  job:
-    chdir: true
-  run:
-    dir: outputs/${ENV_NAME}/${ALG}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-  sweep:
-    dir: multirun/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: seed_${SEED}_$env_setting${ENV_KWARGS.sparse_rewards.period}
+# WandB Params
+ENTITY: "lh-from-kb" 
+PROJECT: "assistax-dev"
+WANDB_MODE: "online" # "disabled" or "online"
+EXP_TAGS: ["IPPO","FF","NoPS","Vectorized"]
+
+
+# hydra:
+#   job:
+#     chdir: true
+#   run:
+#     dir: outputs/${ENV_NAME}/${ALG}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+#   sweep:
+#     dir: multirun/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+#     subdir: seed_${SEED}_$env_setting${ENV_KWARGS.sparse_rewards.period}

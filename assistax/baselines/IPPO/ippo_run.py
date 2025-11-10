@@ -32,7 +32,7 @@ from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    _tree_shape, _stack_tree, _concat_tree, _tree_split, upload_eval_data_to_wandb,
     )
 
 os.environ['XLA_FLAGS'] = (
@@ -75,6 +75,17 @@ def main(config):
             from ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with Parameter Sharing")
 
+    # WANDB logging
+    run = wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=tags,
+        config=config,
+        mode=config["WANDB_MODE"],
+        reinit=True,
+        name=name,
+        save_code=True,
+    )
     # ===== TRAINING SETUP =====
     rng = jax.random.PRNGKey(config["SEED"])
     train_rng, eval_rng = jax.random.split(rng)
@@ -140,7 +151,17 @@ def main(config):
                     flatten_dict(params, sep='/'),
                     f"{agent}.safetensors",
                 )
+        
+        # Uplaod params to wandb
+        artifact = wandb.Artifact(f"model_parameters_{run.name}", type="model")
+        artifact.add_file("all_params.safetensors")
+        if config["network"]["agent_param_sharing"]:
+            artifact.add_file("final_params.safetensors")
+        else:
+            for agent in env.agents:
+                artifact.add_file(f"{agent}.safetensors")
 
+        run.log_artifact(artifact)
         # ===== EVALUATION SETUP =====
         print("Setting up evaluation...")
         
@@ -207,8 +228,10 @@ def main(config):
         first_episode_returns = first_episode_returns["__all__"]
         mean_episode_returns = first_episode_returns.mean(axis=-1)
 
+        
+        
         # Save evaluation results
-        jnp.save("returns.npy", mean_episode_returns)
+        # jnp.save("returns.npy", mean_episode_returns)
 
         print(f"Mean episode return: {mean_episode_returns.mean():.2f} ± {mean_episode_returns.std():.2f}")
 
@@ -232,6 +255,7 @@ def main(config):
         # TODO: limit to fewer evaluation episodes to make rendering more memory efficient
         eval_final = eval_jit(eval_rng, _tree_take(final_train_state, 0, axis=0), render_log_config)
         
+
         # Compute episode returns and select representative episodes
         first_episode_done = jnp.cumsum(eval_final.done["__all__"], axis=0, dtype=bool)
         first_episode_rewards = eval_final.reward["__all__"] * (1 - first_episode_done)
@@ -258,16 +282,22 @@ def main(config):
             eval_final.env_state.env_state.pipeline_state, first_episode_done,
             time_idx=-1, eval_idx=best_idx,
         )
-        
+
+        artifact_html = wandb.Artifact(f"episode_visualizations_{run.name}", type="visualization")
+        artifact_html.add_file("final_worst.html")
+        artifact_html.add_file("final_median.html")
+        artifact_html.add_file("final_best.html")
+        run.log_artifact(artifact_html)
+
         # Generate interactive HTML visualizations
-        html.save("final_worst.html", eval_env.sys, worst_episode)
-        html.save("final_median.html", eval_env.sys, median_episode)
-        html.save("final_best.html", eval_env.sys, best_episode)
+        # html.save("final_worst.html", eval_env.sys, worst_episode)
+        # html.save("final_median.html", eval_env.sys, median_episode)
+        # html.save("final_best.html", eval_env.sys, best_episode)
         
-        print("Visualizations saved:")
-        print("  - final_worst.html: Worst performing episode")
-        print("  - final_median.html: Median performing episode") 
-        print("  - final_best.html: Best performing episode")
+        print("Visualizations saved to WANDB artifacts:")
+        # print("  - final_worst.html: Worst performing episode")
+        # print("  - final_median.html: Median performing episode") 
+        # print("  - final_best.html: Best performing episode")
         
         print("\nTraining and evaluation completed successfully!")
 

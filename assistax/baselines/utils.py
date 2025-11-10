@@ -215,3 +215,36 @@ def _compute_episode_returns_sweep(eval_info, common_reward=False, time_axis=-2)
         })
     
     return undiscounted_returns
+
+def upload_eval_data_to_wandb(eval_data, config, suffix=""):
+    """Upload evaluation data to wandb as artifacts (compact: NaNs removed from storage)."""
+    if not eval_data or not config.get("UPLOAD_EVAL_DATA", True):
+        return
+
+    print("Uploading evaluation data to wandb (compact)…")
+    import tempfile
+    import os
+    with tempfile.TemporaryDirectory() as temp_dir:
+        
+        first_episode_returns = _compute_episode_returns(evals)
+        first_episode_returns = first_episode_returns["__all__"]
+        mean_episode_returns = first_episode_returns.mean(axis=-1)
+
+        eval_data["mean_episode_returns"] = mean_episode_returns
+        
+        for key, data in eval_data.items():
+            if isinstance(data, (np.ndarray, jnp.ndarray)):
+                file_path = os.path.join(temp_dir, f"{key}.npz")  # use .npz (compressed bundle)
+                _save_compact_npz(file_path, data)
+                print(f"Saved {key} compactly with shape {np.asarray(data).shape}")
+            else:
+                # For non-arrays, fall back to a small npy (or skip)
+                file_path = os.path.join(temp_dir, f"{key}.npy")
+                np.save(file_path, np.array(data, dtype=object))
+                print(f"Saved non-array {key} as object npy")
+
+        artifact = wandb.Artifact("evaluation_data" + suffix, type="dataset")
+        artifact.add_dir(temp_dir)
+        wandb.log_artifact(artifact)
+
+    print("Evaluation data uploaded to wandb successfully!")
