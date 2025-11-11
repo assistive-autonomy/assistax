@@ -30,6 +30,8 @@ from assistax.wrappers.baselines import LogWrapper
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict
+import wandb
+from datetime import datetime
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
     _tree_shape, _stack_tree, _concat_tree, _tree_split, upload_eval_data_to_wandb,
@@ -76,10 +78,31 @@ def main(config):
             print("Using: Recurrent Networks with Parameter Sharing")
 
     # WANDB logging
+    now = datetime.now()
+    param_sharing = config["network"]["agent_param_sharing"]
+    if param_sharing:
+        ps_tag = "ps"
+    else:
+        ps_tag = "nps"
+    rec_config = config["network"]["recurrent"]
+    if rec_config:
+        rec_tag = "rnn"
+    else:
+        rec_tag = "ff"
+
+    env_name = (
+        config.get("ENV_NAME")
+        if config.get("MAP_NAME") is None
+        else config.get("MAP_NAME")
+    )
+    env_name = env_name.lower()
+    alg_name = config.get("ALG").lower()
+    tags = config.get("EXP_TAGS") + [env_name] + [alg_name]
+    name = f"{alg_name}_{ps_tag}_{rec_tag}_{env_name}_{now:%Y-%m-%d_%H-%M-%S}"
     run = wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=tags,
+        tags=config["EXP_TAGS"],
         config=config,
         mode=config["WANDB_MODE"],
         reinit=True,
