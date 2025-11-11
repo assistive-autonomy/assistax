@@ -201,6 +201,7 @@ def main(config):
             obs=False,
             info=False,
             avail_actions=False,
+            env_metrics=True,
         )
         
         # JIT compile evaluation functions for efficiency

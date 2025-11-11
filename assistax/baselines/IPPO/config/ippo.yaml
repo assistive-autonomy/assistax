@@ -1,5 +1,5 @@
 defaults:
-  - network: ff_ps
+  - network: ff_nps
   - _self_
 
 ENV_NAME: scratchitch 

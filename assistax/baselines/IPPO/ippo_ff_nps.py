@@ -180,6 +180,7 @@ class EvalInfo(NamedTuple):
     info: Optional[jnp.ndarray]
     avail_actions: Optional[jnp.ndarray]
     ag_idx: Optional[jnp.ndarray]
+    env_metrics: Optional[Dict[str, jnp.ndarray]]
 
 
 @struct.dataclass
@@ -194,6 +195,8 @@ class EvalInfoLogConfig:
     obs: bool = True
     info: bool = True
     avail_actions: bool = True
+    env_metrics: bool = True
+    
 
 
 # ================================ UTILITY FUNCTIONS ================================
@@ -785,7 +788,7 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
                 
                 done_batch = batchify(done, env.agents)
                 info = jax.tree_util.tree_map(lambda x: x.swapaxes(0, 1), info)
-                
+                breakpoint() 
                 # Log evaluation information based on configuration
                 eval_info = EvalInfo(
                     env_state=(env_state if log_eval_info.env_state else None),
@@ -797,7 +800,8 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
                     obs=(obs_batch if log_eval_info.obs else None),
                     info=(info if log_eval_info.info else None),
                     avail_actions=(avail_actions if log_eval_info.avail_actions else None),
-                    ag_idx=(runner_state.ag_idx if crossplay else None)
+                    ag_idx=(runner_state.ag_idx if crossplay else None),
+                    env_metrics=(env_state.env_state.metrics if log_eval_info.env_metrics else None),
                 )
                 
                 runner_state = RunnerState(

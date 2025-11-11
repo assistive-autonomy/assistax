@@ -81,8 +81,6 @@ def render_episodes(path: str):
     config = OmegaConf.to_container(
         OmegaConf.load(config_path), resolve=True
     )
-
-    config["ALG"] = "MAPPO" # short fix remove later
     
     # Dynamically import the correct module based on config
     if config["ALG"] == "IPPO":
