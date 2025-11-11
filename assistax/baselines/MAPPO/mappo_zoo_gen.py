@@ -243,10 +243,7 @@ def _save_agents_to_zoo(config: Dict, final_train_state, zoo: ZooManager, env):
                         config=config,
                         param_dict=agent_params,
                         scenario_agent_id=agent_id,
-                        # Additional metadata can be added here
-                        seed=seed_idx,
-                        agent_index=agent_idx,
-                    )
+                                           )
                     
                     saved_count += 1
                     pbar.update(1)

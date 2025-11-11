@@ -102,4 +102,6 @@ override-dependencies = ["mujoco==3.2.6", "brax==0.10.4"]
 [dependency-groups]
 dev = [
     "ipykernel>=6.30.1",
+    "notebook>=7.4.7",
+    "seaborn>=0.13.2",
 ]
