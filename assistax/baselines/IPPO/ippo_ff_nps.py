@@ -788,7 +788,6 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
                 
                 done_batch = batchify(done, env.agents)
                 info = jax.tree_util.tree_map(lambda x: x.swapaxes(0, 1), info)
-                breakpoint() 
                 # Log evaluation information based on configuration
                 eval_info = EvalInfo(
                     env_state=(env_state if log_eval_info.env_state else None),
