@@ -149,7 +149,7 @@ class EvalInfo(NamedTuple):
     info: Optional[jnp.ndarray]
     avail_actions: Optional[jnp.ndarray]
     ag_idx: Optional[jnp.ndarray]
-    idx_mapping: Optional[Dict[int, str]] = None
+    idx_mapping: Optional[Dict[int, str]] 
 
 @struct.dataclass
 class EvalInfoLogConfig:
@@ -556,6 +556,7 @@ def make_train(config, save_train_state=False, load_zoo=False):
     return train
 
 def make_evaluation(config, load_zoo=False, crossplay=False):
+    
     if load_zoo:
         zoo = ZooManager(config["ZOO_PATH"])
         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
@@ -565,6 +566,7 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
             env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
     else:
         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    
     config["OBS_DIM"] = int(get_space_dim(env.observation_space(env.agents[0])))
     config["ACT_DIM"] = int(get_space_dim(env.action_space(env.agents[0])))
     config["GOBS_DIM"] = int(get_space_dim(env.observation_space("global")))

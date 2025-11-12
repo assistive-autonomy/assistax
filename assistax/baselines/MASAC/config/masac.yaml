@@ -87,7 +87,7 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/MASAC/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: ""
+    dir: multirun/MASAC/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: "" # Add if needed.

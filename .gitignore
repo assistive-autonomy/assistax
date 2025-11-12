@@ -32,3 +32,11 @@ node_modules/
 # Environment
 .env.local
 .env.production
+
+zoo/
+*/zoo/
+
+MUJOCO_LOG.TXT
+MUJOCO_LOG.txt
+
+*.safetensors

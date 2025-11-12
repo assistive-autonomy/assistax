@@ -34,7 +34,9 @@ from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
     _tree_shape, _stack_tree, _concat_tree, _tree_split
     )
-
+os.environ['XLA_FLAGS'] = (
+    '--xla_gpu_triton_gemm_any=True ' # As recommended by MJX for better performance on NVIDIA GPUs
+)
 # ================================ MAIN ORCHESTRATION FUNCTION ================================
 
 @hydra.main(version_base=None, config_path="config", config_name="mappo")

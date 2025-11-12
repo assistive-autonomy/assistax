@@ -30,10 +30,18 @@ from assistax.wrappers.baselines import LogWrapper
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict
+import wandb
+from datetime import datetime
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    _tree_shape, _stack_tree, _concat_tree, _tree_split, upload_eval_data_to_wandb, 
+    log_all_metrics, upload_html_visualizations_to_wandb
     )
+
+os.environ['XLA_FLAGS'] = (
+    '--xla_gpu_triton_gemm_any=True ' # As recommended by MJX for better performance on NVIDIA GPUs
+)
+
 
 # ================================ MAIN ORCHESTRATION FUNCTION ================================
 
@@ -70,6 +78,38 @@ def main(config):
             from ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with Parameter Sharing")
 
+    # WANDB logging
+    now = datetime.now()
+    param_sharing = config["network"]["agent_param_sharing"]
+    if param_sharing:
+        ps_tag = "ps"
+    else:
+        ps_tag = "nps"
+    rec_config = config["network"]["recurrent"]
+    if rec_config:
+        rec_tag = "rnn"
+    else:
+        rec_tag = "ff"
+
+    env_name = (
+        config.get("ENV_NAME")
+        if config.get("MAP_NAME") is None
+        else config.get("MAP_NAME")
+    )
+    env_name = env_name.lower()
+    alg_name = config.get("ALG").lower()
+    tags = config.get("EXP_TAGS") + [env_name] + [alg_name]
+    name = f"{alg_name}_{ps_tag}_{rec_tag}_{env_name}_{now:%Y-%m-%d_%H-%M-%S}"
+    run = wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=config["EXP_TAGS"],
+        config=config,
+        mode=config["WANDB_MODE"],
+        reinit=True,
+        name=name,
+        save_code=True,
+    )
     # ===== TRAINING SETUP =====
     rng = jax.random.PRNGKey(config["SEED"])
     train_rng, eval_rng = jax.random.split(rng)
@@ -96,22 +136,17 @@ def main(config):
 
         # ===== SAVE TRAINING METRICS =====
         print("Saving training metrics...")
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         EXCLUDED_METRICS = ["train_state"]  # Exclude large training states from metrics file
-        jnp.save("metrics.npy", {
-            key: val
-            for key, val in out["metrics"].items()
-            if key not in EXCLUDED_METRICS
-            },
-            allow_pickle=True
-        )
 
+        # TODO here I really should use something like log_multiple_training_seeds 
         # ===== SAVE MODEL PARAMETERS =====
         print("Saving model parameters...")
-        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         all_train_states = out["metrics"]["train_state"]
         final_train_state = out["runner_state"].train_state
 
-        # Save all training states (for analysis across training)
+        
+        # TODO use tempfiles to avoid clutter and then upload as artifact 
         safetensors.flax.save_file(
             flatten_dict(all_train_states.params, sep='/'),
             "all_params.safetensors"
@@ -134,7 +169,17 @@ def main(config):
                     flatten_dict(params, sep='/'),
                     f"{agent}.safetensors",
                 )
+        
+        # Uplaod params to wandb
+        artifact = wandb.Artifact(f"model_parameters_{run.name}", type="model")
+        artifact.add_file("all_params.safetensors")
+        if config["network"]["agent_param_sharing"]:
+            artifact.add_file("final_params.safetensors")
+        else:
+            for agent in env.agents:
+                artifact.add_file(f"{agent}.safetensors")
 
+        run.log_artifact(artifact)
         # ===== EVALUATION SETUP =====
         print("Setting up evaluation...")
         
@@ -174,6 +219,7 @@ def main(config):
             obs=False,
             info=False,
             avail_actions=False,
+            env_metrics=True,
         )
         
         # JIT compile evaluation functions for efficiency
@@ -201,8 +247,13 @@ def main(config):
         first_episode_returns = first_episode_returns["__all__"]
         mean_episode_returns = first_episode_returns.mean(axis=-1)
 
-        # Save evaluation results
-        jnp.save("returns.npy", mean_episode_returns)
+        
+        
+        # TODO Save evaluation results with wandb utility
+        log_all_metrics(config, out, evals, env)
+        upload_eval_data_to_wandb(evals, config, run)
+        # jnp.save("returns.npy", mean_episode_returns)
+
         print(f"Mean episode return: {mean_episode_returns.mean():.2f} ± {mean_episode_returns.std():.2f}")
 
         # ===== VISUALIZATION AND RENDERING =====
@@ -223,8 +274,16 @@ def main(config):
         
         # Evaluate final model for visualization
         # TODO: limit to fewer evaluation episodes to make rendering more memory efficient
-        eval_final = eval_jit(eval_rng, _tree_take(final_train_state, 0, axis=0), render_log_config)
+        render_eval_env, render_run_eval = make_evaluation(config)
+        render_config = config
+        render_config["NUM_EVAL_EPISODES"] = 3
+        render_eval_jit = jax.jit(
+            render_run_eval,
+            static_argnames=["log_eval_info"],
+        )
+        eval_final = render_eval_jit(eval_rng, _tree_take(final_train_state, 0, axis=0), render_log_config)
         
+
         # Compute episode returns and select representative episodes
         first_episode_done = jnp.cumsum(eval_final.done["__all__"], axis=0, dtype=bool)
         first_episode_rewards = eval_final.reward["__all__"] * (1 - first_episode_done)
@@ -251,16 +310,22 @@ def main(config):
             eval_final.env_state.env_state.pipeline_state, first_episode_done,
             time_idx=-1, eval_idx=best_idx,
         )
-        
+        episodes_dict = {
+            'worst': worst_episode,
+            'median': median_episode,
+            'best': best_episode,
+        }
+        upload_html_visualizations_to_wandb(render_eval_env, episodes_dict, run)
+
         # Generate interactive HTML visualizations
-        html.save("final_worst.html", eval_env.sys, worst_episode)
-        html.save("final_median.html", eval_env.sys, median_episode)
-        html.save("final_best.html", eval_env.sys, best_episode)
+        # html.save("final_worst.html", eval_env.sys, worst_episode)
+        # html.save("final_median.html", eval_env.sys, median_episode)
+        # html.save("final_best.html", eval_env.sys, best_episode)
         
-        print("Visualizations saved:")
-        print("  - final_worst.html: Worst performing episode")
-        print("  - final_median.html: Median performing episode") 
-        print("  - final_best.html: Best performing episode")
+        print("Visualizations saved to WANDB artifacts:")
+        # print("  - final_worst.html: Worst performing episode")
+        # print("  - final_median.html: Median performing episode") 
+        # print("  - final_best.html: Best performing episode")
         
         print("\nTraining and evaluation completed successfully!")
 

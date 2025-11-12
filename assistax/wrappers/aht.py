@@ -13,7 +13,7 @@ from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 from flax.traverse_util import flatten_dict, unflatten_dict
 import safetensors.flax
-from jaxmarl.environments.multi_agent_env import State, MultiAgentEnv
+from assistax.envs.multi_agent_env import State, MultiAgentEnv
 from assistax.wrappers.baselines import JaxMARLWrapper
 from typing import Sequence, NamedTuple, Any, Dict, Optional, Callable, Tuple, List
 import functools

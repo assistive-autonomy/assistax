@@ -40,7 +40,9 @@ from assistax.baselines.utils import (
     _tree_shape, _stack_tree, _concat_tree, _tree_split
     )
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
-
+os.environ['XLA_FLAGS'] = (
+    '--xla_gpu_triton_gemm_any=True ' # As recommended by MJX for better performance on NVIDIA GPUs
+)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 

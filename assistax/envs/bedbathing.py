@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Dict
 
 from brax import base
 from brax.envs.base import PipelineEnv, State
@@ -263,7 +263,6 @@ class BedBathing(PipelineEnv):
         n_old_contacts = jp.count_nonzero(old_contact_vector==0)
         new_contacts = (n_contacts - n_old_contacts).astype(jp.float32)
 
-        # TODO: Add human preference rewards
         reward = self._dist_reward_weight*r_dist + self._ctrl_cost_weight*ctrl_cost + self._wiping_reward_weight*new_contacts
         
         done = jp.all(new_contact_vector == 0.0).astype(jp.float32)
@@ -314,7 +313,7 @@ class BedBathing(PipelineEnv):
         }
        
     
-    def _get_human_obs(self, pipeline_state: base.State) -> jax.Array:
+    def _get_human_obs(self, pipeline_state: base.State) -> Dict[st, jax.Array]:
         """Returns the environment observations"""
 
         tool_position = pipeline_state.site_xpos[self.panda_wiper_center_idx]

@@ -3,7 +3,7 @@
 
 from typing import Dict, Literal, Optional, Tuple
 import chex
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
+from assistax.envs.multi_agent_env import MultiAgentEnv
 from gymnax.environments import spaces
 # from brax import envs
 from assistax import envs 
@@ -37,6 +37,10 @@ _agent_action_mapping = {
     "pushcoop": {
         "robot1": jnp.array([0, 1, 2, 3, 4, 5, 6]),
         "robot2": jnp.array([7, 8, 9, 10, 11, 12, 13]),
+    },
+    "handover": {
+        "robot1": jnp.array([0, 1, 2, 3, 4, 5, 6, 7]),
+        "robot2": jnp.array([8, 9, 10, 11, 12, 13, 14, 15]),
     },
 }
 
@@ -72,6 +76,12 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
         "robot2": [(27, 53)],
         "global": [(0, 53)],
     },
+
+    "handover": {
+        "robot1": [(0, 30), (62, 87)],    # Robot1 sees: itself + object + sensors + goals + phase
+        "robot2": [(31, 61), (62, 87)],   # Robot2 sees: itself + object + sensors + goals + phase
+        "global": [(0, 87)],
+    }
 }
 
 _agent_observation_mapping = {
@@ -296,3 +306,7 @@ class ArmManipulation(MABraxEnv):
 class PushCoop(MABraxEnv):
     def __init__(self, **kwargs):
         super().__init__("pushcoop", **kwargs)
+
+class CooperativeHandover(MABraxEnv):
+    def __init__(self, **kwargs):
+        super().__init__("handover", **kwargs)

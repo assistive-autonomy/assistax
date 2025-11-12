@@ -3,6 +3,7 @@ defaults:
   - _self_
 
 ENV_NAME: scratchitch 
+ALG: MAPPO
 ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
@@ -63,7 +64,7 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/MAPPO/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED}
+    dir: multirun/MAPPO/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED} # This should probably be edited a little bit. 
