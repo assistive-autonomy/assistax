@@ -313,7 +313,7 @@ class BedBathing(PipelineEnv):
         }
        
     
-    def _get_human_obs(self, pipeline_state: base.State) -> Dict[st, jax.Array]:
+    def _get_human_obs(self, pipeline_state: base.State) -> Dict[str, jax.Array]:
         """Returns the environment observations"""
 
         tool_position = pipeline_state.site_xpos[self.panda_wiper_center_idx]

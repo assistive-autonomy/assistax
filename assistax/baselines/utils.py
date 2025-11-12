@@ -658,3 +658,59 @@ def upload_html_visualizations_to_wandb(eval_env, episodes_dict, run):
         run.log_artifact(artifact)
     
     print("HTML visualizations uploaded to wandb successfully!")
+
+def upload_model_parameters_to_wandb(all_train_states, final_train_state, config, env, run):
+    """
+    Upload model parameters to wandb as artifacts using temporary files.
+    
+    Args:
+        all_train_states: Training states from all checkpoints
+        final_train_state: Final training state
+        config: Configuration dictionary
+        env: Environment (for agent names)
+        run: wandb run object
+    """
+    import tempfile
+    import os
+    import safetensors.flax
+    from flax.traverse_util import flatten_dict
+    
+    print("Saving and uploading model parameters...")
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Save all training states (checkpoints)
+        all_params_path = os.path.join(temp_dir, "all_params.safetensors")
+        safetensors.flax.save_file(
+            flatten_dict(all_train_states.params, sep='/'),
+            all_params_path
+        )
+        print(f"  Saved all_params.safetensors")
+        
+        # Save final parameters
+        if config["network"]["agent_param_sharing"]:
+            # For parameter sharing: single set of shared parameters
+            final_params_path = os.path.join(temp_dir, "final_params.safetensors")
+            safetensors.flax.save_file(
+                flatten_dict(final_train_state.params, sep='/'),
+                final_params_path
+            )
+            print(f"  Saved final_params.safetensors (parameter sharing)")
+        else:
+            # For independent parameters: split by agent
+            split_params = _unstack_tree(
+                jax.tree.map(lambda x: x.swapaxes(0, 1), final_train_state.params)
+            )
+            for agent, params in zip(env.agents, split_params):
+                agent_params_path = os.path.join(temp_dir, f"{agent}.safetensors")
+                safetensors.flax.save_file(
+                    flatten_dict(params, sep='/'),
+                    agent_params_path
+                )
+                print(f"  Saved {agent}.safetensors")
+        
+        # Create and upload artifact
+        artifact = wandb.Artifact(f"model_parameters_{run.name}", type="model")
+        artifact.add_dir(temp_dir)
+        run.log_artifact(artifact)
+    
+    print("Model parameters uploaded to wandb successfully!")

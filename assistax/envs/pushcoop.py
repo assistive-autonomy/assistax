@@ -214,6 +214,11 @@ class PushCoop(PipelineEnv):
             "robo2_drag_reward": zero, #robo2_drag_reward,
         }
 
+        info = {
+            "target_pos": target_pos,
+            "drag_phase_locked": jp.array(0.0)
+        }
+
 
         return State(pipeline_state, obs, reward, done, metrics, info)
 

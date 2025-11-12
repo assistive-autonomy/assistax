@@ -35,7 +35,7 @@ from datetime import datetime
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
     _tree_shape, _stack_tree, _concat_tree, _tree_split, upload_eval_data_to_wandb, 
-    log_all_metrics, upload_html_visualizations_to_wandb
+    log_all_metrics, upload_html_visualizations_to_wandb, upload_model_parameters_to_wandb,
     )
 
 os.environ['XLA_FLAGS'] = (
@@ -146,40 +146,10 @@ def main(config):
         final_train_state = out["runner_state"].train_state
 
         
-        # TODO use tempfiles to avoid clutter and then upload as artifact 
-        safetensors.flax.save_file(
-            flatten_dict(all_train_states.params, sep='/'),
-            "all_params.safetensors"
-        )
+        # TODO use tempfiles to avoid clutter and then upload as artifact
+        upload_model_parameters_to_wandb(all_train_states, final_train_state, config, env, run)
         
-        # Save final parameters (different format for parameter sharing vs independent)
-        if config["network"]["agent_param_sharing"]:
-            # For parameter sharing: single set of shared parameters
-            safetensors.flax.save_file(
-                flatten_dict(final_train_state.params, sep='/'),
-                "final_params.safetensors"
-            )
-        else:
-            # For independent parameters: split by agent
-            split_params = _unstack_tree(
-                jax.tree.map(lambda x: x.swapaxes(0, 1), final_train_state.params)
-            )
-            for agent, params in zip(env.agents, split_params):
-                safetensors.flax.save_file(
-                    flatten_dict(params, sep='/'),
-                    f"{agent}.safetensors",
-                )
         
-        # Uplaod params to wandb
-        artifact = wandb.Artifact(f"model_parameters_{run.name}", type="model")
-        artifact.add_file("all_params.safetensors")
-        if config["network"]["agent_param_sharing"]:
-            artifact.add_file("final_params.safetensors")
-        else:
-            for agent in env.agents:
-                artifact.add_file(f"{agent}.safetensors")
-
-        run.log_artifact(artifact)
         # ===== EVALUATION SETUP =====
         print("Setting up evaluation...")
         
@@ -276,12 +246,12 @@ def main(config):
         # TODO: limit to fewer evaluation episodes to make rendering more memory efficient
         render_eval_env, render_run_eval = make_evaluation(config)
         render_config = config
-        render_config["NUM_EVAL_EPISODES"] = 3
+        render_config["NUM_EVAL_EPISODES"] = 1 
         render_eval_jit = jax.jit(
             render_run_eval,
             static_argnames=["log_eval_info"],
         )
-        eval_final = render_eval_jit(eval_rng, _tree_take(final_train_state, 0, axis=0), render_log_config)
+        eval_final = render_eval_jit(eval_rng, _tree_take(final_train_state, 0, axis=0), render_log_config) #Take a single seed
         
 
         # Compute episode returns and select representative episodes

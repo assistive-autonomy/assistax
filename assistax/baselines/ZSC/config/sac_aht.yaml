@@ -25,9 +25,9 @@ NUM_CHECKPOINTS: 256 # how often to save the training parameters for evaluating 
 TEST_DURING_TRAINING: True # not currently in use for SAC
 
 # RL HYPERPARAMETERS
-ALGORITHM: MASAC
+ALGORITHM: SAC
 EXPLORE_STEPS: 5000
-PARTNER_ALGORITHMS: ["IPPO", "MAPPO", "MASAC"]  # number of steps to take with random actions at the start of training
+PARTNER_ALGORITHMS: ["IPPO", "MAPPO"]  # number of steps to take with random actions at the start of training
 POLICY_UPDATE_DELAY: 4  # Every `policy_update_delay` q network learning steps the policy network is trained.
                         # It is trained `policy_update_delay` times to compensate, this is a TD3 trick.
 
@@ -65,16 +65,14 @@ DEVICE: 0
 DETERMINISTIC_EVAL: False
 
 # ZOO SETTINGS
-ZOO_PATH: ./path/to/assistax/zoo
+ZOO_PATH: /home/lhin/assistax/zoo 
 
-eval: # path to actor all params for eval
-  path: ./path/to/actor_all_params.safetensors
 
 hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/zsc/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/zsc/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ""

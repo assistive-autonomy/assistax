@@ -550,7 +550,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
                     
                    
                     load_agents[algorithm][agent] = LoadNetworkState(
-                        apply_fn=jax.vmap(zoo_states[0].apply_fn, in_axes=(0, None, None)),
+                        apply_fn=jax.vmap(zoo_states[0].apply_fn, in_axes=(0, None, None)), #TODO and NOTE! this throughs an error when wrong zoo path is provided which is not very insightful we should have a better error 
                         hstate_reset_fn=zoo_states[0].hstate_reset_fn,
                         params=_stack_tree([zs.params for zs in zoo_states]),
                         pop_size=len(zoo_states),
