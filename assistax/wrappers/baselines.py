@@ -53,16 +53,21 @@ class LogEnvState:
     returned_episode_returns: float
     returned_episode_lengths: int
 
+PRESERVE_KEYS = {
+    'preference_metrics',
+    'preference_tracking'
+}
 
 class LogWrapper(JaxMARLWrapper):
     """Log the episode returns and lengths.
     NOTE for now for envs where agents terminate at the same time.
     """
 
-    def __init__(self, env: MultiAgentEnv, replace_info: bool = False, crossplay_info: bool = False):
+    def __init__(self, env: MultiAgentEnv, replace_info: bool = False, crossplay_info: bool = False,  preserve_keys: set = None):
         super().__init__(env)
         self.replace_info = replace_info
         self.crossplay = crossplay_info
+        self.preserve_keys = preserve_keys or PRESERVE_KEYS
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, key: chex.PRNGKey) -> Tuple[chex.Array, State]:
@@ -83,6 +88,7 @@ class LogWrapper(JaxMARLWrapper):
         state: LogEnvState,
         action: Union[int, float],
     ) -> Tuple[chex.Array, LogEnvState, float, bool, dict]:
+        
         obs, env_state, reward, done, info = self._env.step(
             key, state.env_state, action
         )
@@ -99,22 +105,62 @@ class LogWrapper(JaxMARLWrapper):
             + new_episode_length * ep_done,
         )
 
+        info = self._transform_preference_metrics(info)  # Transform preference metrics if needed
+
         if self.replace_info:
-            info = {}
+            preserved_info = {k: v for k, v in info.items() if k in self.preserve_keys}
+            info = preserved_info
+        
         info["returned_episode_returns"] = state.returned_episode_returns
         info["returned_episode_lengths"] = state.returned_episode_lengths
         info["returned_episode"] = jnp.full((self._env.num_agents,), ep_done)
 
         return obs, state, reward, done, info
     
+    def _transform_preference_metrics(self, info):
+        """Transform scalar preference metrics to agent-shaped arrays."""
+        transformed_info = {}
+        
+        for key, value in info.items():
+            if key in self.preserve_keys and key not in ['preference_metrics', 'preference_tracking']:
+                # Transform scalar preference metrics to (num_agents,) shape
+                if hasattr(value, 'shape') and len(value.shape) == 0:  # Scalar
+                    transformed_info[key] = jnp.full((self._env.num_agents,), value)
+                else:
+                    transformed_info[key] = value
+            elif key == 'preference_metrics' and isinstance(value, dict):
+                # Transform nested preference metrics dict
+                transformed_nested = {}
+                for nested_key, nested_value in value.items():
+                    if hasattr(nested_value, 'shape') and len(nested_value.shape) == 0:
+                        transformed_nested[nested_key] = jnp.full((self._env.num_agents,), nested_value)
+                    else:
+                        transformed_nested[nested_key] = nested_value
+                transformed_info[key] = transformed_nested
+            elif key == 'preference_tracking' and isinstance(value, dict):
+                # Transform nested preference tracking dict
+                transformed_nested = {}
+                for nested_key, nested_value in value.items():
+                    if hasattr(nested_value, 'shape') and len(nested_value.shape) == 0:
+                        transformed_nested[nested_key] = jnp.full((self._env.num_agents,), nested_value)
+                    else:
+                        transformed_nested[nested_key] = nested_value
+                transformed_info[key] = transformed_nested
+            else:
+                # Keep everything else unchanged
+                transformed_info[key] = value
+        
+        return transformed_info
+    
 class LogCrossplayWrapper(JaxMARLWrapper):
     """ Mirrors the LogWrapper but for crossplay where we actually 
     want to pass the ag_idx into the reset function so that we can cycle through agents.
     """
-    def __init__(self, env: MultiAgentEnv, replace_info: bool = False, crossplay_info: bool = False):
+    def __init__(self, env: MultiAgentEnv, replace_info: bool = False, crossplay_info: bool = False, preserve_keys: set = None):
         super().__init__(env)
         self.replace_info = replace_info
         self.crossplay = crossplay_info
+        self.preserve_keys = preserve_keys or PRESERVE_KEYS
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, key: chex.PRNGKey, ag_idx: int) -> Tuple[chex.Array, State]:
@@ -153,13 +199,52 @@ class LogCrossplayWrapper(JaxMARLWrapper):
             + new_episode_length * ep_done,
         )
 
+        info = self._transform_preference_metrics(info)  # Transform preference metrics if needed
+
         if self.replace_info:
-            info = {}
+            preserved_info = {k: v for k, v in info.items() if k in self.preserve_keys}
+            info = preserved_info
+
         info["returned_episode_returns"] = state.returned_episode_returns
         info["returned_episode_lengths"] = state.returned_episode_lengths
         info["returned_episode"] = jnp.full((self._env.num_agents,), ep_done)
 
         return obs, state, reward, done, info
+    
+    def _transform_preference_metrics(self, info):
+        """Transform scalar preference metrics to agent-shaped arrays."""
+        transformed_info = {}
+        
+        for key, value in info.items():
+            if key in self.preserve_keys and key not in ['preference_metrics', 'preference_tracking']:
+                # Transform scalar preference metrics to (num_agents,) shape
+                if hasattr(value, 'shape') and len(value.shape) == 0:  # Scalar
+                    transformed_info[key] = jnp.full((self._env.num_agents,), value)
+                else:
+                    transformed_info[key] = value
+            elif key == 'preference_metrics' and isinstance(value, dict):
+                # Transform nested preference metrics dict
+                transformed_nested = {}
+                for nested_key, nested_value in value.items():
+                    if hasattr(nested_value, 'shape') and len(nested_value.shape) == 0:
+                        transformed_nested[nested_key] = jnp.full((self._env.num_agents,), nested_value)
+                    else:
+                        transformed_nested[nested_key] = nested_value
+                transformed_info[key] = transformed_nested
+            elif key == 'preference_tracking' and isinstance(value, dict):
+                # Transform nested preference tracking dict
+                transformed_nested = {}
+                for nested_key, nested_value in value.items():
+                    if hasattr(nested_value, 'shape') and len(nested_value.shape) == 0:
+                        transformed_nested[nested_key] = jnp.full((self._env.num_agents,), nested_value)
+                    else:
+                        transformed_nested[nested_key] = nested_value
+                transformed_info[key] = transformed_nested
+            else:
+                # Keep everything else unchanged
+                transformed_info[key] = value
+        
+        return transformed_info
 
 
 class MPELogWrapper(LogWrapper):

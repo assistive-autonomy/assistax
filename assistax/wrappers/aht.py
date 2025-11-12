@@ -384,6 +384,7 @@ class ZooManager:
     def load_agent(self, agent_uuid: str) -> ZooState:
         """Load an agent from the zoo given an agent UUID."""
         apply_fn, hstate_reset_fn = self._load_architecture(agent_uuid)
+        
         return ZooState(
             agent_uuid=agent_uuid,
             apply_fn=apply_fn,
@@ -735,6 +736,43 @@ class LoadAgentWrapper(JaxMARLWrapper):
         return obs, states, rewards, dones, infos
     
 
+def extract_uuids_from_eval_results(env_wrapper, eval_results):
+    """
+    Extract agent UUIDs from evaluation results.
+    Handles the tiled agent indices pattern.
+    """
+    uuid_info = {}
+    
+    if hasattr(eval_results, 'info') and eval_results.info is not None:
+        if 'agent_indices' in eval_results.info:
+            agent_indices = eval_results.info['agent_indices']
+            
+            for agent_type in env_wrapper.loaded_agents:
+                if agent_type in agent_indices:
+                    indices = agent_indices[agent_type]
+                    
+                    # Since we tiled the indices to [64, 2], we only need the first column
+                    # as both columns contain the same values
+                    if hasattr(indices, 'shape') and len(indices.shape) > 1:
+                        # Just take the first column to get original indices
+                        indices = indices[:, 0]
+                    
+                    # Convert to Python list if it's a JAX array
+                    if hasattr(indices, 'tolist'):
+                        indices = indices.tolist()
+                    
+                    # Ensure indices is a list (handle the single index case)
+                    if not isinstance(indices, list):
+                        indices = [indices]
+                    
+                    # Get UUIDs for each index
+                    uuid_info[agent_type] = [
+                        env_wrapper.get_uuid(agent_type, idx)
+                        for idx in indices
+                    ]
+    
+    return uuid_info
+
 class LoadEvalAgentWrapper(JaxMARLWrapper):
     def __init__(self, env: MultiAgentEnv, load_agents: Dict[str, LoadNetworkState]):
         super().__init__(env)
@@ -793,14 +831,18 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         load_agents_uuids: Dict[str, str | list[str]],
     ):
         """Loads agents from a zoo using ZooManager and groups them by algorithm."""
+        
         if isinstance(zoo, str):
             zoo = ZooManager(zoo_path=zoo)
 
         load_agents: Dict[str, Dict[str, LoadNetworkState]] = {}
+        
         for algorithm, agents_dict in load_agents_uuids.items():
             if algorithm not in load_agents:
                 load_agents[algorithm] = {}
+            
             for agent, agent_uuids in agents_dict.items():
+                
                 if isinstance(agent_uuids, str):
                     try:
                         zoo_state = zoo.load_agent(agent_uuids)
@@ -852,7 +894,65 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
                         pop_size=len(zoo_states),
                         uuids=successful_agent_uuids,
                     )
+
         return cls(env, load_agents)
+
+    
+    # @classmethod
+    # def load_from_zoo(
+    #     cls,
+    #     env: MultiAgentEnv,
+    #     zoo: ZooManager | str,
+    #     load_agents_uuids: Dict[str, str | list[str]],
+    # ):
+    #     """Loads agents from a zoo using ZooManager and groups them by algorithm."""
+    #     if isinstance(zoo, str):
+    #         zoo = ZooManager(zoo_path=zoo)
+
+    #     load_agents: Dict[str, Dict[str, LoadNetworkState]] = {}
+    #     for algorithm, agents_dict in load_agents_uuids.items():
+    #         if algorithm not in load_agents:
+    #             load_agents[algorithm] = {}
+    #         for agent, agent_uuids in agents_dict.items():
+    #             if isinstance(agent_uuids, str):
+    #                 # Single agent case.
+    #                 zoo_state = zoo.load_agent(agent_uuids)
+    #                 load_agents[algorithm][agent] = LoadNetworkState(
+    #                     apply_fn=jax.vmap(zoo_state.apply_fn, in_axes=(0, None, None)),
+    #                     hstate_reset_fn=zoo_state.hstate_reset_fn,
+    #                     params=jax.tree.map(lambda x: jnp.expand_dims(x, 0), zoo_state.params),
+    #                     pop_size=1,
+    #                     uuids=[agent_uuids],  # Store UUID
+    #                 )
+    #             else:
+    #                 # Multiple agents: load each zoo_state.
+    #                 zoo_states = [zoo.load_agent(agent_uuid) for agent_uuid in agent_uuids]
+
+    #                 # Group the zoo states by their parameter shapes.
+    #                 shape_groups = {}
+    #                 for agent_uuid, zs in zip(agent_uuids, zoo_states):
+    #                     flat_shapes, _ = jax.tree_util.tree_flatten(_tree_shape(zs.params))
+    #                     shape_key = tuple(flat_shapes)
+    #                     shape_groups.setdefault(shape_key, []).append(agent_uuid)
+                    
+    #                 if len(shape_groups) > 1:
+    #                     raise ValueError(
+    #                         f"Mismatching parameter shapes for agent '{agent}' under algorithm '{algorithm}'.\n"
+    #                         f"Groups by shape signature (each key is a tuple of shapes): {shape_groups}"
+    #                     )
+                    
+    #                 load_agents[algorithm][agent] = LoadNetworkState(
+    #                     apply_fn=jax.vmap(zoo_states[0].apply_fn, in_axes=(0, None, None)),
+    #                     hstate_reset_fn=zoo_states[0].hstate_reset_fn,
+    #                     params=_stack_tree([zs.params for zs in zoo_states]),
+    #                     pop_size=len(zoo_states),
+    #                     uuids=agent_uuids,  # Store the UUIDs
+    #                 )
+    #     return cls(env, load_agents)
+    
+    # def update_index(self, current_idx, total_pop_size):
+    #     new_idx = (current_idx + 1) % total_pop_size
+    #     return new_idx
 
         
     def take_internal_action(
@@ -928,6 +1028,35 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
             
         return ag_index
         
+    # def reset(self, key: chex.PRNGKey, current_idx: Optional[int]) -> Tuple[Dict[str, chex.Array], LoadAgentState]:
+    #     """
+    #     Reset the environment and initialize the loaded agent state.
+        
+    #     Instead of randomly selecting a loaded agent, we initialize the agent index to 0.
+    #     """
+    #     key_env, key_hstate, key_action = jax.random.split(key, 3)
+    #     obs, state = self._env.reset(key_env)
+    #     dones = {agent: False for agent in self.loaded_agents}
+    #     avail_actions = self._env.get_avail_actions(state)
+    #     hstate = self.reset_internal_hstates(key_hstate)
+
+    #     load_agent_actions, hstate = self.take_internal_action(
+    #         key_action, obs, dones, avail_actions, hstate
+    #     )
+    #     # Initialize indices deterministically (starting at 0).
+    #     current_idx = self.reset_agent_index(current_idx)
+    #      # change this to be an input of the reset function. I will then need to iterate through this in run eval functions of each algorithm
+    #     load_agent_actions = jax.tree.map(lambda i, a: a[i], current_idx, load_agent_actions)
+        
+        
+    #     
+    #     state = LoadAgentState(
+    #         _state=state,
+    #         load_agent_actions=load_agent_actions,
+    #         hstate=hstate,
+    #         ag_idx=current_idx,
+    #     )
+    #     return obs, state
 
     def reset(self, key: chex.PRNGKey, current_idx: Optional[Dict[str, chex.Array]]) -> Tuple[Dict[str, chex.Array], LoadAgentState]:
         """
@@ -978,9 +1107,11 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         obs_st, states_st, rewards, dones, infos = self._env.step_env(
             key_step, state._state, actions
         )
+        # Store agent indices in info - this is JAX-compatible
+        # infos = {**infos, "agent_indices": jnp.tile(state.ag_idx['human'], 2)} #TODO: avoid hardcoding 'human'
 
         if reset_state is None:
-            obs_re, states_re = self._env.reset(key_reset) # TODO: Below is very hacky either get rid entirely or find a beter way to do this
+            obs_re, states_re = self._env.reset(key_reset) # TODO: Below is very hacky either get rid entirely or 
             ag_idx_re = self.reset_agent_index(state.ag_idx) # This makes it more robust but as we don't have early termination we probs dont need this
         else:
             states_re = reset_state
@@ -1045,6 +1176,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         # Check if all values are equal to the first element
         is_uniform = jnp.all(idx_array == idx_array[0])
         
+        # Use JAX's conditional to handle this in a JIT-compatible way
         # If array is uniform, return the first element, otherwise use a predefined value
         result = jax.lax.cond(
             is_uniform,
@@ -1059,7 +1191,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         """
         Preprocess current_idx to handle Python int and convert to proper dict format.
         """        
-        # if single integer, use same value for all agent types
+        # If single integer, use same value for all agent types
         if isinstance(current_idx, int):
             return {agent_type: jnp.array(current_idx) for agent_type in self.loaded_agents}
         
@@ -1072,42 +1204,3 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
                 processed[agent_type] = idx
         
         return processed
-
-# Helper functions for getting eval uuids later on
-
-def extract_uuids_from_eval_results(env_wrapper, eval_results):
-    """
-    Extract agent UUIDs from evaluation results.
-    Handles the tiled agent indices pattern.
-    """
-    uuid_info = {}
-    
-    if hasattr(eval_results, 'info') and eval_results.info is not None:
-        if 'agent_indices' in eval_results.info:
-            agent_indices = eval_results.info['agent_indices']
-            
-            for agent_type in env_wrapper.loaded_agents:
-                if agent_type in agent_indices:
-                    indices = agent_indices[agent_type]
-                    
-                    # Since we tiled the indices to [64, 2], we only need the first column
-                    # as both columns contain the same values
-                    if hasattr(indices, 'shape') and len(indices.shape) > 1:
-                        # Just take the first column to get original indices
-                        indices = indices[:, 0]
-                    
-                    # Convert to Python list if it's a JAX array
-                    if hasattr(indices, 'tolist'):
-                        indices = indices.tolist()
-                    
-                    # Ensure indices is a list (handle the single index case)
-                    if not isinstance(indices, list):
-                        indices = [indices]
-                    
-                    # Get UUIDs for each index
-                    uuid_info[agent_type] = [
-                        env_wrapper.get_uuid(agent_type, idx)
-                        for idx in indices
-                    ]
-    
-    return uuid_info

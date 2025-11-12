@@ -13,8 +13,8 @@ ENV_KWARGS:
     joint_restriction_factor: 1.0
     joint_strength: 1.0
     tremor_magnitude: 0.0
-TOTAL_TIMESTEPS: 1e6
-NUM_STEPS: 64
+TOTAL_TIMESTEPS: 30e6
+NUM_STEPS: 256 
 NUM_ENVS: 1024
 NUM_SEEDS: 4
 SEED: 0
@@ -36,6 +36,7 @@ GAE_LAMBDA: 0.95
 VF_COEF: 1.0
 MAX_GRAD_NORM: 0.5
 ADAM_EPS: 1e-8
+SPLIT_RATIO: 0.2 # The train/test split ratio e.g. 0.2 means 20% train, 80% test
 
 # COMPUTE OPTIONS
 GPU_ENV_CAPACITY: 8192
@@ -44,13 +45,12 @@ DISABLE_JIT: False
 DEVICE: 0
 
 # ZOO SETTINGS
-ZOO_PATH: ./path/to/assistax/zoo
+ZOO_PATH: /home/lhin/assistax/zoo
 
 hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/ZSC/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED}
+    dir: multirun/ZSC/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}

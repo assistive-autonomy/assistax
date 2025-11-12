@@ -51,6 +51,8 @@ AUTOTUNE: True  # whether to autotune alpha
 TARGET_ENTROPY_SCALE: 5.0  # scale factor for target entropy (when auto-tuning)
 INIT_ALPHA: 0.1  # initial entropy value when not using autotune
 
+SPLIT_RATIO: 0.2 # The train/test split ratio e.g. 0.2 means 20% train, 80% test
+
 # WANDB
 # WANDB_GROUP: scratchitch
 # WANDB_RUN: test

@@ -2,7 +2,7 @@ defaults:
   - network: ff_nps
   - _self_
 
-ENV_NAME: armmanipulation
+ENV_NAME: scratchitch
 
 ENV_KWARGS:
   ctrl_cost_weight: 0
@@ -17,31 +17,32 @@ ENV_KWARGS:
 
 TOTAL_TIMESTEPS: 30e6
 NUM_STEPS: 256
-NUM_ENVS: 512
-NUM_SEEDS: 4
+NUM_ENVS: 1024 
+NUM_SEEDS: 2 
 SEED: 0
 NUM_EVAL_EPISODES: 8
 
-PARALLEL_BATCH_SIZE: 5
+PARALLEL_BATCH_SIZE: 1
 
 crossplay:
-  robot_algos: ["IPPO", "MAPPO", "MASAC"]
+  robot_algos: ["IPPO"]
   algo_configs:
     IPPO: 
-      main: "IPPO/config/ippo_mabrax_aht.yaml"
-      network: "IPPO/config/network/ff_nps.yaml"
-    MAPPO: 
-      main: "MAPPO/config/mappo_mabrax_aht.yaml"
-      network: "MAPPO/config/network/ff_nps.yaml"
-    MASAC: 
-      main: "MASAC/config/masac_aht.yaml"
-      network: "MASAC/config/network/ff_nps.yaml"
+      main: "assistax/baselines/ZSC/config/ppo_aht.yaml"
+      network: "assistax/baselines/ZSC/config/network/ff_nps.yaml"
+    # MAPPO: 
+    #   main: "MAPPO/config/mappo_mabrax_aht.yaml"
+    #   network: "MAPPO/config/network/ff_nps.yaml"
+    # MASAC: 
+    #   main: "MASAC/config/masac_aht.yaml"
+    #   network: "MASAC/config/network/ff_nps.yaml"
+ROBOT_START_IDX: 0 # maybe integrate with crossplay configs
+ROBOT_END_IDX: 68    
 
 
-PARTNER_ALGORITHMS: ["IPPO", "MAPPO", "MASAC"]
+PARTNER_ALGORITHMS: ["IPPO"]
 
-ZOO_PATH: ./path/to/assistax/zoo
-
+ZOO_PATH: /home/lhin/assistax/zoo 
 GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False

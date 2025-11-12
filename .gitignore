@@ -1,4 +1,11 @@
-# Byte-compiled / optimized / DLL files
+#
+zoo/
+*/zoo/
+
+MUJOCO_LOG.TXT
+MUJOCO_LOG.txt
+
+*.safetensors Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -19,6 +26,7 @@ multirun/
 *.npy
 *.sh
 *.png
+CLAUDE.md
 
 # Build outputs
 build/
@@ -32,11 +40,16 @@ node_modules/
 # Environment
 .env.local
 .env.production
+.claude 
 
+# Agent Zoo
 zoo/
-*/zoo/
 
-MUJOCO_LOG.TXT
-MUJOCO_LOG.txt
+# Configs 
+config/
+*/config/
+**/config/
+**/config/**
 
-*.safetensors
+slurm/
+*/slurm/

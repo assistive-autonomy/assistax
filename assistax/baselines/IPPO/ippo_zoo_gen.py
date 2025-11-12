@@ -5,15 +5,6 @@ This module generates diverse populations of trained IPPO agents and saves them 
 "zoo" for use in future experiments. The zoo serves as a repository of agent policies that can
 be loaded as teammates, opponents, or evaluation partners in multi-agent scenarios.
 
-Key Features:
-- Population-based training with multiple random seeds for diversity
-- Automatic zoo management and agent storage using ZooManager
-- Individual agent extraction and saving from multi-agent training
-- Support for all four IPPO variants (FF/RNN x NPS/PS)
-- Dynamic algorithm selection based on network architecture
-- Systematic agent organization by scenario and agent ID
-
-
 Usage:
     python ippo_zoo_gen.py [hydra options]
     
