@@ -24,14 +24,14 @@ git clone https://github.com/assistive-autonomy/assistax.git
 *If you have a NVIDIA GPU*
 ```bash
 cd assistax
-uv sync && uv pip install -e ".[cuda]" 
+uv sync --dev --extra cuda12 # if your using cuda12 else cuda13 
 ```
 
 *Otherwise for CPU*
 
 ```bash
 cd assistax
-uv sync && uv pip install -e ".[cpu]" 
+uv sync --dev --extra cpu 
 ```
 
 ## 🚀 Quick Start
