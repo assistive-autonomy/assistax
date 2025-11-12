@@ -1,5 +1,4 @@
-from typing import Tuple
-
+from typing import Tuple, Dict, Optional
 from brax import base
 from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
@@ -25,7 +24,7 @@ class PushCoop(PipelineEnv):
 
     def __init__(
         self,
-        ctrl_cost_weight: float = 1e-6,
+        ctrl_cost_weight: float = 0.0,
         dist_reward_weight: float = 1.0,
         ee_dist_scale: float = 0.1,
         t_dist_scale: float = 0.3,
@@ -200,42 +199,21 @@ class PushCoop(PipelineEnv):
         done, zero = jp.zeros(2)
 
         metrics = {
-            "robo1_reward_dist": zero,
-            "robo2_reward_dist": zero,
-            "robo1_reward_ctrl": zero,
-            "robo2_reward_ctrl": zero,
-            "robo1_reward_t_contact": zero,
-            "robo2_reward_t_contact": zero,
-            "reward_t_dist": zero,
+            "robo1_reward_dist": zero, #dist1_reward, 
+            "robo2_reward_dist": zero, #dist2_reward,
+            "robo1_reward_ctrl": zero, #ctrl_cost TODO set weight to 0 or heterogenous control costs. 
+            "robo2_reward_ctrl": zero, #ctrl_cost
+            "reward_t_to_goal": zero, #target_dist_reward
+            "robot1_staging_reward": zero, #robot1_staging_reward
+            "robot2_staging_reward": zero, #robot2_staging_reward
+            "drag_phase_locked": zero, #drag_phase_locked
+            "phase_weight": zero,#phase_weight
+            "robo1_push_reward": zero, #robo1_push_reward,
+            "robo1_drag_reward": zero, #robo1_drag_reward,
+            "robo2_push_reward": zero, #robo2_push_reward,
+            "robo2_drag_reward": zero, #robo2_drag_reward,
         }
 
-        # info = {
-        #     "robo1_dist_to_target": zero,
-        #     "robo2_dist_to_target": zero,
-        #     "robo1_t_contact": zero,
-        #     "robo2_t_contact": zero,
-        #     "t_dist": zero,
-        #     "t_contact_id": zero,
-        #     "t_contact_force": zero,
-        #     "robo1_reward_dist": zero,
-        #     "robo2_reward_dist": zero,
-        #     "robo1_reward_ctrl": zero,
-        #     "robo2_reward_ctrl": zero,
-        #     "robo1_reward_t_contact": zero,
-        #     "robo2_reward_t_contact": zero,
-        #     "reward_t_dist": zero,
-        #     "target_pos": target_pos,
-        # }
-
-        info = {
-            "dist_to_target": zero,
-            "t_contact": zero,
-            "t_dist": zero,
-            "t_contact_id": zero,
-            "t_contact_force": zero,
-            "target_pos": target_pos,
-            "drag_phase_locked": 0.0,
-        }
 
         return State(pipeline_state, obs, reward, done, metrics, info)
 
@@ -272,6 +250,7 @@ class PushCoop(PipelineEnv):
         dist1 = -robo1_obs["robot1_ee_dist"]
         
         dist2 = -robo2_obs["robot2_ee_dist"]
+        
         dist_target = -self._get_dist_target(pipeline_state, state.info)
         
         # Calculate rewards
@@ -286,7 +265,7 @@ class PushCoop(PipelineEnv):
         
         # Phase 1: T-object not yet at middle (pushing phase)
         # Phase 2: T-object at middle (dragging phase)
-        phase_threshold = 0.05  # meters - adjust based on your needs
+        phase_threshold = 0.01  # meters - adjust based on your needs
         in_drag_phase = dist_to_middle < phase_threshold
 
         drag_phase_locked = state.info.get("drag_phase", 0.0)
@@ -311,7 +290,6 @@ class PushCoop(PipelineEnv):
         robot1_dist_to_staging = jp.linalg.norm(robot1_ee_pos - staging_pos)
         robot1_staging_reward = jp.exp(-robot1_dist_to_staging**2 / self._ee_dist_scale)
         # Robot 2: Different rewards based on phase
-        dist2_reward = jp.exp(-dist2**2 / self._ee_dist_scale)
 
         dist1_reward = jp.exp(-dist1**2 / self._ee_dist_scale)
         # Robot 1: Always tries to push T toward middle/target
@@ -363,7 +341,7 @@ class PushCoop(PipelineEnv):
 
         # Robot 2: Different rewards based on phase
         dist2_reward = jp.exp(-dist2**2 / self._ee_dist_scale)
-        
+       
         # Phase 1 (pushing): Stay at staging position, don't interfere
         robo2_push_reward = (
             robot2_staging_reward +  # Strong incentive to stay at staging
@@ -382,7 +360,7 @@ class PushCoop(PipelineEnv):
 
         # Smooth transition between phases using sigmoid
         # This prevents abrupt reward changes
-        phase_weight = jax.nn.sigmoid((dist_to_middle - phase_threshold) / 0.02)
+        phase_weight = jax.nn.sigmoid((dist_to_middle - phase_threshold) / 0.01)
         phase_weight = (1.0 - drag_phase_locked) * phase_weight  # Lock into drag phase once entered
         
         reward_robo1 = phase_weight * robo1_push_reward + (1 - phase_weight) * robo1_drag_reward 
@@ -393,6 +371,22 @@ class PushCoop(PipelineEnv):
         
         # Optional: Add phase info to state for debugging
         state.info["drag_phase_locked"] = drag_phase_locked
+
+        state.metrics.update(
+            robo1_reward_dist = dist1_reward,
+            robo2_reward_dist = dist2_reward,
+            robo1_reward_ctrl = ctrl_cost,
+            robo2_reward_ctrl = ctrl_cost,
+            reward_t_to_goal = target_dist_reward,
+            robot1_staging_reward = robot1_staging_reward,
+            robot2_staging_reward = robot2_staging_reward,
+            drag_phase_locked = drag_phase_locked,
+            phase_weight = phase_weight,
+            robo1_push_reward = robo1_push_reward,
+            robo1_drag_reward = robo1_drag_reward,
+            robo2_push_reward = robo2_push_reward,
+            robo2_drag_reward = robo2_drag_reward,
+        )
         
         return state.replace(
             pipeline_state=pipeline_state,
@@ -486,7 +480,7 @@ class PushCoop(PipelineEnv):
     #        done=done,
     #    )
 
-    def _get_robo1_obs(self, pipeline_state: base.State, target_pos) -> jax.Array:
+    def _get_robo1_obs(self, pipeline_state: base.State, target_pos) -> Dict[str, jax.Array]:
         """Get the observation for robot 1."""
         pusher_pos = pipeline_state.site_xpos[self.panda1_pusher_point_idx]
         pusher_rot = pipeline_state.xquat[self.panda1_pusher_body_idx]
@@ -518,7 +512,7 @@ class PushCoop(PipelineEnv):
             "other_agent_ee_pos": other_agent_ee_pos,
         }
     
-    def _get_robo2_obs(self, pipeline_state: base.State, target_pos) -> jax.Array:
+    def _get_robo2_obs(self, pipeline_state: base.State, target_pos) -> Dict[str, jax.Array]:
         """Get the observation for robot 2."""
         pusher_pos = pipeline_state.site_xpos[self.panda2_pusher_point_idx]
         pusher_rot = pipeline_state.xquat[self.panda2_pusher_body_idx]
