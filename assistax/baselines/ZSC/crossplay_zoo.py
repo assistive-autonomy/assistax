@@ -117,10 +117,12 @@ def load_and_merge_algo_config(alg_config: dict):
 @hydra.main(version_base=None, config_path="config", config_name="crossplay_zoo")
 def main(config):
     config = OmegaConf.to_container(config, resolve=True)
-
-    # Add configuration for parallel batch size
-    parallel_batch_size = config.get("PARALLEL_BATCH_SIZE", 1)  # Default to 1 if not specified
-
+    
+    # NEW: Add these parameters for splitting computation
+    robot_start_idx = config.get("ROBOT_START_IDX", None)
+    robot_end_idx = config.get("ROBOT_END_IDX", None)
+    
+    parallel_batch_size = config.get("PARALLEL_BATCH_SIZE", 1)
     # IMPORT FUNCTIONS BASED ON ARCHITECTURE
     
     # Dictionary to hold functions per algorithm (this is disgusting so needs to be refactored)
@@ -255,16 +257,17 @@ def main(config):
         }
 
     robo_configs = {}
+    
     for alg, paths in config["crossplay"]["algo_configs"].items():
         robo_configs[alg] = load_and_merge_algo_config(paths)
-
+    
     rng = jax.random.PRNGKey(config["SEED"])
     rng, eval_rng = jax.random.split(rng)
 
     with jax.disable_jit(config["DISABLE_JIT"]):
         zoo = ZooManager(config["ZOO_PATH"])
         scenario = config["ENV_NAME"]
-
+        
         partner_dict = {}
         for partner_algo in config["PARTNER_ALGORITHMS"]:
             partner_dict[partner_algo] = zoo.index.query(f'algorithm == "{partner_algo}"'
@@ -275,11 +278,20 @@ def main(config):
 
         load_zoo_dict = {algo: {"human": list(partner_dict[algo].agent_uuid)} for algo in partner_dict.keys()}
         robo_filtered = {}
+        
         for alg in config["crossplay"]["robot_algos"]:
             robo_filtered[alg] = zoo.index.query(f'algorithm == "{alg}"'
                                          ).query(f'scenario == "{scenario}"'
                                          ).query('scenario_agent_id == "robot"')
             
+            # NEW: Apply index slicing if specified
+            if robot_start_idx is not None or robot_end_idx is not None:
+                start = robot_start_idx if robot_start_idx is not None else 0
+                end = robot_end_idx if robot_end_idx is not None else len(robo_filtered[alg])
+                
+                robo_filtered[alg] = robo_filtered[alg].iloc[start:end]
+                print(f"Processing robots {start} to {end} for algorithm {alg} "
+                      f"({len(robo_filtered[alg])} agents)")           
         # robo_filtered = {alg: df.head(5) for alg, df in robo_filtered.items()}
         returns_dict = {}
         opponent_info_dict = {}
@@ -412,9 +424,17 @@ def main(config):
                             
             returns_dict[alg] = inner_returns_dict
             opponent_info_dict[alg] = inner_opponent_info
-    jnp.save("crossplay_test_results.npy", returns_dict, allow_pickle=True)
-    # Now you can use returns_dict for analysis
-    print("Evaluation complete!")
+    
+    if robot_start_idx is not None or robot_end_idx is not None:
+            start = robot_start_idx if robot_start_idx is not None else 0
+            end = robot_end_idx if robot_end_idx is not None else "end"
+            output_filename = f"crossplay_results_{start}_{end}.npy"
+    else:
+        output_filename = "crossplay_test_results.npy"
+        
+    jnp.save(output_filename, returns_dict, allow_pickle=True)
+
+    print(f"Evaluation complete! Results saved to {output_filename}")
     return returns_dict
 
 if __name__ == "__main__":

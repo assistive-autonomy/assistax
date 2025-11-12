@@ -384,6 +384,7 @@ class ZooManager:
     def load_agent(self, agent_uuid: str) -> ZooState:
         """Load an agent from the zoo given an agent UUID."""
         apply_fn, hstate_reset_fn = self._load_architecture(agent_uuid)
+        
         return ZooState(
             agent_uuid=agent_uuid,
             apply_fn=apply_fn,
@@ -735,344 +736,6 @@ class LoadAgentWrapper(JaxMARLWrapper):
         return obs, states, rewards, dones, infos
     
 
-# class LoadEvalAgentWrapper(JaxMARLWrapper):
-#     def __init__(self, env: MultiAgentEnv, load_agents: Dict[str, LoadNetworkState]):
-#         super().__init__(env)
-#         self.loaded_agents = ['human'] # also currently hard coded this works for assistax but not other JaxMARL envs
-#         self.loaded_params = load_agents
-#         self.agents = [
-#             agent for agent in self._env.agents if agent not in self.loaded_agents
-#         ] # might need to change this to avoid breaking eval 
-#         # self.agents = self._env.agents
-#         self.num_agents = len(self.agents)
-#         self.num_loaded_agents = len(self.loaded_agents)
-#         self.total_pop_size = sum([train_state.pop_size for agents_dict in self.loaded_params.values() for train_state in agents_dict.values()])
-#         self.idx_mapping = self._create_uuid_mapping()
-#         # self.idxs = self._init_idxs()
-#         # self.current_idx = {agent_type: 0 for agent_type in self.loaded_agents}
-#         # self.idx_mask = {agent_type: jax.nn.one_hot(0, self.total_pop_size, dtype=int) for agent_type in self.loaded_agents}
-
-    
-#     def _create_uuid_mapping(self):
-#         """Create a dictionary for UUID lookups"""
-#         mapping = {}
-#         for agent_type in self.loaded_agents:
-#             agent_mapping = {}
-#             index = 0
-            
-#             for algo, agents_dict in self.loaded_params.items():
-#                 if agent_type in agents_dict:
-#                     train_state = agents_dict[agent_type]
-#                     if hasattr(train_state, 'uuids') and train_state.uuids is not None:
-#                         for i, uuid in enumerate(train_state.uuids):
-#                             agent_mapping[index + i] = uuid
-#                     else:
-#                         # If UUIDs aren't available, use placeholders
-#                         for i in range(train_state.pop_size):
-#                             agent_mapping[index + i] = f"{algo}_{agent_type}_{i}"
-                    
-#                     index += train_state.pop_size
-            
-#             mapping[agent_type] = agent_mapping
-        
-#         return mapping
-    
-#     # def _init_idxs(self):
-        
-#     #     idxs = {}
-#     #     for agent_type in self.loaded_agents:
-#     #         idxs[agent_type] = jnp.arange(self.total_pop_size) # TODO: note this only works with one agent_type i.e. human in mabrax 
-        
-#     #     return idxs
-
-#     @classmethod
-#     def load_from_zoo(
-#         cls,
-#         env: MultiAgentEnv,
-#         zoo: ZooManager | str,
-#         load_agents_uuids: Dict[str, str | list[str]],
-#     ):
-#         """Loads agents from a zoo using ZooManager and groups them by algorithm."""
-#         if isinstance(zoo, str):
-#             zoo = ZooManager(zoo_path=zoo)
-
-#         load_agents: Dict[str, Dict[str, LoadNetworkState]] = {}
-#         for algorithm, agents_dict in load_agents_uuids.items():
-#             if algorithm not in load_agents:
-#                 load_agents[algorithm] = {}
-#             for agent, agent_uuids in agents_dict.items():
-#                 if isinstance(agent_uuids, str):
-#                     try:
-#                         zoo_state = zoo.load_agent(agent_uuids)
-#                     except FileNotFoundError:
-#                         warnings.warn(
-#                             f"Agent file for UUID {agent_uuids} not found; skipping agent '{agent}' under algorithm '{algorithm}'."
-#                         )
-#                         continue
-#                     load_agents[algorithm][agent] = LoadNetworkState(
-#                         apply_fn=jax.vmap(zoo_state.apply_fn, in_axes=(0, None, None)),
-#                         hstate_reset_fn=zoo_state.hstate_reset_fn,
-#                         params=jax.tree.map(lambda x: jnp.expand_dims(x, 0), zoo_state.params),
-#                         pop_size=1,
-#                         uuids=[agent_uuids],
-#                     )
-#                 else:
-#                     zoo_states = []
-#                     successful_agent_uuids = []
-#                     for agent_uuid in agent_uuids:
-#                         try:
-#                             state = zoo.load_agent(agent_uuid)
-#                             zoo_states.append(state)
-#                             successful_agent_uuids.append(agent_uuid)
-#                         except FileNotFoundError:
-#                             warnings.warn(f"Agent file for UUID {agent_uuid} not found; skipping.")
-#                     if not zoo_states:
-#                         warnings.warn(
-#                             f"No valid agents loaded for '{agent}' under algorithm '{algorithm}'."
-#                         )
-#                         continue
-
-#                     # Group the zoo states by their parameter shapes.
-#                     shape_groups = {}
-#                     for agent_uuid, zs in zip(successful_agent_uuids, zoo_states):
-#                         flat_shapes, _ = jax.tree_util.tree_flatten(_tree_shape(zs.params))
-#                         shape_key = tuple(flat_shapes)
-#                         shape_groups.setdefault(shape_key, []).append(agent_uuid)
-                    
-#                     if len(shape_groups) > 1:
-#                         raise ValueError(
-#                             f"Mismatching parameter shapes for agent '{agent}' under algorithm '{algorithm}'.\n"
-#                             f"Groups by shape signature (each key is a tuple of shapes): {shape_groups}"
-#                         )
-                    
-#                     load_agents[algorithm][agent] = LoadNetworkState(
-#                         apply_fn=jax.vmap(zoo_states[0].apply_fn, in_axes=(0, None, None)),
-#                         hstate_reset_fn=zoo_states[0].hstate_reset_fn,
-#                         params=_stack_tree([zs.params for zs in zoo_states]),
-#                         pop_size=len(zoo_states),
-#                         uuids=successful_agent_uuids,
-#                     )
-#         return cls(env, load_agents)
-
-        
-#     def take_internal_action(
-#         self,
-#         key: chex.PRNGKey,
-#         obs: Dict[str, chex.Array],
-#         dones: Dict[str, bool],
-#         avail_actions: Dict[str, chex.Array],
-#         hstate: Dict[str, Dict[str, chex.Array]],
-#     ) -> Tuple[Dict[str, chex.Array], Dict[str, chex.Array]]:
-#         """
-#         Compute the action taken by each of the loaded agents and update the corresponding hidden state.
-#         Actions from each algorithm are concatenated along the population dimension.
-#         """
-#         temp_actions = {}  # keys: agent, values: list of action arrays
-#         hstates = {}       # keys: algorithm, values: {agent: new hstate}
-
-#         # Iterate over each algorithm group.
-#         for algorithm, agents_dict in self.loaded_params.items():
-#             temp_hstates = {}
-#             for agent, train_state in agents_dict.items():
-#                 key, subkey = jax.random.split(key)
-#                 network_out = train_state.apply_fn(
-#                     train_state.params,
-#                     hstate[algorithm][agent],
-#                     (obs[agent], dones[agent], avail_actions[agent])
-#                 )
-#                 pi = distrax.MultivariateNormalDiag(*network_out.pi)
-#                 action = pi.sample(seed=subkey)
-                
-#                 if agent not in temp_actions:
-#                     temp_actions[agent] = []
-#                 temp_actions[agent].append(action)
-#                 temp_hstates[agent] = network_out.hstate
-            
-#             hstates[algorithm] = temp_hstates
-        
-#         # Concatenate actions for each agent across all algorithm groups.
-#         final_actions = {
-#             agent: jnp.concatenate(actions, axis=0) for agent, actions in temp_actions.items()
-#         }
-
-#         return final_actions, hstates
-
-#     def reset_internal_hstates(self, key: chex.PRNGKey) -> Dict[str, chex.Array]:
-#         """Reset the hidden states for each of the loaded agents."""
-#         hstates = {}
-#         for algorithm, agents_dict in self.loaded_params.items():
-#             hstates[algorithm] = {
-#                 agent: train_state.hstate_reset_fn(_key)
-#                 for _key, (agent, train_state) in zip(
-#                     jax.random.split(key, self.num_loaded_agents), agents_dict.items()
-#                 )
-#             }
-#         return hstates
-
-#     def reset_agent_index( # probably actually don't even need this anymore
-#         self, current_idx: Dict[str, chex.Array]
-#     ) -> Dict[str, int]:
-#         """
-#         Instead of sampling a random index for each loaded agent, cycle through all agents.
-        
-#         We use multiply the arange index array by the onehot current index to get the index. 
-#         After this we roll the onehot mask forward by +1
-#         """
-        
-#         ag_index = {}
-#         for agent_type in self.loaded_agents:
-#             if current_idx is None:
-#                 ag_index[agent_type] = -1
-#             else:
-#                 ag_index[agent_type] = (current_idx[agent_type]) + 1 % self.total_pop_size
-            
-#         return ag_index
-        
-
-#     def reset(self, key: chex.PRNGKey, current_idx: Optional[Dict[str, chex.Array]]) -> Tuple[Dict[str, chex.Array], LoadAgentState]:
-#         """
-#         Reset the environment and initialize the loaded agent state.
-#         Instead of randomly selecting a loaded agent, we initialize the agent index to 0.
-#         """
-#         key_env, key_hstate, key_action = jax.random.split(key, 3)
-#         obs, state = self._env.reset(key_env)
-#         dones = {agent: False for agent in self.loaded_agents}
-#         avail_actions = self._env.get_avail_actions(state)
-#         hstate = self.reset_internal_hstates(key_hstate)
-#         load_agent_actions, hstate = self.take_internal_action(
-#             key_action, obs, dones, avail_actions, hstate
-#         )
-        
-#         # Initialize indices deterministically (starting at 0).
-#         current_idx = self.reset_agent_index(current_idx)
-  
-#         current_idx = self._preprocess_current_idx(current_idx) # ensure its not int
-#         # Ensure each index is a scalar
-#         current_idx = jax.tree.map(self._ensure_scalar_idx, current_idx)
-        
-#         # Use indices to select actions
-#         load_agent_actions = jax.tree.map(lambda i, a: a[i], current_idx, load_agent_actions)
-        
-#         state = LoadAgentState(
-#             _state=state,
-#             load_agent_actions=load_agent_actions,
-#             hstate=hstate,
-#             ag_idx=current_idx,
-#         )
-#         return obs, state
-
-
-#     def step(
-#         self,
-#         key: chex.PRNGKey,
-#         state: LoadAgentState,
-#         actions: Dict[str, chex.Array],
-#         reset_state: Optional[LoadAgentState] = None,
-#     ):
-#         key_step, key_reset, key_action = jax.random.split(key, 3)
- 
-#         actions = {**state.load_agent_actions, **actions}
-
-#         obs_st, states_st, rewards, dones, infos = self._env.step_env(
-#             key_step, state._state, actions
-#         )
-
-#         if reset_state is None:
-#             obs_re, states_re = self._env.reset(key_reset) # TODO: Below is very hacky either get rid entirely or find a beter way to do this
-#             ag_idx_re = self.reset_agent_index(state.ag_idx) # This makes it more robust but as we don't have early termination we probs dont need this
-#         else:
-#             states_re = reset_state
-#             obs_re = self.get_obs(states_re)
-#             ag_idx_re = reset_state.ag_idx
-#         # Auto-reset environment based on termination.
-#         states = jax.tree.map(
-#             lambda x, y: jax.lax.select(dones["__all__"], x, y), states_re, states_st,
-#         )
-#         obs = jax.tree.map(
-#             lambda x, y: jax.lax.select(dones["__all__"], x, y), obs_re, obs_st
-#         )
-#         ag_idx = jax.tree.map(lambda x, y: jax.lax.select(dones["__all__"], x, y), ag_idx_re, state.ag_idx # get rid of this grimm_stuff
-#         )
-  
-#         avail_actions = self._env.get_avail_actions(state)
-#         load_agent_actions, load_agent_hstate = self.take_internal_action(
-#             key_action, obs, dones, avail_actions, state.hstate,
-#         )
-
-#         load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, load_agent_actions)
-
-#         states = LoadAgentState(
-#             _state=states,
-#             load_agent_actions=load_agent_actions,
-#             hstate=load_agent_hstate,
-#             ag_idx=ag_idx,
-#         )
-
-#         return obs, states, rewards, dones, infos
-    
-#     def get_uuid(self, agent_type, index):
-#         """
-#         Get the UUID for a specific agent index.
-#         This method is intended for use OUTSIDE of JAX-traced code.
-#         """
-#         if hasattr(index, 'item'):
-#             index = index.item()  # Convert JAX array to Python int
-        
-#         if agent_type in self.uuid_mapping:
-#             agent_mapping = self.uuid_mapping[agent_type]
-#             if index in agent_mapping:
-#                 return agent_mapping[index]
-        
-#         return "unknown"
-    
-#     def _ensure_scalar_idx(self, idx_array: chex.Array) -> chex.Array:
-#         """
-#         Ensures the index is a scalar (ndim=0).
-#         If it's an array, checks that all values are identical and returns the first value.
-        
-#         Args:
-#             idx_array: An array of indices
-            
-#         Returns:
-#             A scalar index value
-#         """
-#         # If already a scalar, return as is
-#         if idx_array.ndim == 0:
-#             return idx_array
-        
-#         # Check if all values are equal to the first element
-#         is_uniform = jnp.all(idx_array == idx_array[0])
-        
-#         # If array is uniform, return the first element, otherwise use a predefined value
-#         result = jax.lax.cond(
-#             is_uniform,
-#             lambda _: idx_array[0],  # Return first element if all are the same
-#             lambda _: jnp.array(-9999),  # Return 0 as fallback (you may want to customize this)
-#             operand=None
-#         )
-        
-#         return result
-    
-#     def _preprocess_current_idx(self, current_idx):
-#         """
-#         Preprocess current_idx to handle Python int and convert to proper dict format.
-#         """        
-#         # if single integer, use same value for all agent types
-#         if isinstance(current_idx, int):
-#             return {agent_type: jnp.array(current_idx) for agent_type in self.loaded_agents}
-        
-#         # If already a dict, convert any Python ints to JAX arrays
-#         processed = {}
-#         for agent_type, idx in current_idx.items():
-#             if isinstance(idx, int):
-#                 processed[agent_type] = jnp.array(idx)
-#             else:
-#                 processed[agent_type] = idx
-        
-#         return processed
-
-# # Helper functions for getting eval uuids later on
-
 def extract_uuids_from_eval_results(env_wrapper, eval_results):
     """
     Extract agent UUIDs from evaluation results.
@@ -1168,14 +831,18 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         load_agents_uuids: Dict[str, str | list[str]],
     ):
         """Loads agents from a zoo using ZooManager and groups them by algorithm."""
+        
         if isinstance(zoo, str):
             zoo = ZooManager(zoo_path=zoo)
 
         load_agents: Dict[str, Dict[str, LoadNetworkState]] = {}
+        
         for algorithm, agents_dict in load_agents_uuids.items():
             if algorithm not in load_agents:
                 load_agents[algorithm] = {}
+            
             for agent, agent_uuids in agents_dict.items():
+                
                 if isinstance(agent_uuids, str):
                     try:
                         zoo_state = zoo.load_agent(agent_uuids)
@@ -1382,7 +1049,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
     #     load_agent_actions = jax.tree.map(lambda i, a: a[i], current_idx, load_agent_actions)
         
         
-    #     breakpoint()
+    #     
     #     state = LoadAgentState(
     #         _state=state,
     #         load_agent_actions=load_agent_actions,

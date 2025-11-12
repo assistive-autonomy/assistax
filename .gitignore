@@ -44,4 +44,5 @@ config/
 **/config/
 **/config/**
 
-
+slurm/
+*/slurm/

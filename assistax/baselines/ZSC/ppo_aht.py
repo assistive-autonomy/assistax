@@ -114,7 +114,7 @@ def main(config):
         print(f"Total partners across all algorithms: {len(all_partners)}")
    
         # Do a single 50/50 split across all partners
-        train_partners = all_partners.sample(frac=0.5, random_state=42)  # Set random_state for reproducibility
+        train_partners = all_partners.sample(frac=config["SPLIT_RATIO"], random_state=42)  # Set random_state for reproducibility
         test_partners = all_partners.drop(train_partners.index)
 
         # Split back into algorithm-specific dictionaries

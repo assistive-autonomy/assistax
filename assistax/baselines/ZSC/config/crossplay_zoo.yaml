@@ -17,8 +17,8 @@ ENV_KWARGS:
 
 TOTAL_TIMESTEPS: 30e6
 NUM_STEPS: 256
-NUM_ENVS: 512
-NUM_SEEDS: 4
+NUM_ENVS: 1024 
+NUM_SEEDS: 2 
 SEED: 0
 NUM_EVAL_EPISODES: 8
 
@@ -28,20 +28,21 @@ crossplay:
   robot_algos: ["IPPO"]
   algo_configs:
     IPPO: 
-      main: "baselines/ZSC/config/ppo_aht.yaml"
-      network: "baselines/ZSC/config/network/ff_nps.yaml"
+      main: "assistax/baselines/ZSC/config/ppo_aht.yaml"
+      network: "assistax/baselines/ZSC/config/network/ff_nps.yaml"
     # MAPPO: 
     #   main: "MAPPO/config/mappo_mabrax_aht.yaml"
     #   network: "MAPPO/config/network/ff_nps.yaml"
     # MASAC: 
     #   main: "MASAC/config/masac_aht.yaml"
     #   network: "MASAC/config/network/ff_nps.yaml"
+ROBOT_START_IDX: 0 # maybe integrate with crossplay configs
+ROBOT_END_IDX: 68    
 
 
 PARTNER_ALGORITHMS: ["IPPO"]
 
-ZOO_PATH: path/to/zoo  # Path to the directory containing the agent zoo
-
+ZOO_PATH: /home/lhin/assistax/zoo 
 GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False
