@@ -53,3 +53,8 @@ config/
 
 slurm/
 */slurm/
+
+MUJOCO_LOG.TXT
+MUJOCO_LOG.txt
+
+*.safetensors
