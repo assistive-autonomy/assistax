@@ -36,7 +36,7 @@ GAE_LAMBDA: 0.95
 VF_COEF: 1.0
 MAX_GRAD_NORM: 0.5
 ADAM_EPS: 1e-8
-SPLIT_RATIO: 0.2 # The train/test split ration e.g. 0.2 means 20% train, 80% test
+SPLIT_RATIO: 0.2 # The train/test split ratio e.g. 0.2 means 20% train, 80% test
 
 # COMPUTE OPTIONS
 GPU_ENV_CAPACITY: 8192
