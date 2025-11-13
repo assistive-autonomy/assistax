@@ -647,16 +647,23 @@ def upload_html_visualizations_to_wandb(eval_env, episodes_dict, run):
     
     with tempfile.TemporaryDirectory() as temp_dir:
         # Generate HTML files in temporary directory
+        html_files = {}
         for name, episode_data in episodes_dict.items():
             file_path = os.path.join(temp_dir, f"final_{name}.html")
             html.save(file_path, eval_env.sys, episode_data)
+            html_files[name] = file_path
             print(f"  Generated final_{name}.html")
         
         # Create and upload artifact
         artifact = wandb.Artifact(f"visualizations_{run.name}", type="visualization")
         artifact.add_dir(temp_dir)
         run.log_artifact(artifact)
-    
+        for name, file_path in html_files.items():
+            with open(file_path, 'r') as f:
+                html_content = f.read()
+            # This makes it viewable in the wandb dashboard
+            wandb.log({f"visualization/{name}_episode": wandb.Html(html_content)})
+            print(f"  Logged {name} episode for interactive viewing")   
     print("HTML visualizations uploaded to wandb successfully!")
 
 def upload_model_parameters_to_wandb(all_train_states, final_train_state, config, env, run):
