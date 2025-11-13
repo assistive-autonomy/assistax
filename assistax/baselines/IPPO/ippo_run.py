@@ -244,6 +244,20 @@ def main(config):
         
         # Evaluate final model for visualization
         # TODO: limit to fewer evaluation episodes to make rendering more memory efficient
+        print("Freeing memory before rendering...")
+        del out
+        del evals  
+        del all_train_states
+        del split_trainstate
+        time.sleep(5)  # Wait a moment to ensure memory is freed
+        
+        # STEP 2: Python garbage collection
+        import gc
+        gc.collect()
+        
+        # STEP 3: Clear JAX's compilation cache and force memory release
+        jax.clear_caches()
+
         render_eval_env, render_run_eval = make_evaluation(config)
         render_config = config
         render_config["NUM_EVAL_EPISODES"] = 1 
@@ -266,8 +280,6 @@ def main(config):
         median_idx = episode_argsort.take(episode_argsort.shape[-1] // 2, axis=-1)
 
         # Extract episode data for visualization
-        from assistax.render import html
-        
         worst_episode = _take_episode(
             eval_final.env_state.env_state.pipeline_state, first_episode_done,
             time_idx=-1, eval_idx=worst_idx,
