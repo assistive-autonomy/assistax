@@ -675,6 +675,8 @@ class LoadAgentWrapper(JaxMARLWrapper):
         
         ag_idx = self.reset_agent_index(key_ag_idx)
         load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, load_agent_actions)
+        
+        jax.debug.print("Agent Indexes on Reset: {ag_idx}", ag_idx=ag_idx)
   
         state = LoadAgentState(
             _state=state,
@@ -697,10 +699,13 @@ class LoadAgentWrapper(JaxMARLWrapper):
 
         # read in the loaded agent actions from the state
         actions = {**state.load_agent_actions, **actions}
+        breakpoint()
+        jax.debug.print("actions taken: {actions}", actions=actions)
 
         obs_st, states_st, rewards, dones, infos = self._env.step_env(
             key_step, state._state, actions
         )
+        
         if reset_state is None:
             obs_re, states_re = self._env.reset(key_reset)
             ag_idx_re = self.reset_agent_index(key_ag_idx)
@@ -708,6 +713,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
             states_re = reset_state
             obs_re = self.get_obs(states_re)
             ag_idx_re = reset_state.ag_idx
+
         # Auto-reset environment based on termination
         states = jax.tree.map(
             lambda x, y: jax.lax.select(dones["__all__"], x, y), states_re, states_st,
@@ -721,11 +727,13 @@ class LoadAgentWrapper(JaxMARLWrapper):
 
         # Take the next action with the loaded agents
         avail_actions = self._env.get_avail_actions(state)
+        
         load_agent_actions, load_agent_hstate = self.take_internal_action(
             key_action, obs, dones, avail_actions, state.hstate,
         )
 
         load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, load_agent_actions)
+        
         states = LoadAgentState(
             _state=states,
             load_agent_actions=load_agent_actions,
@@ -1027,37 +1035,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
                 ag_index[agent_type] = (current_idx[agent_type]) + 1 % self.total_pop_size
             
         return ag_index
-        
-    # def reset(self, key: chex.PRNGKey, current_idx: Optional[int]) -> Tuple[Dict[str, chex.Array], LoadAgentState]:
-    #     """
-    #     Reset the environment and initialize the loaded agent state.
-        
-    #     Instead of randomly selecting a loaded agent, we initialize the agent index to 0.
-    #     """
-    #     key_env, key_hstate, key_action = jax.random.split(key, 3)
-    #     obs, state = self._env.reset(key_env)
-    #     dones = {agent: False for agent in self.loaded_agents}
-    #     avail_actions = self._env.get_avail_actions(state)
-    #     hstate = self.reset_internal_hstates(key_hstate)
-
-    #     load_agent_actions, hstate = self.take_internal_action(
-    #         key_action, obs, dones, avail_actions, hstate
-    #     )
-    #     # Initialize indices deterministically (starting at 0).
-    #     current_idx = self.reset_agent_index(current_idx)
-    #      # change this to be an input of the reset function. I will then need to iterate through this in run eval functions of each algorithm
-    #     load_agent_actions = jax.tree.map(lambda i, a: a[i], current_idx, load_agent_actions)
-        
-        
-    #     
-    #     state = LoadAgentState(
-    #         _state=state,
-    #         load_agent_actions=load_agent_actions,
-    #         hstate=hstate,
-    #         ag_idx=current_idx,
-    #     )
-    #     return obs, state
-
+    
     def reset(self, key: chex.PRNGKey, current_idx: Optional[Dict[str, chex.Array]]) -> Tuple[Dict[str, chex.Array], LoadAgentState]:
         """
         Reset the environment and initialize the loaded agent state.
@@ -1108,7 +1086,6 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
             key_step, state._state, actions
         )
         # Store agent indices in info - this is JAX-compatible
-        # infos = {**infos, "agent_indices": jnp.tile(state.ag_idx['human'], 2)} #TODO: avoid hardcoding 'human'
 
         if reset_state is None:
             obs_re, states_re = self._env.reset(key_reset) # TODO: Below is very hacky either get rid entirely or 

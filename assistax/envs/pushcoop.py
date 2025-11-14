@@ -251,28 +251,15 @@ class PushCoop(PipelineEnv):
             robo2_obs["other_agent_ee_pos"],
         ))
         
-        # Get distances
-        dist1 = -robo1_obs["robot1_ee_dist"]
-        
-        dist2 = -robo2_obs["robot2_ee_dist"]
-        
+        # T dist to target       
         dist_target = -self._get_dist_target(pipeline_state, state.info)
         
         # Calculate rewards
         target_dist_reward = jp.exp(-dist_target**2 / self._t_dist_scale)
         
         # Phase determination: Check if T-object is near middle of table
-        t_pos = pipeline_state.geom_xpos[self.t_shape_geom_idx] # x, y position TODO I cuuld condsider finding a better center measurement. 
-        staging_pos = pipeline_state.site_xpos[self.staging_area_site_idx]
+        in_drag_phase, dist_to_middle, phase_threshold = self._determine_phase(pipeline_state)
         
-        middle_pos = pipeline_state.geom_xpos[self.table_geom_idx] # Middle of table
-        dist_to_middle = jp.linalg.norm(t_pos[:2] - middle_pos[:2])
-        
-        # Phase 1: T-object not yet at middle (pushing phase)
-        # Phase 2: T-object at middle (dragging phase)
-        phase_threshold = 0.01  # meters - adjust based on your needs
-        in_drag_phase = dist_to_middle < phase_threshold
-
         drag_phase_locked = state.info.get("drag_phase", 0.0)
 
         drag_phase_locked = jp.logical_or(drag_phase_locked, in_drag_phase).astype(jp.float32)
@@ -282,115 +269,49 @@ class PushCoop(PipelineEnv):
         phase_weight = jax.nn.sigmoid((dist_to_middle - phase_threshold) / 0.05)
         phase_weight = (1.0 - drag_phase_locked) * phase_weight  # Lock into drag phase once entered
 
-
         # Terminal conditions
         t_at_target = self._get_dist_target(pipeline_state, state.info) < 0.1
         t_fell = self._get_t_floor_contact(pipeline_state)
         t_at_target_reward = t_at_target * 100.0
         failed_reward = t_fell * -10.0
-
-        # robot 1 reward
-        
-        robot1_ee_pos = robo1_obs["pusher_pos"]
-        robot1_dist_to_staging = jp.linalg.norm(robot1_ee_pos - staging_pos)
-        robot1_staging_reward = jp.exp(-robot1_dist_to_staging**2 / self._ee_dist_scale)
-        # Robot 2: Different rewards based on phase
-
-        dist1_reward = jp.exp(-dist1**2 / self._ee_dist_scale)
-        # Robot 1: Always tries to push T toward middle/target
-        robo1_push_reward = (
-            self._dist_reward_weight * target_dist_reward +
-            self._t_dist_weight * dist1_reward +
-            self._ctrl_cost * ctrl_cost +
-            failed_reward +
-            t_at_target_reward
-        )
-        
-        robo1_drag_reward = (
-            # self._dist_reward_weight * target_dist_reward +
-            self._t_dist_weight * robot1_staging_reward +
-            self._ctrl_cost * ctrl_cost +
-            failed_reward +
-            t_at_target_reward
-           
-        )
-        
+       
+        # If T falls or reaches target, episode ends
         done = jp.logical_or(t_at_target, t_fell).astype(jp.float32)
         
-        # PHASE-BASED REWARD STRUCTURE
-        # Robot 1: Always tries to push T toward middle/target
-        robo1_push_reward = (
-            self._dist_reward_weight * target_dist_reward +
-            self._t_dist_weight * dist1_reward +
-            self._ctrl_cost * ctrl_cost +
-            failed_reward +
-            t_at_target_reward
-        )
-        
-        dist_to_staging_robo1 = jp.linalg.norm(robo1_obs["pusher_pos"] - staging_pos)
-        robot1_staging_dist_reward = jp.exp(-dist_to_staging_robo1**2 / self._ee_dist_scale)
-        
-        robo1_drag_reward = (
-            # self._dist_reward_weight * target_dist_reward +
-            self._t_dist_weight * robot1_staging_dist_reward +
-            self._ctrl_cost * ctrl_cost +
-            failed_reward +
-            t_at_target_reward
-           
-        )
-        
-        # Robot 2 staging position reward (only in push phase)
-        robot2_ee_pos = robo2_obs["pusher_pos"] 
-        robot2_dist_to_staging = jp.linalg.norm(robot2_ee_pos - staging_pos)
-        robot2_staging_reward = jp.exp(-robot2_dist_to_staging**2 / self._ee_dist_scale)
-
-        # Robot 2: Different rewards based on phase
-        dist2_reward = jp.exp(-dist2**2 / self._ee_dist_scale)
-       
-        # Phase 1 (pushing): Stay at staging position, don't interfere
-        robo2_push_reward = (
-            robot2_staging_reward +  # Strong incentive to stay at staging
-            self._ctrl_cost * ctrl_cost +
-            failed_reward
-        )
-        
-        # Phase 2 (dragging): Get close to T and drag to goal
-        robo2_drag_reward = (
-            self._dist_reward_weight * target_dist_reward +
-            self._t_dist_weight * dist2_reward +
-            self._ctrl_cost * ctrl_cost +
-            failed_reward +
-            t_at_target_reward
-        )
-
-        # Smooth transition between phases using sigmoid
         # This prevents abrupt reward changes
         phase_weight = jax.nn.sigmoid((dist_to_middle - phase_threshold) / 0.01)
         phase_weight = (1.0 - drag_phase_locked) * phase_weight  # Lock into drag phase once entered
         
-        reward_robo1 = phase_weight * robo1_push_reward + (1 - phase_weight) * robo1_drag_reward 
-
-        reward_robo2 = phase_weight * robo2_push_reward + (1 - phase_weight) * robo2_drag_reward
+        reward_robo1, robo1_reward_info = self._robot1_reward(phase_weight, robo1_obs, failed_reward, 
+                                                              t_at_target_reward, target_dist_reward, 
+                                                              ctrl_cost, pipeline_state)
+        reward_robo2, robo2_reward_info = self._robot2_reward(phase_weight, robo2_obs, failed_reward,
+                                                              t_at_target_reward, target_dist_reward, 
+                                                              ctrl_cost, pipeline_state)
 
         reward = jp.array([reward_robo1, reward_robo2])
         
         # Optional: Add phase info to state for debugging
-        state.info["drag_phase_locked"] = drag_phase_locked
+
+        u_info = {
+            "target_pos": state.info["target_pos"],
+            "drag_phase_locked": drag_phase_locked,
+        }
 
         state.metrics.update(
-            robo1_reward_dist = dist1_reward,
-            robo2_reward_dist = dist2_reward,
-            robo1_reward_ctrl = ctrl_cost,
-            robo2_reward_ctrl = ctrl_cost,
+            robo1_reward_dist = robo1_reward_info["dist_reward"],
+            robo2_reward_dist = robo2_reward_info["dist_reward"],
+            robo1_reward_ctrl = robo1_reward_info["reward_ctrl"],
+            robo2_reward_ctrl = robo2_reward_info["reward_ctrl"],
             reward_t_to_goal = target_dist_reward,
-            robot1_staging_reward = robot1_staging_reward,
-            robot2_staging_reward = robot2_staging_reward,
+            robot1_staging_reward = robo1_reward_info["staging_reward"],
+            robot2_staging_reward = robo2_reward_info["staging_reward"],
             drag_phase_locked = drag_phase_locked,
             phase_weight = phase_weight,
-            robo1_push_reward = robo1_push_reward,
-            robo1_drag_reward = robo1_drag_reward,
-            robo2_push_reward = robo2_push_reward,
-            robo2_drag_reward = robo2_drag_reward,
+            robo1_push_reward = robo1_reward_info["push_reward"],
+            robo1_drag_reward = robo1_reward_info["drag_reward"],
+            robo2_push_reward = robo2_reward_info["push_reward"],
+            robo2_drag_reward = robo2_reward_info["drag_reward"],
         )
         
         return state.replace(
@@ -398,6 +319,7 @@ class PushCoop(PipelineEnv):
             obs=obs,
             reward=reward,
             done=done,
+            info = state.info | u_info,
         )
     
     #def step(self, rng: jax.Array, state: State, action: jax.Array) -> State:
@@ -668,7 +590,7 @@ class PushCoop(PipelineEnv):
         
         return force_components
     
-    def _get_t_obstacle_contact(self, pipeline_state: base.State) -> jax.Array:
+    def _get_t_obstacle_contact(self, pipeline_state: base.State) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
         """Get the contact between the T shape and the obstacles."""
         obs1_forces = []
         obs2_forces = []
@@ -699,6 +621,86 @@ class PushCoop(PipelineEnv):
         obs5_forces = obs5_forces[:3]
 
         return obs1_forces, obs2_forces, obs4_forces, obs5_forces
+
+    def _determine_phase(self, pipeline_state: base.State) -> Tuple[jax.Array, jax.Array, jax.Array]:
+        
+        t_pos = pipeline_state.geom_xpos[self.t_shape_geom_idx] # x, y position TODO I cuuld condsider finding a better center measurement. 
+        staging_pos = pipeline_state.site_xpos[self.staging_area_site_idx]
+        
+        middle_pos = pipeline_state.geom_xpos[self.table_geom_idx] # Middle of table
+        dist_to_middle = jp.linalg.norm(t_pos[:2] - middle_pos[:2])
+        
+        # Phase 1: T-object not yet at middle (pushing phase)
+        # Phase 2: T-object at middle (dragging phase)
+        phase_threshold = 0.05  # meters - adjust based on your needs
+        in_drag_phase = dist_to_middle < phase_threshold
+
+        return in_drag_phase, dist_to_middle, phase_threshold
+    
+
+    def _robot1_reward(self, phase_weight, 
+                       robo1_obs, 
+                       failed_reward, 
+                       t_at_target_reward, 
+                       target_dist_reward, 
+                       ctrl_cost, 
+                       pipeline_state: base.State) -> Tuple[jax.Array, dict]:
+        
+        robo1_ee_pos = robo1_obs["pusher_pos"]
+        staging_pos = pipeline_state.site_xpos[self.staging_area_site_idx]
+        robot1_dist_to_staging = jp.linalg.norm(robo1_ee_pos - staging_pos)
+        robot1_staging_dist_reward = jp.exp(-robot1_dist_to_staging**2 / self._ee_dist_scale)
+
+        dist1 = - robo1_obs["robot1_ee_dist"]
+        dist1_reward = jp.exp(-dist1**2 / self._ee_dist_scale) #TODO double check this
+
+        reward_robo1_push = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist1_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward # took out this component 1.0 * robo1_contact 
+        reward_robo1_drag = self._t_dist_weight * robot1_staging_dist_reward + self._ctrl_cost * ctrl_cost + self._dist_reward_weight * target_dist_reward
+
+        reward_robo1 = phase_weight * reward_robo1_push + (1 - phase_weight) * 2.0 * reward_robo1_drag # We need to weigh this to actually encourage the robot to give up pushing.
+        reward_info = {
+            "dist_reward": dist1_reward,
+            "reward_ctrl": ctrl_cost,
+            "staging_reward": robot1_staging_dist_reward,
+            "push_reward": reward_robo1_push,
+            "drag_reward": reward_robo1_drag,
+        }
+        
+        
+        return reward_robo1, reward_info
+
+    def _robot2_reward(self, phase_weight, 
+                       robo2_obs, 
+                       failed_reward, 
+                       t_at_target_reward, 
+                       target_dist_reward, 
+                       ctrl_cost, 
+                       pipeline_state: base.State) -> Tuple[jax.Array, dict]:
+        
+        robo2_ee_pos = robo2_obs["pusher_pos"]
+        staging_pos = pipeline_state.site_xpos[self.staging_area_site_idx]
+        robot2_dist_to_staging = jp.linalg.norm(robo2_ee_pos - staging_pos)
+        robot2_staging_reward = jp.exp(-robot2_dist_to_staging**2 / self._ee_dist_scale)
+
+        dist2 = - robo2_obs["robot2_ee_dist"]
+        dist2_reward = jp.exp(-dist2**2 / self._ee_dist_scale) #TODO double check this
+
+        reward_robo2_push = robot2_staging_reward + self._ctrl_cost * ctrl_cost + failed_reward # TODO Should we include target distance here?
+        reward_robo2_drag = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist2_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward
+
+        reward_robo2 = phase_weight * reward_robo2_push + (1 - phase_weight) * reward_robo2_drag
+        
+        reward_info = {
+            "dist_reward": dist2_reward,
+            "reward_ctrl": ctrl_cost,
+            "staging_reward": robot2_staging_reward,
+            "push_reward": reward_robo2_push,
+            "drag_reward": reward_robo2_drag,
+        }
+    
+        return reward_robo2, reward_info
+    
+
 
 
     

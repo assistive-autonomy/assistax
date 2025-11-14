@@ -82,7 +82,7 @@ def main(config):
             print("Using: Recurrent Networks with Parameter Sharing")
 
     # ===== TRAINING SETUP =====
-    rng = jax.random.PRNGKey(config["SEED"])
+    rng = jax.random.key(config["SEED"])
     train_rng, eval_rng = jax.random.split(rng)
     train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
     
@@ -256,7 +256,7 @@ def main(config):
         )
         
         # Evaluate against test partners (unseen during training - zero-shot generalization)
-        print("Evaluating against test partners (zero-shot generalization)...")
+        print("Evaluating against test partners (zero-shot coordination)...")
         evals_test = _concat_tree([
             eval_test_vmap(eval_rng, ts, eval_log_config)
             for ts in tqdm(split_trainstate, desc="Test partner evaluation")

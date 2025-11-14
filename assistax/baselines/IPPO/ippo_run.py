@@ -111,7 +111,8 @@ def main(config):
         save_code=True,
     )
     # ===== TRAINING SETUP =====
-    rng = jax.random.PRNGKey(config["SEED"])
+    #rng = jax.random.PRNGKey(config["SEED"])
+    rng = jax.random.key(config["SEED"]) # TODO update to new jax API
     train_rng, eval_rng = jax.random.split(rng)
     train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
     
