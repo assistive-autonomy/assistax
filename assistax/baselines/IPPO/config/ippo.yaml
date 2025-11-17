@@ -9,7 +9,7 @@ ENV_KWARGS:
   homogenisation_method: max
   backend: mjx
   het_reward: False # TODO Has to be true for pushcoop otherwise false, but would be better to set this automatically based on the env. 
-  episode_length: 2000
+  episode_length: 1000
 #  disability:
 #    joint_idx: 13
 #    joint_restriction_factor: 1.0

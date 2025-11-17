@@ -676,7 +676,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
         ag_idx = self.reset_agent_index(key_ag_idx)
         load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, load_agent_actions)
         
-        jax.debug.print("Agent Indexes on Reset: {ag_idx}", ag_idx=ag_idx)
+        #jax.debug.print("Agent Indexes on Reset: {ag_idx}", ag_idx=ag_idx)
   
         state = LoadAgentState(
             _state=state,
@@ -699,8 +699,8 @@ class LoadAgentWrapper(JaxMARLWrapper):
 
         # read in the loaded agent actions from the state
         actions = {**state.load_agent_actions, **actions}
-        breakpoint()
-        jax.debug.print("actions taken: {actions}", actions=actions)
+       # breakpoint()
+       # jax.debug.print("actions taken: {actions}", actions=actions)
 
         obs_st, states_st, rewards, dones, infos = self._env.step_env(
             key_step, state._state, actions

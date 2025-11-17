@@ -89,6 +89,7 @@ dependencies = [
     "mujoco>=3.3.7",
     "mujoco-mjx>=3.3.7",
     "flashbax>=0.1.3",
+    "notebook>=7.4.7",
 ]
 
 [project.optional-dependencies]
