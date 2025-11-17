@@ -94,10 +94,6 @@ class BedBathing(PipelineEnv):
         self.human_uarm_size = mjmodel.geom_size[self.human_tuarm_geom]
         self.human_larm_size = mjmodel.geom_size[self.human_tlarm_geom]
         
-        # self.contact_force = jax.vmap(contact_force, in_axes=(None, 0, None, None))
-
-        # self.TARGET_CONTACT_ID = 294
-        
         # TODO: Update these indexes once XML is updated or write some sort of helper function to get these
         self.UARM_TOOL_CONTACT_ID = 58
     
@@ -120,9 +116,7 @@ class BedBathing(PipelineEnv):
         self._wiping_reward_weight = wiping_reward_weight
         self._dist_scale = dist_scale
         self._reset_noise_scale = reset_noise_scale
-        # self.actuator_classes = self._get_actuator_classes(self.path)
-        # self.humanoid_actuators, self.panda_actuators = self._identify_actuators(self.actuator_classes)
-
+        
         # BedBathing specific indices
         self.target_threshold = target_threshold
         self.n_targets = n_targets
@@ -185,7 +179,14 @@ class BedBathing(PipelineEnv):
             "distances": jp.zeros(self.n_targets),
             "contacts_info": jp.zeros(self.n_targets)
         }
-        info = {"contact_vector": contact_vector}
+
+        info = {"contact_vector": contact_vector,
+                "ee_speed": 0.0,
+                "ee_force": 0.0,
+                "action_magnitude": 0.0,
+                }
+
+
         return State(pipeline_state, obs, reward, done, metrics, info)
     
     def get_targets(self, pipeline_state, contact_vector):
@@ -254,7 +255,15 @@ class BedBathing(PipelineEnv):
         distances = self._mask_contacts(distances_all, old_contact_vector)
         new_contact_vector = self._update_contact_vector(distances, old_contact_vector, self.target_threshold, human_obs["force_on_human"])
         
-        contact_info = {"contact_vector": new_contact_vector}
+        ee_velocity =  (
+            pipeline_state.site_xpos[self.panda_wiper_center_idx] - pipeline_state0.site_xpos[self.panda_wiper_center_idx]
+        ) / self.dt
+        
+        new_info = {"contact_vector": new_contact_vector,
+                    "ee_speed": jp.linalg.norm(ee_velocity),
+                    "ee_force": jp.linalg.norm(human_obs["force_on_human"]),
+                    "action_magnitude": jp.linalg.norm(action),
+                    }
 
         closest_distance = jp.min(distances)
         r_dist = jp.exp(-closest_distance**2/self._dist_scale)
@@ -281,17 +290,16 @@ class BedBathing(PipelineEnv):
             obs=obs,
             reward=reward,
             done=done,
-            info=state.info | contact_info,
+            info=state.info | new_info,
         )
         # return (robo_obs, human_obs)
 
-    def _get_robo_obs(self, pipeline_state: base.State) -> jax.Array:
+    def _get_robo_obs(self, pipeline_state: base.State) -> Dict[str, jax.Array]:
         """Returns the environment observations."""
 
         tool_position = pipeline_state.site_xpos[self.panda_wiper_center_idx]
         tool_orientation = pipeline_state.xquat[self.panda_wiper_body_idx]
         
-        # TODO: adjust this so the ._get_force_on_tool takes 3 args
         force_on_tool = self._get_force_on_tool(pipeline_state, self.UARM_TOOL_CONTACT_ID, self.LARM_TOOL_CONTACT_ID)
         robo_joint_angles = pipeline_state.qpos[self.panda_joint_id_start:self.panda_joint_id_end]
 
@@ -299,16 +307,11 @@ class BedBathing(PipelineEnv):
         human_larm_pos = pipeline_state.xpos[self.human_tlarm_idx]
 
         return {
-            # "position": position,
-            # "velocity": velocity,
             "tool_position": tool_position,
             "tool_orientation": tool_orientation,
-            # "distance_to_target": distance_to_target,
-            # "target_pos": target_pos,
             "human_uarm_pos": human_uarm_pos,
             "human_larm_pos": human_larm_pos,
             "force_on_tool": force_on_tool,
-            # "force_on_human": force_on_,
             "robo_joint_angles": robo_joint_angles  
         }
        
@@ -324,21 +327,16 @@ class BedBathing(PipelineEnv):
         human_larm_pos = pipeline_state.xpos[self.human_tlarm_idx]
 
         force_on_human = self._get_force_on_tool(pipeline_state, self.UARM_TOOL_CONTACT_ID, self.LARM_TOOL_CONTACT_ID)
+
         return {
-            # "position": position,
-            # "velocity": velocity,
             "tool_position": tool_position,
             "tool_orientation": tool_orientation,
-            # "distance_to_target": distance_to_target,
             "tool_orientation": tool_orientation,
-            # "target_pos": target_pos,
             "human_uarm_pos": human_uarm_pos,
             "human_larm_pos": human_larm_pos,
             "force_on_human": force_on_human,
-            # "force_on_target": force_on_target,
             "human_joint_angles": human_joint_angles
         }
-        #return jp.concatenate((position, velocity, distance_to_target, tool_orientation, target_pos, human_uarm_pos, human_larm_pos))
     
 
     def _get_geom_pos(self, pipeline_state: base.State, geom_id: int) -> jax.Array:
@@ -389,7 +387,6 @@ class BedBathing(PipelineEnv):
     
     def _map_cylinder_points_to_global(self, points: jax.Array, rotation_matrix: jax.Array, global_position: jax.Array) -> jax.Array:
         # Rotate the cylinder points using the rotation matrix
-        # TODO: check rotation matrix shape and see if we need .T
         rotated_points = jp.dot(points, rotation_matrix.T)
         # Translate the rotated points to their global position
         global_points = rotated_points + global_position

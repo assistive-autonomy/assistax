@@ -315,13 +315,21 @@ class PreferenceRewardWrapper(Wrapper):
                 'cumulative_touches': 0.0,
                 'last_contact_force': 0.0,
             },
-            preference_metrics={
-                'speed_pref_reward': 0.0,
-                'force_pref_reward': 0.0,
-                'action_eff_reward': 0.0,
-                'touch_penalty_reward': 0.0,
-                'total_pref_reward': 0.0,
-            }
+            #preference_metrics={
+            #    'speed_pref_reward': 0.0,
+            #    'force_pref_reward': 0.0,
+            #    'action_eff_reward': 0.0,
+            #    'touch_penalty_reward': 0.0,
+            #    'total_pref_reward': 0.0,
+            #}
+        )
+
+        state.metrics.update(
+            speed_pref_reward = jp.array(0.0),
+            force_pref_reward = jp.array(0.0),
+            action_eff_reward = jp.array(0.0),
+            touch_penalty_reward = jp.array(0.0),
+            total_pref_reward = jp.array(0.0),
         )
         return state
     
@@ -351,11 +359,13 @@ class PreferenceRewardWrapper(Wrapper):
             total_pref_reward=total_preference_reward
         )
 
+        # TODO: add tracking to metrics so we can the influence of preference_rewards
 
         next_state.info.update(
             preference_tracking=updated_tracking,
-            preference_metrics=preference_rewards,
         )
+
+        next_state.metrics.update(preference_rewards)
 
         return next_state.replace(reward=augmented_reward)
     
@@ -424,7 +434,6 @@ class PreferenceRewardWrapper(Wrapper):
         current_contact_force = jp.linalg.norm(contact_forces)
         prev_contact_force = prev_tracking.get('last_contact_force', 0.0)
         
-        # Return 1.0 for new touch, 0.0 otherwise 
-        # Note: penalty weight should be negative to make this a penalty
         new_touch = (prev_contact_force < self.touch_threshold) & (current_contact_force >= self.touch_threshold)
+
         return jp.where(new_touch, 1.0, 0.0)
