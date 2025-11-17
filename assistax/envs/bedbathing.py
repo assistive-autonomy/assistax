@@ -141,33 +141,21 @@ class BedBathing(PipelineEnv):
 
         pipeline_state = self.pipeline_init(qpos, qvel)
 
-        # uarm_contact_id = contact_id(pipeline_state, self.human_tuarm_idx, self.panda_wiper_idx)
-        # larm_contact_id = contact_id(pipeline_state, self.human_tlarm_idx, self.panda_wiper_idx)
-
-        # self.LARM_TOOL_CONTACT_ID = jp.int32(larm_contact_id)
-        # self.UARM_TOOL_CONTACT_ID = jp.int32(uarm_contact_id)
-
         robo_obs = self._get_robo_obs(pipeline_state)
         human_obs = self._get_human_obs(pipeline_state)
         #obs = jp.concatenate((robo_obs, human_obs))
         obs = jp.concatenate((
             robo_obs["tool_position"],
             robo_obs["tool_orientation"],
-            # robo_obs["distance_to_target"].reshape((1,)),
-            # robo_obs["target_pos"],
             robo_obs["human_uarm_pos"],
             robo_obs["human_larm_pos"],
             robo_obs["force_on_tool"].reshape((6,)),
-            # robo_obs["force_on_target"].reshape((6,)),
             robo_obs["robo_joint_angles"],
             human_obs["tool_position"],
             human_obs["tool_orientation"],
-            # human_obs["distance_to_target"].reshape((1,)),
-            # human_obs["target_pos"],
             human_obs["human_uarm_pos"],
             human_obs["human_larm_pos"],
             human_obs["force_on_human"].reshape((6,)),
-            # human_obs["force_on_target"].reshape((6,)),
             human_obs["human_joint_angles"],           
         ))
         reward, done, zero = jp.zeros(3)
@@ -198,11 +186,6 @@ class BedBathing(PipelineEnv):
         distances_all = self._target_distances(global_targets, pipeline_state.site_xpos[self.panda_wiper_center_idx])
         distances = self._mask_contacts(distances_all, contact_vector)
 
-        # get 3d distances
-        # panda_wiper = pipeline_state.site_xpos[self.panda_wiper_center_idx]
-        # all_distances = panda_wiper - global_targets
-        # all_distances_euclidean = jp.linalg.norm(all_distances)
-
         # mask distances and get closest target
         # masked_distances_euclidean = jp.where(contact_vector == 0, jp.inf, all_distances_euclidean)
         closest_distance_idx = jp.argmin(distances)
@@ -215,13 +198,6 @@ class BedBathing(PipelineEnv):
         assert pipeline_state0 is not None
         pipeline_state = self.pipeline_step(pipeline_state0, action)
         
-        # global_targets_uarm = self._map_cylinder_points_to_global(self.wiping_targets_uarm, pipeline_state.xmat[self.human_tuarm_idx], pipeline_state.xpos[self.human_tuarm_idx])
-        # global_targets_larm = self._map_cylinder_points_to_global(self.wiping_targets_larm, pipeline_state.xmat[self.human_tlarm_idx], pipeline_state.xpos[self.human_tlarm_idx])
-
-        # global_targets = jp.vstack((global_targets_uarm, global_targets_larm))
-        # distances_all = self._target_distances(global_targets, pipeline_state.site_xpos[self.panda_wiper_center_idx])
-        # distances = self._mask_contacts(distances_all, self.contact_vector)
-
         ctrl_cost = -jp.sum(jp.square(action))
         robo_obs = self._get_robo_obs(pipeline_state)
         human_obs = self._get_human_obs(pipeline_state)
@@ -230,15 +206,12 @@ class BedBathing(PipelineEnv):
         obs = jp.concatenate((
             robo_obs["tool_position"],
             robo_obs["tool_orientation"],
-            # robo_obs["distance_to_target"].reshape((1,)),
-            # robo_obs["target_pos"],
             robo_obs["human_uarm_pos"],
             robo_obs["human_larm_pos"],
             robo_obs["force_on_tool"].reshape((6,)),
             robo_obs["robo_joint_angles"],
             human_obs["tool_position"],
             human_obs["tool_orientation"],
-            # human_obs["distance_to_target"].reshape((1,)),
             human_obs["human_uarm_pos"],
             human_obs["human_larm_pos"],
             human_obs["force_on_human"].reshape((6,)),
@@ -292,7 +265,6 @@ class BedBathing(PipelineEnv):
             done=done,
             info=state.info | new_info,
         )
-        # return (robo_obs, human_obs)
 
     def _get_robo_obs(self, pipeline_state: base.State) -> Dict[str, jax.Array]:
         """Returns the environment observations."""
