@@ -80,6 +80,22 @@ This will generate a sweep for the specified IPPO variant for the scratchitch ta
 
 The pre-trained partner policies `zoo` can be downloaded on [Hugging Face](https://huggingface.co/datasets/leohink/assistax-zoo/). Downlaod the `zoo.tar.gz` file and change the `ZOO_PATH` config in `assistax/baselines/ZSC/config/ppo_aht.yaml` to train a 50-50 split agains a pre-trained population of "human" agents. 
 
+## 💡 Running Experiments **Tip**
+
+When running experiments the hydra config automatically creates an EXP ID based on the time but if you are using multiruns it maybe nice to have the same EXP_ID for all experiments that are launched with the multirun. To achieve this simply set the `EXP_ID` as an environment variable e.g., run:
+
+```bash
+EXP_ID=$(date +%Y-%m-%d_%H-%M-%S) python ippo_run.py -m SEED=0,1,2,3,4
+```
+
+or if you are using slurm or another launch script add the following:
+
+```bash
+export EXP_ID=$(date +%Y-%m-%d_%H-%M-%S)
+```
+
+
+
 ## 🥱 Other information
 
 - We use Hydra for managing configuration and training runs. For more information, see the [Hydra docs](https://hydra.cc/docs/intro/).
