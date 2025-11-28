@@ -31,10 +31,10 @@ class BedBathing(PipelineEnv):
 
     def __init__(
         self,
-        ctrl_cost_weight: float = 1e-6,
-        dist_reward_weight: float = 0.1,
+        ctrl_cost_weight: float = 0,
+        dist_reward_weight: float = 1.0,
         dist_scale: float = 0.1,
-        wiping_reward_weight: float = 1.0,
+        wiping_reward_weight: float = 2.0,
         reset_noise_scale=5e-3,
         backend="mjx",
         n_targets: int = 52,
@@ -95,9 +95,11 @@ class BedBathing(PipelineEnv):
         self.human_larm_size = mjmodel.geom_size[self.human_tlarm_geom]
         
         # TODO: Update these indexes once XML is updated or write some sort of helper function to get these
-        self.UARM_TOOL_CONTACT_ID = 58
+        self.UARM_TOOL_CONTACT_ID1 = 58
+        self.UARM_TOOL_CONTACT_ID2 = 59
     
-        self.LARM_TOOL_CONTACT_ID = 62
+        self.LARM_TOOL_CONTACT_ID1 = 62
+        self.LARM_TOOL_CONTACT_ID2 = 63
 
         # TODO: Double check these or write a helper function to find these
         self.panda_joint_id_start = 18
@@ -237,22 +239,24 @@ class BedBathing(PipelineEnv):
                     "ee_force": jp.linalg.norm(human_obs["force_on_human"]),
                     "action_magnitude": jp.linalg.norm(action),
                     }
-
         closest_distance = jp.min(distances)
         r_dist = jp.exp(-closest_distance**2/self._dist_scale)
-
         n_contacts = jp.count_nonzero(new_contact_vector==0)
         n_old_contacts = jp.count_nonzero(old_contact_vector==0)
         new_contacts = (n_contacts - n_old_contacts).astype(jp.float32)
+        #jax.debug.print("New contacts: {nc}, Closest distance: {cd}", nc=new_contacts, cd=closest_distance)
+        ## jax.debug.print("Contact vector: {cv}", cv=new_contact_vector)
+        #jax.debug.print("Distances: {d}, All Distances {ad}", d=distances, ad=distances_all)
+        #jax.debug.print("Reward Distance: {rd}, Control Cost: {cc}, Wiping Reward: {wr}", rd=r_dist, cc=ctrl_cost, wr=new_contacts)
 
         reward = self._dist_reward_weight*r_dist + self._ctrl_cost_weight*ctrl_cost + self._wiping_reward_weight*new_contacts
         
         done = jp.all(new_contact_vector == 0.0).astype(jp.float32)
         
         state.metrics.update(
-            reward_dist = r_dist,
-            reward_ctrl = ctrl_cost,
-            reward_wiping = new_contacts,
+            reward_dist = self._dist_reward_weight*r_dist,
+            reward_ctrl = self._ctrl_cost_weight*ctrl_cost,
+            reward_wiping = self._wiping_reward_weight*new_contacts,
             contact_vector = new_contact_vector,
             distances = distances,
             contacts_info = state.info["contact_vector"]
@@ -272,7 +276,7 @@ class BedBathing(PipelineEnv):
         tool_position = pipeline_state.site_xpos[self.panda_wiper_center_idx]
         tool_orientation = pipeline_state.xquat[self.panda_wiper_body_idx]
         
-        force_on_tool = self._get_force_on_tool(pipeline_state, self.UARM_TOOL_CONTACT_ID, self.LARM_TOOL_CONTACT_ID)
+        force_on_tool = self._get_force_on_tool(pipeline_state, self.UARM_TOOL_CONTACT_ID1, self.UARM_TOOL_CONTACT_ID2, self.LARM_TOOL_CONTACT_ID1, self.LARM_TOOL_CONTACT_ID2)
         robo_joint_angles = pipeline_state.qpos[self.panda_joint_id_start:self.panda_joint_id_end]
 
         human_uarm_pos = pipeline_state.xpos[self.human_tuarm_idx]
@@ -298,7 +302,7 @@ class BedBathing(PipelineEnv):
         human_uarm_pos = pipeline_state.xpos[self.human_tuarm_idx]
         human_larm_pos = pipeline_state.xpos[self.human_tlarm_idx]
 
-        force_on_human = self._get_force_on_tool(pipeline_state, self.UARM_TOOL_CONTACT_ID, self.LARM_TOOL_CONTACT_ID)
+        force_on_human = self._get_force_on_tool(pipeline_state, self.UARM_TOOL_CONTACT_ID1, self.UARM_TOOL_CONTACT_ID2, self.LARM_TOOL_CONTACT_ID1, self.LARM_TOOL_CONTACT_ID2)
 
         return {
             "tool_position": tool_position,
@@ -333,12 +337,14 @@ class BedBathing(PipelineEnv):
 
         return center_distance
     
-    def _get_force_on_tool(self, pipeline_state, uarm_tool_id: int, larm_id:int) -> jax.Array:
+    def _get_force_on_tool(self, pipeline_state, uarm_tool_id1: int, uarm_tool_id2: int, larm_tool_id1: int, larm_tool_id2: int) -> jax.Array:
         """Return the force on the tool"""
-        tool_uarm = contact_force(self.sys, pipeline_state, uarm_tool_id, False)
-        tool_larm = contact_force(self.sys, pipeline_state, larm_id, False)
+        tool_uarm1 = contact_force(self.sys, pipeline_state, uarm_tool_id1, False)
+        tool_uarm2 = contact_force(self.sys, pipeline_state, uarm_tool_id2, False)
+        tool_larm1 = contact_force(self.sys, pipeline_state, larm_tool_id1, False)
+        tool_larm2 = contact_force(self.sys, pipeline_state, larm_tool_id2, False)
 
-        return jp.sum(jp.vstack((tool_uarm, tool_larm)), axis=0)
+        return jp.sum(jp.vstack((tool_uarm1, tool_uarm2, tool_larm1, tool_larm2)), axis=0)
     
     def _initialize_targets(self, num_points: int, height: float, radius: float) -> jax.Array:
         # Calculate angles for equally spaced points around the circumference

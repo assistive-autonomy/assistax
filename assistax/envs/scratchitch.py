@@ -161,8 +161,8 @@ class ScratchItch(PipelineEnv):
                 "arm_geom_idx": scratch_arm_geom_idx,
                 "pos": scratch_pos,
             },
-            "scratcher_speed": 0.0, # add for preference tracking
-            "scratcher_force": 0.0,
+            "ee_speed": 0.0, # add for preference tracking
+            "ee_force": 0.0,
             "action_magnitude": 0.0,
         }
 
@@ -252,8 +252,8 @@ class ScratchItch(PipelineEnv):
         )
 
         state.info.update(
-            scratcher_speed=scratcher_speed,
-            scratcher_force=scratcher_force,
+            ee_speed=scratcher_speed,
+            ee_force=scratcher_force,
             action_magnitude=jp.linalg.norm(action),
         )
 

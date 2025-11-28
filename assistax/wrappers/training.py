@@ -301,8 +301,8 @@ class PreferenceRewardWrapper(Wrapper):
         
         # Variable names to look for in state.info (allows customization for different environments)
         self.variable_names = variable_names or {
-            'speed': 'scratcher_speed',
-            'force': 'scratcher_force', 
+            'speed': 'ee_speed',
+            'force': 'ee_force', 
             'action_magnitude': 'action_magnitude',
         }
         
@@ -372,7 +372,7 @@ class PreferenceRewardWrapper(Wrapper):
     def _compute_preference_rewards(
         self, speed: float, force: float, action_magnitude: float, 
         contact_forces: jax.Array, prev_state: State
-    ) -> Dict[str, float]:
+    ) -> Dict[str, float | jax.Array]:
         """Compute individual preference rewards."""
         
         # 1. Speed preference: reward for staying in preferred range

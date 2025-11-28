@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'linux'",
@@ -167,6 +167,7 @@ dependencies = [
     { name = "markupsafe" },
     { name = "matplotlib" },
     { name = "mdurl" },
+    { name = "mediapy" },
     { name = "ml-collections" },
     { name = "msgpack" },
     { name = "mujoco" },
@@ -262,6 +263,7 @@ requires-dist = [
     { name = "markupsafe", specifier = ">=3.0.2" },
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "mdurl", specifier = ">=0.1.2" },
+    { name = "mediapy", specifier = ">=1.2.4" },
     { name = "ml-collections", specifier = ">=1.1.0" },
     { name = "msgpack", specifier = ">=1.1.1" },
     { name = "mujoco", specifier = ">=3.3.7" },
@@ -2047,6 +2049,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "mediapy"
+version = "1.2.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ipython" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/04/a3/e92406a5552130085bc741861de2d02e1cc16f0615373e0a4cd0016de16d/mediapy-1.2.4.tar.gz", hash = "sha256:052947a676ebd3491359a6943b144559fdc414f741b03a05c78fa7b6291e6b12", size = 26659, upload-time = "2025-05-01T10:18:27.828Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/cb/9419149225b44d2cec12208430044c7310dd778d5348000ebb274bc3e2ce/mediapy-1.2.4-py3-none-any.whl", hash = "sha256:dd2b2364543077a1d292cab9eca5d08c8550521523aa1cbb721fd7617ccde872", size = 26118, upload-time = "2025-05-01T10:18:26.445Z" },
 ]
 
 [[package]]

@@ -58,3 +58,7 @@ MUJOCO_LOG.TXT
 MUJOCO_LOG.txt
 
 *.safetensors
+
+wandb_download_project.py
+
+*/wandb_project_artifacts/*

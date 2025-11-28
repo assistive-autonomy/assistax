@@ -550,6 +550,11 @@ class CooperativeHandover(PipelineEnv):
             "drop": drop_reward,
             "collision": collision_reward,
         }
+
+        # TODO REWARD We Could Add:
+        # Penalty threshold if the action is too big. 
+        # Reward the correct angle. 
+        # The angle get more important as we get closer to the object. 
         
         return rewards
 
@@ -803,8 +808,6 @@ class CooperativeHandover(PipelineEnv):
         ) & (phase == HandoverPhase.PLACE)
         
         # Check failure conditions
-
-
         dropped = obj_z < 0.1  # Object dropped
         severe_collision = rewards["collision"] < -2.0  # Severe robot collision
         

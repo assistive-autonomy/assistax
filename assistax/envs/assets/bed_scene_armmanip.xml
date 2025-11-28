@@ -1,4 +1,8 @@
 <mujoco model="panda scene">
+  <visual>
+    <global offwidth="1920" offheight="1920"/>
+  </visual>
+
   <compiler angle="radian" meshdir="bed_assets" autolimits="true"/>
 
   <asset>
@@ -109,10 +113,10 @@
         <joint axis="0 1 0" type="slide" range="0 0.04"/>
       </default>
       <default class="c_robot_hand">
-        <geom contype="4" conaffinity="28" rgba="0 0 1 0.1"/>
+        <geom contype="4" conaffinity="28" group="3" rgba="0 0 1 0.1"/>
       </default>
       <default class="c_robot_tool">
-        <geom contype="4" conaffinity="28" group="3" rgba="0 0 1 1.0"/>
+        <geom contype="4" conaffinity="28" group="2" rgba="0 0 1 1.0"/>
       </default>
       <default class="no-c_robot">
         <geom contype="0" conaffinity="0" group="3" rgba="0 1 0 0.1"/>
@@ -141,7 +145,7 @@
 
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
-    <camera name="default" pos="0.846 -1.465 0.916" xyaxes="0.866 0.500 0.000 -0.171 0.296 0.940"/>
+    <camera name="default" pos="1.5 -2.8 1.5" xyaxes="0.866 0.500 0.000 -0.171 0.296 0.940"/>
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane" conaffinity="1"/>
     <body name="bed_container" pos="0 0 0" quat="0.5 0.5 0.5 0.5">
       <include file="bed_assets/bed_bare.xml"/>

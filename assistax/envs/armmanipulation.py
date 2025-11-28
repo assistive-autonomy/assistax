@@ -140,15 +140,8 @@ class ArmManipulation(PipelineEnv):
         
         self._dist_scale = dist_scale
         self._reset_noise_scale = reset_noise_scale
-        # self.actuator_classes = self._get_actuator_classes(self.path)
-        # self.humanoid_actuators, self.panda_actuators = self._identify_actuators(self.actuator_classes)
 
-        # BedBathing specific indices
-        # self.target_threshold = target_threshold
-        # self.n_targets = n_targets
-        # n_targets_per_arm = n_targets//2
-        # self.wiping_targets_uarm = self._initialize_targets(n_targets_per_arm, mjmodel.geom_size[self.human_tuarm_geom][1], mjmodel.geom_size[self.human_tuarm_geom][0])
-        # self.wiping_targets_larm = self._initialize_targets(n_targets_per_arm, mjmodel.geom_size[self.human_tlarm_geom][1], mjmodel.geom_size[self.human_tlarm_geom][0])
+
 
     def reset(self, rng: jax.Array) -> State:
         """Resets the environment to an initial state."""
@@ -195,6 +188,19 @@ class ArmManipulation(PipelineEnv):
           
         ))
         reward, done, zero = jp.zeros(3)
+
+        #print("Human obs:", human_obs)
+        #print("Robo obs:", robo_obs)
+        #print(f"robo_obs joints: {robo_obs['robo_joint_angles'].shape}, robo_obs vel: {robo_obs['robo_joint_vel'].shape}, tool pos: {robo_obs['tool_position'].shape}, tool target dist: {robo_obs['tool_target_dist'].shape}, tool target dist euclidean: {robo_obs['tool_target_dist_euclidean'].shape}, tool target dist angular: {robo_obs['tool_target_dist_angular'].shape}")
+        #print(f"human_obs larm_waist_dist: {human_obs['larm_waist_dist'].shape}, larm_waist_dist_euclidean: {human_obs['larm_waist_dist_euclidean'].shape}, human_joint_angles: {human_obs['human_joint_angles'].shape}, human_joint_vel: {human_obs['human_joint_vel'].shape}")
+
+        info = {
+            "ee_speed": 0.0,
+            "ee_force": 0.0,
+            "action_magnitude": 0.0,
+        }
+
+
         metrics = {
             "reward_hook_dist": zero,
             "reward_rot": zero,
@@ -206,7 +212,7 @@ class ArmManipulation(PipelineEnv):
             "weighted_reward_rot": zero
         }
 
-        return State(pipeline_state, obs, reward, done, metrics)
+        return State(pipeline_state, obs, reward, done, metrics, info)
 
     def step(self, rng: jax.Array, state: State, action: jax.Array) -> State:
         """Runs one timestep of the environment's dynamics."""
@@ -242,6 +248,11 @@ class ArmManipulation(PipelineEnv):
             human_obs["human_joint_vel"]       
         ))
 
+        #print("Human obs:", human_obs)
+        #print("Robo obs:", robo_obs)
+        #print(f"robo_obs joints: {robo_obs['robo_joint_angles'].shape}, robo_obs vel: {robo_obs['robo_joint_vel'].shape}, tool pos: {robo_obs['tool_position'].shape}, tool target dist: {robo_obs['tool_target_dist'].shape}, tool target dist euclidean: {robo_obs['tool_target_dist_euclidean'].shape}, tool target dist angular: {robo_obs['tool_target_dist_angular'].shape}")
+        #print(f"human_obs larm_waist_dist: {human_obs['larm_waist_dist'].shape}, larm_waist_dist_euclidean: {human_obs['larm_waist_dist_euclidean'].shape}, human_joint_angles: {human_obs['human_joint_angles'].shape}, human_joint_vel: {human_obs['human_joint_vel'].shape}")
+
         # elbow_stomach_dist = jp.exp((-jp.linalg.norm(human_obs["elbow_pos"] - human_obs["stomach_pos"]))**2/self._dist_scale)
 
         # tool_wrist_dist = jp.exp((-jp.linalg.norm(robo_obs["tool_position"] - robo_obs["wrist_pos"]))**2/self._dist_scale)
@@ -258,8 +269,9 @@ class ArmManipulation(PipelineEnv):
         rot_scale = 0.1
         r_rot = jp.sqrt(jp.sum(ang_dist** 2)) 
 
-        larm_waist_dist = human_obs["larm_waist_dist_euclidean"]
-        r_waist_dist = (1 - jp.tanh(larm_waist_dist / self._dist_scale))
+        # larm_waist_dist = human_obs["larm_waist_dist_euclidean"]
+        # r_waist_dist = (1 - jp.tanh(larm_waist_dist / self._dist_scale))
+        r_waist_dist = jp.exp(-human_obs["larm_waist_dist_euclidean"]**2/self._dist_scale)
 
         waist_scale = 10
         reward = waist_scale*r_waist_dist + self._dist_reward_weight*r_hook_dist + self._ctrl_cost_weight*ctrl_cost + r_rot * rot_scale
@@ -277,13 +289,25 @@ class ArmManipulation(PipelineEnv):
             weighted_reward_rot = r_rot * rot_scale
         )
 
+        ee_speed = (
+            pipeline_state.site_xpos[self.panda_hook_center_idx] - pipeline_state0.site_xpos[self.panda_hook_center_idx]
+        ) / self.dt
+        action_magnitude = jp.linalg.norm(action)
+        ee_force = self._get_force_on_tool(pipeline_state, self.UARM_HPLATFORM_CONTACT_ID, self.LARM_HPLATFORM_CONTACT_ID, self.UARM_HEND_CONTACT_ID, self.LARM_HEND_CONTACT_ID)
+
+        new_info = {
+            "ee_speed": jp.linalg.norm(ee_speed),
+            "ee_force": jp.linalg.norm(ee_force),
+            "action_magnitude": action_magnitude,
+        }
+
         return state.replace(
             pipeline_state=pipeline_state,
             obs=obs,
             reward=reward,
             done=done,
+            info=state.info | new_info,
         )
-        # return (robo_obs, human_obs)
 
     def xmat_to_quat(self, xmat):
         w = jp.sqrt(1 + xmat[0] + xmat[4] + xmat[8]) / 2
@@ -312,7 +336,7 @@ class ArmManipulation(PipelineEnv):
         tool_target_dist_angular = target_orientation - tool_orientation
 
         # # TODO: adjust this so the ._get_force_on_tool takes 3 args
-        force_on_tool = self._get_force_on_tool(pipeline_state, self.UARM_HPLATFORM_CONTACT_ID, self.LARM_HPLATFORM_CONTACT_ID, self.UARM_HEND_CONTACT_ID, self.LARM_HEND_CONTACT_ID)
+        #force_on_tool = self._get_force_on_tool(pipeline_state, self.UARM_HPLATFORM_CONTACT_ID, self.LARM_HPLATFORM_CONTACT_ID, self.UARM_HEND_CONTACT_ID, self.LARM_HEND_CONTACT_ID)
 
         # human_uarm_pos = pipeline_state.xpos[self.human_tuarm_idx]
         robo_joint_angles = pipeline_state.qpos[self.panda_joint_id_start:self.panda_joint_id_end]
@@ -351,7 +375,7 @@ class ArmManipulation(PipelineEnv):
             "robo_joint_vel": robo_joint_vel,
             "tool_position": tool_position,
             # # tactile
-            # "force_on_tool": force_on_tool,
+            #"force_on_tool": force_on_tool,
             # ground truth
             "tool_target_dist": tool_target_dist,
             "tool_target_dist_euclidean": tool_target_dist_euclidean,
@@ -404,7 +428,7 @@ class ArmManipulation(PipelineEnv):
         larm_waist_dist = arm_target - arm_pos
         larm_waist_dist_euclidean = jp.linalg.norm(larm_waist_dist)
 
-        # force_on_human = self._get_force_on_tool(pipeline_state, self.UARM_HPLATFORM_CONTACT_ID, self.LARM_HPLATFORM_CONTACT_ID, self.UARM_HEND_CONTACT_ID, self.LARM_HEND_CONTACT_ID)
+        #force_on_human = self._get_force_on_tool(pipeline_state, self.UARM_HPLATFORM_CONTACT_ID, self.LARM_HPLATFORM_CONTACT_ID, self.UARM_HEND_CONTACT_ID, self.LARM_HEND_CONTACT_ID)
         
         return {
             # "position": position,
@@ -419,7 +443,7 @@ class ArmManipulation(PipelineEnv):
             # "wrist_pos": wrist_pos,
             # "stomach_pos": stomach_pos,
             # "waist_pos": waist_pos,
-            # "force_on_human": force_on_human,
+            #"force_on_human": force_on_human,
             # "force_on_target": force_on_target,
             "human_joint_angles": normalised_human_joint_angles,
             "human_joint_vel": human_joint_vel,

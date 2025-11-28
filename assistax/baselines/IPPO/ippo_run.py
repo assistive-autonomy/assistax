@@ -13,6 +13,7 @@ values for network
 """
 
 import os
+os.environ.setdefault('MUJOCO_GL', 'egl') # Use EGL backend for offscreen rendering in MuJoCo
 import time
 from tqdm import tqdm
 import jax
@@ -28,7 +29,7 @@ import assistax
 from assistax.wrappers.baselines import get_space_dim, LogEnvState
 from assistax.wrappers.baselines import LogWrapper
 import hydra
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict
 import wandb
 from datetime import datetime
@@ -36,6 +37,7 @@ from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
     _tree_shape, _stack_tree, _concat_tree, _tree_split, upload_eval_data_to_wandb, 
     log_all_metrics, upload_html_visualizations_to_wandb, upload_model_parameters_to_wandb,
+    upload_mujoco_trajectories_to_wandb, upload_mujoco_videos_to_wandb
     )
 
 os.environ['XLA_FLAGS'] = (
@@ -46,7 +48,7 @@ os.environ['XLA_FLAGS'] = (
 # ================================ MAIN ORCHESTRATION FUNCTION ================================
 
 @hydra.main(version_base=None, config_path="config", config_name="ippo")
-def main(config):
+def main(config: DictConfig):
     """
     Main orchestration function for IPPO training and evaluation.
     
@@ -98,12 +100,13 @@ def main(config):
     )
     env_name = env_name.lower()
     alg_name = config.get("ALG").lower()
-    tags = config.get("EXP_TAGS") + [env_name] + [alg_name]
-    name = f"{alg_name}_{ps_tag}_{rec_tag}_{env_name}_{now:%Y-%m-%d_%H-%M-%S}"
+    name = f"{alg_name}_{ps_tag}_{rec_tag}_{env_name}_{config['EXP_ID']}_seed{config['SEED']}"
+    tags = [config["EXP_ID"]] + config.get("EXP_TAGS") + [env_name] + [alg_name]
+    config["EXP_TAGS"] = tags  # Update config with full tags list for easier grouping in WandB
     run = wandb.init(
         entity=config["ENTITY"],
         project=config["PROJECT"],
-        tags=config["EXP_TAGS"],
+        tags=tags,
         config=config,
         mode=config["WANDB_MODE"],
         reinit=True,
@@ -298,7 +301,27 @@ def main(config):
             'median': median_episode,
             'best': best_episode,
         }
-        upload_html_visualizations_to_wandb(render_eval_env, episodes_dict, run)
+        
+        # upload_html_visualizations_to_wandb(render_eval_env, episodes_dict, run)
+
+        if config.get("RENDER_MUJOCO_TRAJECTORIES", True):
+            upload_mujoco_trajectories_to_wandb(render_eval_env, episodes_dict, run)
+
+        # Conditionally upload rendered videos (larger files, immediate visual feedback)
+        if config.get("RENDER_VIDEOS", False):
+            try:
+                upload_mujoco_videos_to_wandb(
+                    render_eval_env,
+                    episodes_dict,
+                    run,
+                    fps=config.get("VIDEO_FPS", 30),
+                    quality=config.get("VIDEO_QUALITY", "high"),
+                    width=config.get("VIDEO_WIDTH", 1280),
+                    height=config.get("VIDEO_HEIGHT", 720),
+                )
+            except Exception as e:
+                print(f"Warning: Video rendering failed: {e}")
+                print("Continuing without videos...")
 
         # Generate interactive HTML visualizations
         # html.save("final_worst.html", eval_env.sys, worst_episode)

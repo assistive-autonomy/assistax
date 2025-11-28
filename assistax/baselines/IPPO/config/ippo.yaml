@@ -10,48 +10,31 @@ ENV_KWARGS:
   backend: mjx
   het_reward: False # TODO Has to be true for pushcoop otherwise false, but would be better to set this automatically based on the env. 
   episode_length: 1000
-#  disability:
-#    joint_idx: 13
-#    joint_restriction_factor: 1.0
-#    joint_strength: 1.0
-#    tremor_magnitude: 0.0
+  #disability:
+  #  joint_idx: 13 # 13 = right shoulder, 14 = right elbow ; 12 = right shoulder but which direction?
+  #  joint_restriction_factor: 0.7
+  #  joint_strength: 0.7
+  #  tremor_magnitude: 0.0
 #  sparse_rewards: 
 #    mode: periodic
 #    period: 100 
 #    accumulate: True
-  # preference_rewards:
-  #   preference_weights:
-  #     speed_preference: 0.25:
-  #     force_preference: 0.35
-  #     action_efficiency: 0.15
-  #     touch_penalty: -0.03
-  #   preference_ranges:
-  #     speed_range: [0.06, 0.14]
-  #     force_range: [1.5, 3.5]
-  #     max_action_magnitude: 0.8
-  #   touch_threshold: 0.3
-  #   variable_names:
-  #     speed: "scratcher_speed"
-  #     force: "scratcher_force"
-  #     action_magnitude: "action_magnitude"
-  #     contact_forces: "contact_forces"  
-
   #preference_rewards:
   #  preference_weights:
   #    speed_preference: 0.25
   #    force_preference: 0.35
   #    action_efficiency: 0.15
   #    touch_penalty: -0.03
-  #  preference_ranges:
-  #    speed_range: [0.06, 0.14]
-  #    force_range: [1.5, 3.5]
-  #    max_action_magnitude: 0.8
-  #  touch_threshold: 0.3
+    #preference_ranges:
+    #  speed_range: [0.06, 0.14]
+    #  force_range: [1.5, 3.5]
+    #  max_action_magnitude: 0.8
+    #touch_threshold: 0.3
   #  variable_names:
-  #    speed: "scratcher_speed"
-  #    force: "scratcher_force"
+  #    speed: "ee_speed"
+  #    force: "ee_force"
   #    action_magnitude: "action_magnitude"
-  #    contact_forces: "contact_forces"  
+      # contact_forces: "contact_forces"  
 
   # pixel_obs:
   #   hw: 64
@@ -63,9 +46,9 @@ ENV_KWARGS:
 TOTAL_TIMESTEPS: 3e7 
 NUM_STEPS: 64
 NUM_ENVS: 1024 
-NUM_SEEDS: 3 
-SEED: 0
-NUM_EVAL_EPISODES: 10
+NUM_SEEDS: 2 
+SEED: 0 
+NUM_EVAL_EPISODES: 12 
 
 # RL HYPERPARAMETERS
 UPDATE_EPOCHS: 4
@@ -103,11 +86,20 @@ sweep:
   ent_coef: false
   clip_eps: false
 
+# Visualization settings
+SAVE_MUJOCO_TRAJECTORIES: True  # Always save trajectories (minimal overhead)
+RENDER_VIDEOS: False  # Set to True for important runs
+VIDEO_FPS: 30  # Frames per second for videos
+VIDEO_WIDTH: 1920 # Video width in pixels
+VIDEO_HEIGHT: 1080  # Video height in pixels
+VIDEO_QUALITY: "high"  # "low", "medium", or "high"
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}   # Unique experiment identifier based on timestamp
+
 # WandB Params
 ENTITY: "lh-from-kb" 
 PROJECT: "assistax-dev"
 WANDB_MODE: "online" # "disabled" or "online"
-EXP_TAGS: ["IPPO","FF","NoPS","Vectorized"]
+EXP_TAGS: ["IPPO","FF","NoPS","Vectorized", "NoPref"]
 
 
 # hydra:

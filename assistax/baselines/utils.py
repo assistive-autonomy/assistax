@@ -16,6 +16,8 @@ from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict, Optional
 import os 
 import functools
+import mujoco
+import mediapy as media 
 
 # Tree Utilities 
 
@@ -177,6 +179,32 @@ def _compute_episode_returns(eval_info, time_axis=-2):
         eval_info.reward
     )
     return undiscounted_returns
+
+def _compute_episode_metrics(metric_arr, done_arr, time_axis=-2):
+    """
+    Compute undiscounted episode metrics from metric array and done flags.
+    
+    Handles episode boundaries correctly by resetting cumulative metrics
+    when episodes end and start new ones.
+    
+    Args:
+        metric_arr: Array of metrics to sum over episodes
+        done_arr: Boolean array indicating episode termination
+        time_axis: Axis representing time dimension (default: -2)
+    Returns:
+        Undiscounted metrics for each episode
+    """
+    # Create mask for episode boundaries
+    first_timestep = [slice(None) for _ in range(done_arr.ndim)]
+    first_timestep[time_axis] = 0
+    episode_done = jnp.cumsum(done_arr, axis=time_axis, dtype=bool)
+    episode_done = jnp.roll(episode_done, 1, axis=time_axis)
+    episode_done = episode_done.at[tuple(first_timestep)].set(False)
+    
+    # Sum metrics within episodes only
+    undiscounted_metrics = (metric_arr * (1 - episode_done)).sum(axis=time_axis)
+    
+    return undiscounted_metrics
 
 def _compute_episode_returns_sweep(eval_info, common_reward=False, time_axis=-2):
     """
@@ -559,18 +587,45 @@ def log_all_metrics(config, out, evals, env):
             if not isinstance(metric_values, (jnp.ndarray, np.ndarray)):
                 continue
             
-            if len(metric_values.shape) == 4:
-                mean_metric = jnp.mean(metric_values, axis=(2, 3))
-            elif len(metric_values.shape) == 3:
-                mean_metric = jnp.mean(metric_values, axis=2)
-            else:
-                continue
+            # Check if this is a reward component that should get episode sums
+            is_reward_component = 'reward' in metric_name.lower() or 'weighted' in metric_name.lower()
             
-            eval_stats[f"eval/env_metrics/{metric_name}"] = {
-                'mean': jnp.mean(mean_metric, axis=0),
-                'std': jnp.std(mean_metric, axis=0),
-            }
-    
+            if is_reward_component and evals.done is not None:
+                # Create a temporary evals-like object with this metric as the reward
+                
+                metric_episode_returns = _compute_episode_metrics(metric_values, evals.done["__all__"], time_axis=2)
+                
+                mean_metric_per_checkpoint = jnp.mean(metric_episode_returns, axis=2)
+                
+                eval_stats[f"eval/env_metrics/{metric_name}"] = {
+                    'mean': jnp.mean(mean_metric_per_checkpoint, axis=0),
+                    'std': jnp.std(mean_metric_per_checkpoint, axis=0),
+                }
+                
+                # for key, returns in metric_episode_returns.items():
+                #     # returns shape: (num_seeds, num_checkpoints, num_episodes)
+                #     mean_returns_per_checkpoint = jnp.mean(returns, axis=2)  # Average over episodes
+                #     
+                #     suffix = "" if key == '__all__' else f"/{key}"
+                #     eval_stats[f"eval/reward_components/{metric_name}{suffix}"] = {
+                #         'mean': jnp.mean(mean_returns_per_checkpoint, axis=0),
+                #         'std': jnp.std(mean_returns_per_checkpoint, axis=0),
+                #     }
+            
+            else:
+                # Regular averaging for non-reward metrics
+                if len(metric_values.shape) == 4:
+                    mean_metric = jnp.mean(metric_values, axis=(2, 3))
+                elif len(metric_values.shape) == 3:
+                    mean_metric = jnp.mean(metric_values, axis=2)
+                else:
+                    continue
+                
+                eval_stats[f"eval/env_metrics/{metric_name}"] = {
+                    'mean': jnp.mean(mean_metric, axis=0),
+                    'std': jnp.std(mean_metric, axis=0),
+                }
+
     print(f"Pre-computed {len(eval_stats)} evaluation metrics")
     
     # ===== LOG ALL METRICS TOGETHER AT EACH CHECKPOINT =====
@@ -629,41 +684,88 @@ def log_all_metrics(config, out, evals, env):
     print("ALL METRICS LOGGING COMPLETE")
     print("="*70 + "\n")
 
+#def upload_html_visualizations_to_wandb(eval_env, episodes_dict, run):
+#    """
+#    Upload HTML visualizations to wandb as artifacts.
+#    
+#    Args:
+#        eval_env: Evaluation environment (for sys attribute)
+#        episodes_dict: Dict mapping names to episode data
+#                      e.g., {'worst': worst_episode, 'median': median_episode, 'best': best_episode}
+#        run: wandb run object
+#    """
+#    from assistax.render import html
+#    import tempfile
+#    import os
+#    
+#    print("Creating and uploading HTML visualizations...")
+#    
+#    with tempfile.TemporaryDirectory() as temp_dir:
+#        # Generate HTML files in temporary directory
+#        html_files = {}
+#        for name, episode_data in episodes_dict.items():
+#            file_path = os.path.join(temp_dir, f"final_{name}.html")
+#            html.save(file_path, eval_env.sys, episode_data)
+#            html_files[name] = file_path
+#            print(f"  Generated final_{name}.html")
+#        
+#        # Create and upload artifact
+#        artifact = wandb.Artifact(f"visualizations_{run.name}", type="visualization")
+#        artifact.add_dir(temp_dir)
+#        run.log_artifact(artifact)
+#        for name, file_path in html_files.items():
+#            with open(file_path, 'r') as f:
+#                html_content = f.read()
+#            # This makes it viewable in the wandb dashboard
+#            wandb.log({f"visualization/{name}_episode": wandb.Html(html_content)})
+#            print(f"  Logged {name} episode for interactive viewing")   
+#    print("HTML visualizations uploaded to wandb successfully!")
+
 def upload_html_visualizations_to_wandb(eval_env, episodes_dict, run):
     """
     Upload HTML visualizations to wandb as artifacts.
     
     Args:
-        eval_env: Evaluation environment (for sys attribute)
-        episodes_dict: Dict mapping names to episode data
+        eval_env: Evaluation environment (Gymnax-style wrapper with env.env.sys)
+        episodes_dict: Dict mapping names to episode data (qp trajectories)
                       e.g., {'worst': worst_episode, 'median': median_episode, 'best': best_episode}
         run: wandb run object
     """
-    from assistax.render import html
+    from brax.io import html  # or: from mujoco import mjx; from mujoco.mjx import io as html
     import tempfile
     import os
     
     print("Creating and uploading HTML visualizations...")
     
+    # Get the MuJoCo system with proper timestep
+    sys = eval_env.env.sys.tree_replace({'opt.timestep': eval_env.env.dt})
+    
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Generate HTML files in temporary directory
         html_files = {}
+        
         for name, episode_data in episodes_dict.items():
+            # Render HTML string
+            html_content = html.render(sys, episode_data)
+            
+            # Save to temporary file
             file_path = os.path.join(temp_dir, f"final_{name}.html")
-            html.save(file_path, eval_env.sys, episode_data)
-            html_files[name] = file_path
+            with open(file_path, 'w') as f:
+                f.write(html_content)
+            
+            html_files[name] = (file_path, html_content)
             print(f"  Generated final_{name}.html")
         
-        # Create and upload artifact
+        # Create and upload artifact for file downloads
         artifact = wandb.Artifact(f"visualizations_{run.name}", type="visualization")
         artifact.add_dir(temp_dir)
         run.log_artifact(artifact)
-        for name, file_path in html_files.items():
-            with open(file_path, 'r') as f:
-                html_content = f.read()
-            # This makes it viewable in the wandb dashboard
+        print("  Artifact uploaded")
+        
+        # Log HTML for interactive viewing in wandb dashboard
+        for name, (file_path, html_content) in html_files.items():
             wandb.log({f"visualization/{name}_episode": wandb.Html(html_content)})
-            print(f"  Logged {name} episode for interactive viewing")   
+            print(f"  Logged {name} episode for interactive viewing")
+    
     print("HTML visualizations uploaded to wandb successfully!")
 
 def upload_model_parameters_to_wandb(all_train_states, final_train_state, config, env, run):
@@ -721,3 +823,245 @@ def upload_model_parameters_to_wandb(all_train_states, final_train_state, config
         run.log_artifact(artifact)
     
     print("Model parameters uploaded to wandb successfully!")
+
+
+def upload_mujoco_trajectories_to_wandb(eval_env, episodes_dict, run):
+    """
+    Save MuJoCo XML models and trajectories, then upload to wandb as artifacts.
+    
+    Args:
+        eval_env: Evaluation environment (Gymnax-style wrapper with env.env.sys)
+        episodes_dict: Dict mapping names to episode data (list of brax.mjx.base.State objects)
+        run: wandb run object
+    """
+    import tempfile
+    import os
+    import numpy as np
+    import shutil
+    
+    print("Creating and uploading MuJoCo trajectories...")
+    
+    # Get the XML file path from the environment
+    if hasattr(eval_env.env, 'path'):
+        xml_source_path = str(eval_env.env.path)
+        print(f"  Using XML from: {xml_source_path}")
+    else:
+        print("  Warning: Environment does not have 'path' attribute. Skipping.")
+        return
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Copy the XML file to temp directory
+        model_xml_path = os.path.join(temp_dir, "model.xml")
+        shutil.copy(xml_source_path, model_xml_path)
+        print(f"  Copied model.xml")
+        
+        # Save trajectory data for each episode
+        for name, episode_data in episodes_dict.items():
+            # episode_data is a list of brax.mjx.base.State objects
+            # Each State has .qpos and .qvel attributes
+            
+            if not isinstance(episode_data, list) or len(episode_data) == 0:
+                print(f"  Warning: {name} episode is invalid")
+                continue
+            
+            # Extract qpos and qvel from each state
+            qpos_trajectory = np.array([np.array(state.qpos) for state in episode_data])
+            qvel_trajectory = np.array([np.array(state.qvel) for state in episode_data])
+            
+            print(f"  {name}: {len(episode_data)} steps, qpos shape {qpos_trajectory.shape}, qvel shape {qvel_trajectory.shape}")
+            
+            # Save trajectory
+            traj_path = os.path.join(temp_dir, f"{name}_trajectory.npz")
+            np.savez(
+                traj_path,
+                qpos=qpos_trajectory,
+                qvel=qvel_trajectory,
+                timestep=eval_env.env.dt,
+            )
+            print(f"  Saved {name}_trajectory.npz")
+        
+        # Create README
+        readme_path = os.path.join(temp_dir, "README.md")
+        with open(readme_path, 'w') as f:
+            f.write("""# MuJoCo Trajectory Visualization
+
+## Files
+- `model.xml`: MuJoCo model definition
+- `*_trajectory.npz`: Trajectory data (qpos, qvel)
+
+## Usage
+```python
+import numpy as np
+import mujoco
+import mujoco.viewer
+
+model = mujoco.MjModel.from_xml_path("model.xml")
+data = mujoco.MjData(model)
+traj = np.load("best_trajectory.npz")
+
+qpos_trajectory = traj['qpos']
+qvel_trajectory = traj['qvel']
+timestep = float(traj['timestep'])
+
+with mujoco.viewer.launch_passive(model, data) as viewer:
+    i = 0
+    while viewer.is_running():
+        i = i % len(qpos_trajectory)
+        data.qpos[:] = qpos_trajectory[i]
+        data.qvel[:] = qvel_trajectory[i]
+        mujoco.mj_forward(model, data)
+        viewer.sync()
+        
+        import time
+        time.sleep(timestep)
+        i += 1
+```
+""")
+        
+        # Upload to wandb
+        artifact = wandb.Artifact(
+            f"mujoco_trajectories_{run.name}",
+            type="trajectory",
+            description="MuJoCo XML and trajectory data for rendering"
+        )
+        artifact.add_dir(temp_dir)
+        run.log_artifact(artifact)
+        
+        # Log stats
+        trajectory_stats = {
+            f"trajectory/{name}_num_steps": len(episode_data)
+            for name, episode_data in episodes_dict.items()
+            if isinstance(episode_data, list)
+        }
+        wandb.log(trajectory_stats)
+    
+    print("MuJoCo trajectories uploaded successfully!")
+
+def upload_mujoco_videos_to_wandb(eval_env, episodes_dict, run, fps=30, quality="high", width=1280, height=720):
+    """
+    Render MuJoCo episodes as videos and upload to wandb.
+    
+    Args:
+        eval_env: Evaluation environment (Gymnax-style wrapper with env.env.sys)
+        episodes_dict: Dict mapping names to episode data (list of brax.mjx.base.State objects)
+        run: wandb run object
+        fps: Frames per second for the video
+        quality: Video quality - "low", "medium", or "high"
+        width: Video width in pixels
+        height: Video height in pixels
+    """
+    import tempfile
+    import os
+    import numpy as np
+    import mujoco
+    import mediapy as media
+    
+    print(f"Rendering MuJoCo videos at {width}x{height}, {fps} FPS, {quality} quality...")
+    
+    # Get the XML file path from the environment
+    if hasattr(eval_env.env, 'path'):
+        xml_source_path = str(eval_env.env.path)
+        print(f"  Using XML from: {xml_source_path}")
+    else:
+        print("  Warning: Environment does not have 'path' attribute. Skipping.")
+        return
+    
+    # Quality settings (bps = bits per second)
+    #quality_settings = {
+    #    "low": 2_000_000,      # 2 Mbps
+    #    "medium": 5_000_000,   # 5 Mbps
+    #    "high": 10_000_000,    # 10 Mbps
+    #}
+    #bps = quality_settings.get(quality, 5_000_000)
+    quality_settings = {
+    "low": 23,       # Default quality
+    "medium": 18,    # High quality
+    "high": 15,      # Very high quality
+    }
+    crf = quality_settings.get(quality, 18)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Load MuJoCo model
+        model = mujoco.MjModel.from_xml_path(xml_source_path)
+        data = mujoco.MjData(model)
+        
+        # Check framebuffer size and adjust if necessary
+        max_offscreen_width = model.vis.global_.offwidth
+        max_offscreen_height = model.vis.global_.offheight
+        
+        if width > max_offscreen_width or height > max_offscreen_height:
+            print(f"  Warning: Requested size {width}x{height} exceeds framebuffer size {max_offscreen_width}x{max_offscreen_height}")
+            # Scale down while maintaining aspect ratio
+            scale = min(max_offscreen_width / width, max_offscreen_height / height)
+            width = int(width * scale)
+            height = int(height * scale)
+            print(f"  Adjusted to {width}x{height}")
+        
+        # Create renderer
+        renderer = mujoco.Renderer(model, height=height, width=width)
+        
+        video_paths = {}
+        
+        for name, episode_data in episodes_dict.items():
+            if not isinstance(episode_data, list) or len(episode_data) == 0:
+                print(f"  Warning: {name} episode is invalid")
+                continue
+            
+            print(f"  Rendering {name} episode ({len(episode_data)} frames)...")
+            
+            # Extract trajectories
+            qpos_trajectory = np.array([np.array(state.qpos) for state in episode_data])
+            qvel_trajectory = np.array([np.array(state.qvel) for state in episode_data])
+            
+            # Render frames
+            frames = []
+            for i in range(len(qpos_trajectory)):
+                # Set state
+                data.qpos[:] = qpos_trajectory[i]
+                data.qvel[:] = qvel_trajectory[i]
+                
+                # Forward kinematics
+                mujoco.mj_forward(model, data)
+                
+                # Render frame
+                renderer.update_scene(data, camera="default")
+                frame = renderer.render()
+                frames.append(frame)
+            
+            # Save video using mediapy with correct parameters
+            video_path = os.path.join(temp_dir, f"{name}_episode.mp4")
+            media.write_video(
+                video_path, 
+                frames, 
+                fps=fps,
+                #bps=bps, # bits per second
+                crf=crf,
+                codec='h264'
+            )
+            video_paths[name] = video_path
+            
+            duration = len(episode_data) * eval_env.env.dt
+            print(f"    Saved {name}_episode.mp4 ({duration:.2f}s)")
+        
+        # Close renderer to avoid the __del__ error
+        renderer.close()
+        
+        # Upload to wandb
+        print("  Uploading videos to wandb...")
+        
+        # Create artifact for downloads
+        artifact = wandb.Artifact(
+            f"mujoco_videos_{run.name}",
+            type="video",
+            description=f"Rendered episodes at {width}x{height}, {fps}fps"
+        )
+        for name, video_path in video_paths.items():
+            artifact.add_file(video_path, name=f"{name}_episode.mp4")
+        run.log_artifact(artifact)
+        
+        # Log for inline viewing
+        for name, video_path in video_paths.items():
+            wandb.log({f"video/{name}_episode": wandb.Video(video_path, fps=fps, format="mp4")})
+        
+        print("  Videos uploaded successfully!")
+    
+    print("MuJoCo videos uploaded to wandb!")
