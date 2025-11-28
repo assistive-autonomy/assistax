@@ -302,7 +302,9 @@ def main(config: DictConfig):
             'best': best_episode,
         }
         
-        # upload_html_visualizations_to_wandb(render_eval_env, episodes_dict, run)
+        # Upload HTML visualizations to WandB
+        if config.get("SAVE_HTML_RENDER", True):
+            upload_html_visualizations_to_wandb(render_eval_env, episodes_dict, run)
 
         if config.get("RENDER_MUJOCO_TRAJECTORIES", True):
             upload_mujoco_trajectories_to_wandb(render_eval_env, episodes_dict, run)
