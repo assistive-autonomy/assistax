@@ -295,6 +295,8 @@ class PreferenceRewardWrapper(Wrapper):
             'force_range': (1.0, 5.0),   # Good scratching force range  
             'max_action_magnitude': 1.0,
         }
+
+        self.pref_rew_weight = preference_rewards.get("overall_weight", 1.0)
         
         # Touch detection threshold
         self.touch_threshold = touch_threshold
@@ -353,7 +355,7 @@ class PreferenceRewardWrapper(Wrapper):
         
         # Add preference reward to original reward
         total_preference_reward = sum(preference_rewards.values())
-        augmented_reward = next_state.reward + total_preference_reward
+        augmented_reward = next_state.reward + self.pref_rew_weight*total_preference_reward
 
         preference_rewards.update(
             total_pref_reward=total_preference_reward

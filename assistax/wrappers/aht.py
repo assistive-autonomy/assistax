@@ -490,6 +490,7 @@ class ZooManager:
 class LoadAgentWrapper(JaxMARLWrapper):
     def __init__(self, env: MultiAgentEnv, load_agents: Dict[str, LoadNetworkState]):
         super().__init__(env)
+        
         self.loaded_agents = ['human']
         self.loaded_params = load_agents
         self.agents = [

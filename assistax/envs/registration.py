@@ -9,6 +9,7 @@ from assistax.envs.base_env import (
     ArmManipulation,
     PushCoop,
     CooperativeHandover,
+    Feeding,
 )
 
 def make(env_id: str, **env_kwargs):
@@ -25,6 +26,8 @@ def make(env_id: str, **env_kwargs):
         env = PushCoop(**env_kwargs)    
     elif env_id == "handover":
         env = CooperativeHandover(**env_kwargs)
+    elif env_id == "feeding":
+        env = Feeding(**env_kwargs)
 
     return env
    
@@ -34,4 +37,5 @@ registered_envs = [
     "armmanipulation",
     "pushcoop",
     "handover",
+    "feeding",
 ]

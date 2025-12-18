@@ -20,6 +20,7 @@ results/
 tmp/
 *-checkpoint.py
 wandb/
+wandb_structured_artifacts/
 outputs/
 models/
 multirun/

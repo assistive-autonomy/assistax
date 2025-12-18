@@ -228,8 +228,9 @@ class ScratchItch(PipelineEnv):
             human_obs["human_joint_angles"],           
         ))
         
-        dist = -robo_obs["distance_to_target"]
+        dist = -robo_obs["distance_to_target"] # Why the double negative? I guess this is squared away anyways?
         r_dist = jp.exp(-dist**2/self._dist_scale)
+
         # This reward should mimick scratching but I'm not sure the scale is correct i.e. 0.005 might be too large or too small of a distance
         scratcher_vel = (
             pipeline_state.site_xpos[self.panda_scratcher_tip_idx] - pipeline_state0.site_xpos[self.panda_scratcher_tip_idx]

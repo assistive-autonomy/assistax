@@ -42,6 +42,10 @@ _agent_action_mapping = {
         "robot1": jnp.array([0, 1, 2, 3, 4, 5, 6, 7]),
         "robot2": jnp.array([8, 9, 10, 11, 12, 13, 14, 15]),
     },
+    "feeding": {
+        "robot": jnp.array([19, 20, 21, 22, 23, 24, 25]),
+        "human": jnp.array([0, 1, 2, 17, 18]), # Moving abdomen, torso and head 
+    },
 }
 
 
@@ -81,6 +85,12 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
         "robot1": [(0, 30), (62, 87)],    # Robot1 sees: itself + object + sensors + goals + phase
         "robot2": [(31, 61), (62, 87)],   # Robot2 sees: itself + object + sensors + goals + phase
         "global": [(0, 87)],
+    },
+
+    "feeding": {
+        "robot": [(0,21)],
+        "human": [(22, 54)],
+        "global": [(0,54)],
     }
 }
 
@@ -310,3 +320,7 @@ class PushCoop(MABraxEnv):
 class CooperativeHandover(MABraxEnv):
     def __init__(self, **kwargs):
         super().__init__("handover", **kwargs)
+
+class Feeding(MABraxEnv):
+    def __init__(self, **kwargs):
+        super().__init__("feeding", **kwargs)
