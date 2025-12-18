@@ -102,6 +102,11 @@ dependencies = [
     cuda13 = [
         "jax[cuda13]>=0.4.37"
     ]
+
+    cpu = [
+        "jax>=0.4.37"
+    ]
+
     notebooks = [
         "jupyter>=1.1.1",
     ]
