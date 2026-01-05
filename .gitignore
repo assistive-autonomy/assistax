@@ -25,7 +25,6 @@ outputs/
 models/
 multirun/
 *.npy
-*.sh
 *.png
 CLAUDE.md
 
