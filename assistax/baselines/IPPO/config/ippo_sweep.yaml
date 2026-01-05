@@ -4,6 +4,7 @@ defaults:
 
     #ENV_NAME: scratchitch
 ENV_NAME: scratchitch
+ALG: IPPO
 ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
@@ -51,10 +52,16 @@ SWEEP:
   ent_coef: false
   clip_eps: false
 
+# Saving Options
+SAVE_ALL_TRAIN_STATES: false
+SAVE_FINAL_TRAIN_STATE: false
+
 ENTITY: "lh-from-kb" 
 PROJECT: "assistax-dev"
 WANDB_MODE: "online" # "disabled" or "online"
 EXP_TAGS: ["SWEEP", "IPPO","FF","NoPS","Vectorized", "NoPref"]
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}   # Unique experiment identifier based on timestamp
+
 
 
 hydra:
