@@ -146,7 +146,7 @@ def main(config):
     num_configs = batch_dims[0]
     print(f"\nProcessing {num_configs} configurations for WANDB logging...")
     
-    env = assistax.make(config_dict["ENV_NAME"], **config_dict["ENV_KWARGS"])
+    env = assistax.make(config_dict["ENV_NAME"], **config_dict["ENV_KWARGS"]) # It's likely very annoying memory overhead to be creating these objects all the time for making train, making evaluation etc. So should perhaps rething that. 
 
     for h_idx in range(num_configs):
         # Slice the data to get (Seeds, Updates, ...) for this config

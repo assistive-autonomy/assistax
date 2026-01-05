@@ -74,6 +74,7 @@ dependencies = [
     "scipy>=1.12.0",
     "simplejson>=3.20.1",
     "six>=1.17.0",
+    "tensorflow-probability>=0.25.0",
     "tfp-nightly==0.26.0.dev20251020",
     "toolz>=1.0.0",
     "tqdm>=4.67.1",
