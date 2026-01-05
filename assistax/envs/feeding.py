@@ -39,7 +39,7 @@ class Feeding(PipelineEnv):
         self,
         ctrl_cost_weight: float = 1e-6,
         dist_reward_weight: float = 2.0,
-        dist_scale: float = 2.5,
+        dist_scale: float = 3,
         feeding_reward_weight: float = 1.0,
         target_spoon_speed: float = 0.1,
         target_spoon_force: float = 1.0,

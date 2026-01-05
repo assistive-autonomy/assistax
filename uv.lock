@@ -210,6 +210,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+cpu = [
+    { name = "jax" },
+]
 cuda12 = [
     { name = "jax", extra = ["cuda12"] },
 ]
@@ -254,6 +257,7 @@ requires-dist = [
     { name = "importlib-resources", specifier = ">=6.5.2" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
     { name = "jax", specifier = ">=0.8.0" },
+    { name = "jax", marker = "extra == 'cpu'", specifier = ">=0.4.37" },
     { name = "jax", extras = ["cuda12"], marker = "extra == 'cuda12'", specifier = ">=0.4.37" },
     { name = "jax", extras = ["cuda13"], marker = "extra == 'cuda13'", specifier = ">=0.4.37" },
     { name = "jinja2", specifier = ">=3.1.6" },
@@ -304,7 +308,7 @@ requires-dist = [
     { name = "wrapt", specifier = ">=1.17.2" },
     { name = "zipp", specifier = ">=3.23.0" },
 ]
-provides-extras = ["cuda12", "cuda13", "notebooks"]
+provides-extras = ["cuda12", "cuda13", "cpu", "notebooks"]
 
 [[package]]
 name = "asttokens"

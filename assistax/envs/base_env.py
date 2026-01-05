@@ -44,7 +44,7 @@ _agent_action_mapping = {
     },
     "feeding": {
         "robot": jnp.array([19, 20, 21, 22, 23, 24, 25]),
-        "human": jnp.array([0, 1, 2, 17, 18]), # Moving abdomen, torso and head 
+        "human": jnp.array([0, 1]), # head 
     },
 }
 

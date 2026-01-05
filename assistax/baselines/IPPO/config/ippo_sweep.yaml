@@ -51,6 +51,12 @@ SWEEP:
   ent_coef: false
   clip_eps: false
 
+ENTITY: "lh-from-kb" 
+PROJECT: "assistax-dev"
+WANDB_MODE: "online" # "disabled" or "online"
+EXP_TAGS: ["SWEEP", "IPPO","FF","NoPS","Vectorized", "NoPref"]
+
+
 hydra:
   job:
     chdir: true
