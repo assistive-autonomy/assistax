@@ -3,7 +3,7 @@
 cd /home/s2618563/assistax
 # --- CONFIGURATION ---
 FIXED_SEEDS=12
-START_CONFIGS=64   # Start high (e.g., 64 or 128)
+START_CONFIGS=56   # Start high (e.g., 64 or 128)
 MIN_CONFIGS=1      # Floor
 DECREMENT=4        # How many configs to drop per failure
 PYTHON_SCRIPT="assistax/baselines/IPPO/ippo_sweep_old.py"
@@ -23,7 +23,7 @@ while [ $current_configs -ge $MIN_CONFIGS ]; do
     uv run python $PYTHON_SCRIPT -cn ippo_sweep -m \
         SWEEP.num_configs=$current_configs \
         NUM_SEEDS=$FIXED_SEEDS \
-        TOTAL_TIMESTEPS=100000 \
+        TOTAL_TIMESTEPS=4e7 \
         WANDB_MODE=disabled \
         +DRY_RUN=True
     
