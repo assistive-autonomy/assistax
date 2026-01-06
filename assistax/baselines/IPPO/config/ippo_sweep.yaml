@@ -15,9 +15,9 @@ ENV_KWARGS:
     #  joint_restriction_factor: 1.0
     #  joint_strength: 1.0
     #  tremor_magnitude: 0.0
-TOTAL_TIMESTEPS: 10e6
+TOTAL_TIMESTEPS: 4e7
 NUM_STEPS: 64
-NUM_ENVS: 256
+NUM_ENVS: 1024 
 NUM_SEEDS: 4
 SEED: 0
 NUM_EVAL_EPISODES: 16   
