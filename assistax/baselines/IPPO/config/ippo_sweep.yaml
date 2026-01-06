@@ -49,8 +49,12 @@ SWEEP:
   lr:
     min: -4.0
     max: -2.0
-  ent_coef: false
-  clip_eps: false
+  ent_coef:
+    min: -5.0
+    max: -2.0
+  clip_eps:
+    min: -2.0
+    max: -0.5 
 
 # Saving Options
 SAVE_ALL_TRAIN_STATES: false
@@ -62,13 +66,11 @@ WANDB_MODE: "online" # "disabled" or "online"
 EXP_TAGS: ["SWEEP", "IPPO","FF","NoPS","Vectorized", "NoPref"]
 EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}   # Unique experiment identifier based on timestamp
 
-
-
 hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/${ENV_NAME}/${ALG}/${defaults.network}/{now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/${ENV_NAME}/${ALG}/${defaults.network}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ""
