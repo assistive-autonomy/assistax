@@ -70,7 +70,7 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/${ENV_NAME}/${ALG}/${defaults.network}/{now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/${ENV_NAME}/${ALG}/{now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/${ENV_NAME}/${ALG}/${defaults.network}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/${ENV_NAME}/${ALG}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ""

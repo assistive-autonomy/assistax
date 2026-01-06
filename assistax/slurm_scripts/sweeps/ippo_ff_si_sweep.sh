@@ -12,4 +12,4 @@
 
 cd /home/s2618563/assistax 
 ulimit -n 10000
-uv run python ippo_sweep_old.py -cn ippo_sweep -m network=ff_nps ++ENV_NAME=scratchitch ++TOTAL_TIMESTEPS=4e7 ++BATCH_SIZE=128,256,512 ++UPDATE_EPOCHS=4,8,16 "++SEED=range(0,12)" SWEEP.num_configs=24
+uv run python assistax/baselines/IPPO/ippo_sweep_old.py -cn ippo_sweep -m network=ff_nps ++NUM_SEEDS=12 ++ENV_NAME=scratchitch ++TOTAL_TIMESTEPS=4e7 ++BATCH_SIZE=128,256,512 ++UPDATE_EPOCHS=4,8,16 "++SEED=range(0,6)" SWEEP.num_configs=24
