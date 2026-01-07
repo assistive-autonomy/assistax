@@ -60,11 +60,27 @@ sweep:
   ent_coef: false
   clip_eps: false
 
-hydra:
-  job:
-    chdir: true
-  run:
-    dir: outputs/MAPPO/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-  sweep:
-    dir: multirun/MAPPO/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED} # This should probably be edited a little bit. 
+# Visualization settings
+SAVE_MUJOCO_TRAJECTORIES: True  # Always save trajectories (minimal overhead)
+SAVE_HTML_RENDER: False 
+RENDER_VIDEOS: True  # Set to True for important runs
+VIDEO_FPS: 30  # Frames per second for videos
+VIDEO_WIDTH: 1920 # Video width in pixels
+VIDEO_HEIGHT: 1080  # Video height in pixels
+VIDEO_QUALITY: "high"  # "low", "medium", or "high"
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}} 
+
+# WandB Params
+ENTITY: "lh-from-kb" 
+PROJECT: "assistax-dev"
+WANDB_MODE: "online" # "disabled" or "online"
+EXP_TAGS: ["MAPPO","FF","NoPS","Vectorized", "NoPref"]
+
+#hydra:
+#  job:
+#    chdir: true
+#  run:
+#    dir: outputs/MAPPO/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+#  sweep:
+#    dir: multirun/MAPPO/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+#    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED} # This should probably be edited a little bit. 

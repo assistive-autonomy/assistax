@@ -149,7 +149,7 @@ class EvalInfo(NamedTuple):
     info: Optional[jnp.ndarray]
     avail_actions: Optional[jnp.ndarray]
     ag_idx: Optional[jnp.ndarray]
-    idx_mapping: Optional[Dict[int, str]] 
+    env_metrics: Optional[Dict[str, jnp.ndarray]]
 
 @struct.dataclass
 class EvalInfoLogConfig:
@@ -162,6 +162,7 @@ class EvalInfoLogConfig:
     obs: bool = True
     info: bool = True
     avail_actions: bool = True
+    env_metrics: bool = True
 
 def batchify(qty: Dict[str, jnp.ndarray], agents: Sequence[str]) -> jnp.ndarray:
     """Convert dict of arrays to batched array."""
@@ -701,6 +702,7 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
                     info=(info if log_eval_info.info else None),
                     avail_actions=(avail_actions if log_eval_info.avail_actions else None),
                     ag_idx=(runner_state.ag_idx if crossplay else None),
+                    env_metrics=(env_state.env_state.metrics if log_eval_info.env_metrics else None),
                 )
 
                 runner_state = RunnerState(

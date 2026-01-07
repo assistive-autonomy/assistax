@@ -149,10 +149,9 @@ def main(config: DictConfig):
         all_train_states = out["metrics"]["train_state"]
         final_train_state = out["runner_state"].train_state
 
+        # Uploading model parameters to WandB 
         
-        # TODO use tempfiles to avoid clutter and then upload as artifact
         upload_model_parameters_to_wandb(all_train_states, final_train_state, config, env, run)
-        
         
         # ===== EVALUATION SETUP =====
         print("Setting up evaluation...")
