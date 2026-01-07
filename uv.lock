@@ -195,6 +195,7 @@ dependencies = [
     { name = "scipy" },
     { name = "simplejson" },
     { name = "six" },
+    { name = "tensorflow-probability" },
     { name = "tfp-nightly" },
     { name = "toolz" },
     { name = "tqdm" },
@@ -295,6 +296,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.12.0" },
     { name = "simplejson", specifier = ">=3.20.1" },
     { name = "six", specifier = ">=1.17.0" },
+    { name = "tensorflow-probability", specifier = ">=0.25.0" },
     { name = "tfp-nightly", specifier = "==0.26.0.dev20251020" },
     { name = "toolz", specifier = ">=1.0.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
@@ -3799,6 +3801,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2b/c5/d4cc6e293fb837aaf9f76dd7745476aeba8ef7ef5146c3b3f9ee375fe7a5/tensorboardx-2.6.4.tar.gz", hash = "sha256:b163ccb7798b31100b9f5fa4d6bc22dad362d7065c2f24b51e50731adde86828", size = 4769801, upload-time = "2025-06-10T22:37:07.419Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/1d/b5d63f1a6b824282b57f7b581810d20b7a28ca951f2d5b59f1eb0782c12b/tensorboardx-2.6.4-py3-none-any.whl", hash = "sha256:5970cf3a1f0a6a6e8b180ccf46f3fe832b8a25a70b86e5a237048a7c0beb18e2", size = 87201, upload-time = "2025-06-10T22:37:05.44Z" },
+]
+
+[[package]]
+name = "tensorflow-probability"
+version = "0.25.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "absl-py" },
+    { name = "cloudpickle" },
+    { name = "decorator" },
+    { name = "dm-tree" },
+    { name = "gast" },
+    { name = "numpy" },
+    { name = "six" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fe/b6/e116761ceeb880b7ad4c6a7e1203538754dd7dda42538f08d6daaf8dfa4d/tensorflow_probability-0.25.0-py2.py3-none-any.whl", hash = "sha256:f3f4d6431656c0122906888afe1b67b4400e82bd7f254b45b92e6c5b84ea8e3e", size = 6979403, upload-time = "2024-11-08T16:25:57.238Z" },
 ]
 
 [[package]]

@@ -3,22 +3,23 @@ defaults:
   - _self_
 
 ENV_NAME: scratchitch
+ALG: MAPPO
 ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
   backend: mjx
   het_reward: False  # Has to be true for pushcoop otherwise false
-  disability:
-    joint_idx: 13
-    joint_restriction_factor: 1.0
-    joint_strength: 1.0
-    tremor_magnitude: 0.0
-TOTAL_TIMESTEPS: 30e6
+  #disability:
+  #  joint_idx: 13
+  #  joint_restriction_factor: 1.0
+  #  joint_strength: 1.0
+  #  tremor_magnitude: 0.0
+TOTAL_TIMESTEPS: 4e7
 NUM_STEPS: 128
-NUM_ENVS: 512
-NUM_SEEDS: 2
+NUM_ENVS: 1024 
+NUM_SEEDS: 4
 SEED: 0
-NUM_EVAL_EPISODES: 32
+NUM_EVAL_EPISODES:  16
 
 # RL HYPERPARAMETERS
 UPDATE_EPOCHS: 4
@@ -50,7 +51,7 @@ eval:
 SWEEP:
   num_configs: 4
   lr:
-    min: -5.0
+    min: -4.0
     max: -2.0
   ent_coef:
     min: -5.0
@@ -59,11 +60,13 @@ SWEEP:
     min: -2.0
     max: -0.5
 
+SAVE_ALL_TRAIN_STATES: false
+
 hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/${ENV_NAME}/${ALG}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED}
+    dir: multirun/${ENV_NAME}/${ALG}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: "" 
