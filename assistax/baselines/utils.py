@@ -1065,3 +1065,17 @@ def upload_mujoco_videos_to_wandb(eval_env, episodes_dict, run, fps=30, quality=
         print("  Videos uploaded successfully!")
     
     print("MuJoCo videos uploaded to wandb!")
+
+def print_memory_stats(label=""):
+    """Prints the true peak memory used by JAX on the primary GPU."""
+    try:
+        # Use local_devices to ensure we target the specific GPU this process is using
+        device = jax.local_devices()[0]
+        stats = device.memory_stats()
+        peak_gb = stats['peak_bytes_in_use'] / 1e9
+        # This is the string the Bash script will 'grep' for
+        print(f"--- MEMORY_STATS_PEAK: {peak_gb:.4f} GB ---")
+        print("----------------------------------------------")
+        print(f"All Stats: {stats}")
+    except Exception:
+        print("--- MEMORY_STATS_PEAK: 0.0000 GB ---")

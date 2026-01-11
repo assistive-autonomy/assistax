@@ -1,9 +1,15 @@
 """
-IPPO Hyperparameter Sweeping with Parallel JAX and Grouped WANDB Logging
+IPPO Hyperparameter Sweeping 
 
-This script runs a parallelized hyperparameter sweep using JAX nested vmaps.
-Results are then unstacked and logged as individual WANDB runs within a group,
-allowing for seed-aggregation (mean/std) per hyperparameter configuration.
+This module orchestrates large-scale hyperparameter sweeps for IPPO experiments across different
+network architectures. It systematically explores hyperparameter spaces, manages experiment
+organization, and handles efficient evaluation of multiple configurations simultaneously.
+
+Usage:
+    python ippo_sweep.py [hydra options]
+    
+The script will create a unique directory for each sweep configuration and save all
+results systematically for later analysis.
 """
 
 import os
@@ -12,9 +18,15 @@ from tqdm import tqdm
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
+from flax.linen.initializers import constant, orthogonal
+from flax.training.train_state import TrainState
 from flax.traverse_util import flatten_dict
 import safetensors.flax
+import optax
+import distrax
 import assistax
+from assistax.wrappers.baselines import  get_space_dim, LogEnvState, LogWrapper
+from assistax.wrappers.aht import ZooManager, LoadAgentWrapper
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict
@@ -22,174 +34,319 @@ from base64 import urlsafe_b64encode
 from datetime import datetime
 import wandb
 
-# Import your existing baseline utilities
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode,
     _tree_shape, _stack_tree, _concat_tree, _tree_split, upload_eval_data_to_wandb, 
     log_all_metrics, upload_html_visualizations_to_wandb, upload_model_parameters_to_wandb,
-    upload_mujoco_trajectories_to_wandb, upload_mujoco_videos_to_wandb
-)
+    upload_mujoco_trajectories_to_wandb, upload_mujoco_videos_to_wandb, print_memory_stats,
+    )
+
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
 
-# Set MuJoCo and XLA flags for performance
-os.environ.setdefault('MUJOCO_GL', 'egl')
-os.environ['XLA_FLAGS'] = '--xla_gpu_triton_gemm_any=True'
+os.environ['XLA_FLAGS'] = (
+    '--xla_gpu_triton_gemm_any=True ' # As recommended by MJX for better performance on NVIDIA GPUs
+)
 
-# ================================ SWEEP UTILITIES ================================
+# ================================ HYPERPARAMETER SWEEP UTILITIES ================================
 
 def _generate_sweep_axes(rng, config):
-    """Generates hyperparameter configurations based on sweep settings."""
+    """
+    Generate hyperparameter configurations for sweep experiments.
+    
+    Creates arrays of hyperparameter values to sweep over, sampling from
+    log-uniform distributions for learning rate, entropy coefficient, and
+    clipping epsilon based on configuration specifications.
+    
+    Args:
+        rng: Random number generator key
+        config: Configuration dictionary containing sweep specifications
+        
+    Returns:
+        Dictionary containing hyperparameter values and their corresponding
+        vmap axes for efficient parallel execution
+    """
     lr_rng, ent_coef_rng, clip_eps_rng = jax.random.split(rng, 3)
     sweep_config = config["SWEEP"]
-    num_configs = sweep_config["num_configs"]
     
-    # Helper to sample from log-uniform distributions
-    def sample_log_uni(key, bounds):
-        return 10**jax.random.uniform(key, shape=(num_configs,), minval=bounds["min"], maxval=bounds["max"])
+    # Learning rate sweep configuration
+    if sweep_config.get("lr", False):
+        lrs = 10**jax.random.uniform(
+            lr_rng,
+            shape=(sweep_config["num_configs"],),
+            minval=sweep_config["lr"]["min"],
+            maxval=sweep_config["lr"]["max"],
+        )
+        lr_axis = 0
+    else:
+        lrs = config["LR"]
+        lr_axis = None
 
-    lrs = sample_log_uni(lr_rng, sweep_config["lr"]) if sweep_config.get("lr") else config["LR"]
-    ent_coefs = sample_log_uni(ent_coef_rng, sweep_config["ent_coef"]) if sweep_config.get("ent_coef") else config["ENT_COEF"]
-    clip_epss = sample_log_uni(clip_eps_rng, sweep_config["clip_eps"]) if sweep_config.get("clip_eps") else config["CLIP_EPS"]
+    # Entropy coefficient sweep configuration
+    if sweep_config.get("ent_coef", False):
+        ent_coefs = 10**jax.random.uniform(
+            ent_coef_rng,
+            shape=(sweep_config["num_configs"],),
+            minval=sweep_config["ent_coef"]["min"],
+            maxval=sweep_config["ent_coef"]["max"],
+        )
+        ent_coef_axis = 0
+    else:
+        ent_coefs = config["ENT_COEF"]
+        ent_coef_axis = None
+
+    # Clipping epsilon sweep configuration
+    if sweep_config.get("clip_eps", False):
+        clip_epss = 10**jax.random.uniform(
+            clip_eps_rng,
+            shape=(sweep_config["num_configs"],),
+            minval=sweep_config["clip_eps"]["min"],
+            maxval=sweep_config["clip_eps"]["max"],
+        )
+        clip_eps_axis = 0
+    else:
+        clip_epss = config["CLIP_EPS"]
+        clip_eps_axis = None
 
     return {
-        "lr": {"val": lrs, "axis": 0 if sweep_config.get("lr") else None},
-        "ent_coef": {"val": ent_coefs, "axis": 0 if sweep_config.get("ent_coef") else None},
-        "clip_eps": {"val": clip_epss, "axis": 0 if sweep_config.get("clip_eps") else None},
+        "lr": {"val": lrs, "axis": lr_axis},
+        "ent_coef": {"val": ent_coefs, "axis": ent_coef_axis},
+        "clip_eps": {"val": clip_epss, "axis": clip_eps_axis},
     }
 
-# ================================ MAIN SWEEP FUNCTION ================================
+
+# ================================ MAIN SWEEPING FUNCTION ================================
 
 @hydra.main(version_base=None, config_path="config", config_name="ippo_sweep")
 def main(config):
+    """
+    Main orchestration function for IPPO hyperparameter sweeping.
+    
+    This function:
+    1. Creates a unique experiment directory based on configuration hash
+    2. Dynamically imports the correct IPPO variant based on config
+    3. Generates hyperparameter sweep configurations
+    4. Runs training across all hyperparameter combinations using nested vmaps
+    5. Saves all results systematically for later analysis
+    6. Evaluates all trained models and computes performance metrics
+    
+    Args:
+        config: Hydra configuration object containing all hyperparameters
+    """
     # ===== EXPERIMENT ORGANIZATION =====
-    # Generate a unique key for this sweep group
-    config_key = hash(OmegaConf.to_yaml(config)) % 2**62
-    group_id = urlsafe_b64encode(
-        config_key.to_bytes((config_key.bit_length() + 8) // 8, "big", signed=False)
+    # Create unique directory for this sweep configuration
+    config_key = hash(config) % 2**62
+    config_key = urlsafe_b64encode(
+        config_key.to_bytes(
+            (config_key.bit_length() + 8) // 8,
+            "big", signed=False
+        )
     ).decode("utf-8").replace("=", "")
     
-    os.makedirs(group_id, exist_ok=True)
-    print(f"Sweep Group Directory: {group_id}")
+    os.makedirs(config_key, exist_ok=True)
+    print(f"Experiment directory: {config_key}")
     
-    config_dict = OmegaConf.to_container(config, resolve=True)
+    config = OmegaConf.to_container(config, resolve=True)
 
     # ===== DYNAMIC ALGORITHM SELECTION =====
-    match (config_dict["network"]["recurrent"], config_dict["network"]["agent_param_sharing"]):
-        case (False, False): from ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
-        case (False, True):  from ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
-        case (True, False):  from ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
-        case (True, True):   from ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
-
+    # Import the appropriate IPPO variant based on network architecture configuration
+    match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
+        case (False, False):
+            from ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
+            print("Using: Feedforward Networks with No Parameter Sharing")
+            network_type = "FF_NPS"
+        case (False, True):
+            from ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
+            print("Using: Feedforward Networks with Parameter Sharing")
+            network_type = "FF_PS"
+        case (True, False):
+            from ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
+            print("Using: Recurrent Networks with No Parameter Sharing")
+            network_type = "RNN_NPS"
+        case (True, True):
+            from ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
+            print("Using: Recurrent Networks with Parameter Sharing")
+            network_type = "RNN_PS"
+   
     # ===== SWEEP SETUP =====
-    rng = jax.random.PRNGKey(config_dict["SEED"])
+    rng = jax.random.PRNGKey(config["SEED"])
     train_rng, eval_rng, sweep_rng = jax.random.split(rng, 3)
-    train_rngs = jax.random.split(train_rng, config_dict["NUM_SEEDS"])
-    sweep = _generate_sweep_axes(sweep_rng, config_dict)
+    train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
     
-    print(f"Starting parallel training for {config_dict['SWEEP']['num_configs']} configurations...")
-
-    # ===== TRAINING EXECUTION (PARALLEL) =====
-    with jax.disable_jit(config_dict["DISABLE_JIT"]):
+    # Generate hyperparameter sweep configurations
+    sweep = _generate_sweep_axes(sweep_rng, config)
+    
+    print(f"Hyperparameter sweep configurations:")
+    print(f"  Learning rates: {sweep['lr']['val'] if sweep['lr']['axis'] is not None else 'Fixed'}")
+    print(f"  Entropy coefficients: {sweep['ent_coef']['val'] if sweep['ent_coef']['axis'] is not None else 'Fixed'}")
+    print(f"  Clipping epsilons: {sweep['clip_eps']['val'] if sweep['clip_eps']['axis'] is not None else 'Fixed'}")
+    print(f"  Seeds: {config['NUM_SEEDS']}")
+    
+    # ===== TRAINING EXECUTION =====
+    print("Starting hyperparameter sweep training...")
+    with jax.disable_jit(config["DISABLE_JIT"]):
         train_jit = jax.jit(
-            make_train(config_dict, save_train_state=True),
-            device=jax.devices()[config_dict["DEVICE"]]
+            make_train(config, save_train_state=True),
+            device=jax.devices()[config["DEVICE"]]
         )
         
-        # Nested VMAP: [Configs, Seeds]
-        # Inner vmap: over seeds (axis 0)
-        # Outer vmap: over sweep axes defined in _generate_sweep_axes
+        # Execute nested vmap for hyperparameter sweep
+        # Outer vmap: across hyperparameter configurations
+        # Inner vmap: across random seeds
         out = jax.vmap(
-            jax.vmap(train_jit, in_axes=(0, None, None, None)),
-            in_axes=(None, sweep["lr"]["axis"], sweep["ent_coef"]["axis"], sweep["clip_eps"]["axis"])
-        )(train_rngs, sweep["lr"]["val"], sweep["ent_coef"]["val"], sweep["clip_eps"]["val"])
+            jax.vmap(
+                train_jit,
+                in_axes=(0, None, None, None)  # Vmap over seeds
+            ),
+            in_axes=(
+                None,  # Seeds (broadcast to all hyperparameter configs)
+                sweep["lr"]["axis"],        # Learning rate axis
+                sweep["ent_coef"]["axis"],  # Entropy coefficient axis
+                sweep["clip_eps"]["axis"],  # Clipping epsilon axis
+            )
+        )(
+            train_rngs,
+            sweep["lr"]["val"],
+            sweep["ent_coef"]["val"],
+            sweep["clip_eps"]["val"],
+        )
 
-        # Local save for backup
+        # ===== SAVE TRAINING RESULTS =====
+        print("Saving training metrics...")
+        
+        # Save training metrics (excluding large training states)
+        if config["PRINT_MEMORY_STATS"]:
+            print_memory_stats(f"IPPO Sweep: Training Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
+       
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"]) # this could be inefficient memory wise
         EXCLUDED_METRICS = ["train_state"]
-        jnp.save(f"{group_id}/metrics.npy", {
+        jnp.save(f"{config_key}/metrics.npy", {
             key: val
             for key, val in out["metrics"].items()
             if key not in EXCLUDED_METRICS
             },
             allow_pickle=True
         )
-
-    # ===== EVALUATION EXECUTION (PARALLEL) =====
-    print("Evaluating all trained models...")
-    all_train_states = out["metrics"]["train_state"]
-    # Capture batch structure (Configs, Seeds, Updates)
-    batch_dims = jax.tree.leaves(_tree_shape(all_train_states.params))[:3]
-    total_models = int(jnp.prod(jnp.array(batch_dims)))
-    
-    eval_env, run_eval = make_evaluation(config_dict)
-    eval_log_config = EvalInfoLogConfig(done=True, reward=True, env_metrics=True)
-    eval_jit = jax.jit(run_eval, static_argnames=["log_eval_info"])
-
-    # Flatten the first 3 dims (Configs, Seeds, Updates) for sequential batch evaluation
-    flat_ts = jax.tree.map(lambda x: x.reshape((total_models, *x.shape[3:])), all_train_states)
-    
-    n_sequential_evals = int(jnp.ceil(
-        config_dict["NUM_EVAL_EPISODES"] * total_models / config_dict["GPU_ENV_CAPACITY"]
-    ))
-    split_ts = _tree_split(flat_ts, n_sequential_evals)
-    
-    eval_batches = []
-    for ts_batch in tqdm(split_ts, desc="Evaluation Batches"):
-        res = jax.vmap(eval_jit, in_axes=(None, 0, None))(eval_rng, ts_batch, eval_log_config)
-        eval_batches.append(res)
-    
-    # Combine and reshape back to (Configs, Seeds, Updates, ...)
-    evals = _concat_tree(eval_batches)
-    evals = jax.tree.map(lambda x: x.reshape((*batch_dims, *x.shape[1:])), evals)
-
-    # ===== LOGGING TO WANDB (ITERATIVE) =====
-    # We iterate over the first dimension (Configs) to create unique runs
-    num_configs = batch_dims[0]
-    print(f"\nProcessing {num_configs} configurations for WANDB logging...")
-    
-    env = assistax.make(config_dict["ENV_NAME"], **config_dict["ENV_KWARGS"]) # It's likely very annoying memory overhead to be creating these objects all the time for making train, making evaluation etc. So should perhaps rething that. 
-
-    for h_idx in range(num_configs):
-        # Slice the data to get (Seeds, Updates, ...) for this config
-        h_out = jax.tree.map(lambda x: x[h_idx], out)
-        h_evals = jax.tree.map(lambda x: x[h_idx], evals)
         
-        # Determine specific hparams for metadata
-        cur_lr = float(sweep["lr"]["val"][h_idx]) if sweep["lr"]["axis"] is not None else config_dict["LR"]
-        cur_ent = float(sweep["ent_coef"]["val"][h_idx]) if sweep["ent_coef"]["axis"] is not None else config_dict["ENT_COEF"]
-        
-        # Standard IPPO tag creation for individual run naming
-        run_name = f"hp_{h_idx}_lr{cur_lr:.1e}_ent{cur_ent:.1e}"
-        
-        run = wandb.init(
-            entity=config_dict["ENTITY"],
-            project=config_dict["PROJECT"],
-            group=group_id, # Shared group ID for the sweep
-            name=run_name,
-            config={**config_dict, "current_lr": cur_lr, "current_ent": cur_ent},
-            reinit=True,
-            mode=config_dict["WANDB_MODE"],
-            tags=config_dict.get("EXP_TAGS", []) + ["sweep"]
+        # Save hyperparameter configurations for analysis
+        print("Saving hyperparameter configurations...")
+        jnp.save(f"{config_key}/hparams.npy", {
+            "lr": sweep["lr"]["val"],
+            "ent_coef": sweep["ent_coef"]["val"],
+            "clip_eps": sweep["clip_eps"]["val"],
+            "num_steps": config["NUM_STEPS"],
+            "num_envs": config["NUM_ENVS"],
+            "update_epochs": config["UPDATE_EPOCHS"],
+            "num_minibatches": config["NUM_MINIBATCHES"],
+            }
         )
 
-        # Log metrics using your existing utility
-        # This will now compute mean/std across the Seeds dimension correctly
-        log_all_metrics(config_dict, h_out, h_evals, env)
+        # ===== SAVE MODEL PARAMETERS =====
+        # Save all training states (for analysis across training)
         
-        # Optional: Save evaluation data NPZ artifacts
-        if config_dict.get("UPLOAD_EVAL_DATA", True):
-            upload_eval_data_to_wandb(h_evals, config_dict, run)
+        all_train_states = out["metrics"]["train_state"]
+        final_train_state = out["runner_state"].train_state
+
+        if config["SAVE_ALL_TRAIN_STATES"]: 
+            print("Saving model parameters...")
             
-        # Optional: Save parameters (usually excessive for sweeps, but available)
-        if config_dict.get("SAVE_PARAMS", False):
-            upload_model_parameters_to_wandb(
-                h_out["metrics"]["train_state"], 
-                h_out["runner_state"].train_state, 
-                config_dict, env, run
+            safetensors.flax.save_file(
+                flatten_dict(all_train_states.params, sep='/'),
+                f"{config_key}/all_params.safetensors"
             )
 
-        run.finish()
+        # Save final parameters (different format for parameter sharing vs independent)
+        if config["SAVE_FINAL_TRAIN_STATE"]:
+            
+            if not config["network"]["agent_param_sharing"]:
+                # For independent parameters: split by agent
+                # Note: Different axis manipulation for 3D sweep structure (hyperparams x seeds x agents)
+                split_params = _unstack_tree(
+                    jax.tree.map(lambda x: jnp.moveaxis(x, 2, 0), final_train_state.params)
+                )
+                for agent, params in zip(env.agents, split_params):
+                    safetensors.flax.save_file(
+                        flatten_dict(params, sep='/'),
+                        f"{config_key}/{agent}.safetensors",
+                    )
 
-    print(f"\nHyperparameter sweep completed! View results under Group ID: {group_id}")
+        # ===== EVALUATION SETUP =====
+        print("Setting up evaluation...")
+        
+        # Calculate evaluation batching for memory efficiency
+        # Note: 3D batch structure for sweep (hyperparams x seeds x envs)
+        batch_dims = jax.tree.leaves(_tree_shape(all_train_states.params))[:3]
+        n_sequential_evals = int(jnp.ceil(
+            config["NUM_EVAL_EPISODES"] * jnp.prod(jnp.array(batch_dims))
+            / config["GPU_ENV_CAPACITY"]
+        ))
+        
+        def _flatten_and_split_trainstate(train_state):
+            """
+            Flatten training states across all batch dimensions and split for sequential evaluation.
+            
+            For sweep experiments, we have 3D batch structure (hyperparams x seeds x envs)
+            that needs to be flattened for memory-efficient evaluation.
+            """
+            flat_trainstate = jax.tree.map(
+                lambda x: x.reshape((x.shape[0] * x.shape[1] * x.shape[2], *x.shape[3:])),
+                train_state
+            )
+            return _tree_split(flat_trainstate, n_sequential_evals)
+        
+        split_trainstate = jax.jit(_flatten_and_split_trainstate)(all_train_states)
+
+        # ===== EVALUATION EXECUTION =====
+        print("Running evaluation...")
+        eval_env, run_eval = make_evaluation(config)
+        
+        # Configure what information to log during evaluation
+        eval_log_config = EvalInfoLogConfig(
+            env_state=False,
+            done=True,
+            action=False,
+            value=False,
+            reward=True,
+            log_prob=False,
+            obs=False,
+            info=False,
+            avail_actions=False,
+        )
+        
+        # JIT compile evaluation functions for efficiency
+        eval_jit = jax.jit(
+            run_eval,
+            static_argnames=["log_eval_info"],
+        )
+        eval_vmap = jax.vmap(eval_jit, in_axes=(None, 0, None))
+         
+        if config["PRINT_MEMORY_STATS"]:
+            print_memory_stats(f"IPPO Sweep: Pre-Eval Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
+        # Run evaluation in batches for memory efficiency
+        evals = _concat_tree([
+            eval_vmap(eval_rng, ts, eval_log_config)
+            for ts in tqdm(split_trainstate, desc="Evaluation batches")
+        ])
+        
+        # Reshape evaluation results back to original 3D batch structure
+        evals = jax.tree.map(
+            lambda x: x.reshape((*batch_dims, *x.shape[1:])),
+            evals
+        )
+
+        # ===== COMPUTE PERFORMANCE METRICS =====
+        print("Computing performance metrics...")
+        first_episode_returns = _compute_episode_returns(evals)
+        mean_episode_returns = first_episode_returns["__all__"].mean(axis=-1)
+
+        # Save evaluation results
+        jnp.save(f"{config_key}/returns.npy", mean_episode_returns)
+        
+        print("\nHyperparameter sweep completed successfully!")
+
+        if config["PRINT_MEMORY_STATS"]:
+            print_memory_stats(f"IPPO Sweep: Final Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
+
+
 
 if __name__ == "__main__":
     main()
