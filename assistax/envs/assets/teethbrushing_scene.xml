@@ -150,11 +150,11 @@
       <include file="teethbrushing_assets/humanoid_bare.xml"/>
       <freejoint/>
     </body>
-    <body name="table" pos="0.65 0 0">
+    <body name="table" pos="0.9 0 0">
         <geom type="cylinder" size="0.05 0.15" pos="0 0 0.15" rgba="0.2 0.2 0.2 1" contype="0" conaffinity="0"/>
         <geom type="box" size="0.15 0.15 0.02" pos="0 0 0.3" rgba="0.6 0.4 0.2 1" contype="0" conaffinity="0"/>
     </body>
-    <body childclass="panda" name="panda_container" pos="0.65 0 0.32" euler="0 0 3.14159">
+    <body childclass="panda" name="panda_container" pos="0.9 0 0.32" euler="0 0 3.14159">
       <include file="teethbrushing_assets/panda_bare.xml"/>
     </body>
   </worldbody>
@@ -195,7 +195,8 @@
   </equality>
 
   <keyframe>
-    <key name="init" qpos='0.011 0.187 -0.420 0.7 0.073 -0.077 0.707 0 -0.649 0.007 -0.043 -0.018 -0.523 -1.993 -0.014 0 -0.531 -1.993 0.509 -0.427 -0.400 -0.474 0.427 -0.400 0 0 0 0 0 0 0  '/>
+    <key name="init" qpos="0.011 0.187 -0.42 0.7 0.073 -0.077 0.707 0 -0.077 0 -0.649 0.007 -0.043 -0.018 -0.523 -1.993 -0.014 0 -0.531 -1.993 0.509 -0.433635 -0.427 -0.400 0.427 -0.400 0 0 0 0 0 0 0"/>
   </keyframe>
+
 
 </mujoco>

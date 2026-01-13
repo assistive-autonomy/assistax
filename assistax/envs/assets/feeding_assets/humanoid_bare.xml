@@ -56,7 +56,7 @@
         <camera pos="0 0 0"/>
       </body>
     </body>
-    <body childclass="no-c_human" name="left_upper_arm" pos="0 0.17 0.06">
+    <body childclass="c_human_upper-body" name="left_upper_arm" pos="0 0.17 0.06">
       <joint armature="0.0068" axis="2 -1 1" name="left_shoulder1" pos="0 0 0" range="-1.047197 1.483529" stiffness="1" type="hinge"/>
       <joint armature="0.0051" axis="0 1 1" name="left_shoulder2" pos="0 0 0" range="-1.047197 1.483529" stiffness="1" type="hinge"/>
       <geom fromto="0 0 0 .16 .16 -.16" name="left_uarm1" size="0.04 0.16" type="capsule"/>

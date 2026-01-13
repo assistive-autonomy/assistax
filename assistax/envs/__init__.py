@@ -25,6 +25,7 @@ from assistax.envs import armmanipulation
 from assistax.envs import pushcoop
 from assistax.envs import handover
 from assistax.envs import feeding
+from assistax.envs.teethbrushing import TeethBrushing
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from assistax.wrappers import training
 
@@ -35,6 +36,7 @@ _envs = {
     "pushcoop": pushcoop.PushCoop,
     "handover": handover.CooperativeHandover,
     "feeding": feeding.Feeding,
+    "teethbrushing": TeethBrushing,
 }
 
 def create(

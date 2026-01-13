@@ -46,6 +46,10 @@ _agent_action_mapping = {
         "robot": jnp.array([19, 20, 21, 22, 23, 24, 25]),
         "human": jnp.array([0, 1]), # head 
     },
+    "teethbrushing": {
+        "robot": jnp.array([19, 20, 21, 22, 23, 24, 25]),
+        "human": jnp.array([0, 1]), # head 
+    },
 }
 
 
@@ -91,7 +95,12 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
         "robot": [(0,21)],
         "human": [(22, 54)],
         "global": [(0,54)],
-    }
+    },
+    "teethbrushing": {
+        "robot": [(0,21)],
+        "human": [(22, 54)],
+        "global": [(0,54)],
+    },
 }
 
 _agent_observation_mapping = {
@@ -324,3 +333,7 @@ class CooperativeHandover(MABraxEnv):
 class Feeding(MABraxEnv):
     def __init__(self, **kwargs):
         super().__init__("feeding", **kwargs)
+
+class TeethBrushing(MABraxEnv):
+    def __init__(self, **kwargs):
+        super().__init__("teethbrushing", **kwargs)

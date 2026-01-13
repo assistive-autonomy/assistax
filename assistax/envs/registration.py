@@ -10,6 +10,7 @@ from assistax.envs.base_env import (
     PushCoop,
     CooperativeHandover,
     Feeding,
+    TeethBrushing,
 )
 
 def make(env_id: str, **env_kwargs):
@@ -28,6 +29,8 @@ def make(env_id: str, **env_kwargs):
         env = CooperativeHandover(**env_kwargs)
     elif env_id == "feeding":
         env = Feeding(**env_kwargs)
+    elif env_id == "teethbrushing":
+        env = TeethBrushing(**env_kwargs)
 
     return env
    
@@ -38,4 +41,5 @@ registered_envs = [
     "pushcoop",
     "handover",
     "feeding",
+    "teethbrushing",
 ]
