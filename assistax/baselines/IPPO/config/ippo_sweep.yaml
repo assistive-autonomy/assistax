@@ -61,8 +61,6 @@ SWEEP:
 SAVE_ALL_TRAIN_STATES: false
 SAVE_FINAL_TRAIN_STATE: false
 
-
-
 ENTITY: "lh-from-kb" 
 PROJECT: "assistax-dev"
 WANDB_MODE: "online" # "disabled" or "online"

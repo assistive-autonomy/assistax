@@ -18,6 +18,8 @@ import os
 import functools
 import mujoco
 import mediapy as media 
+import pandas as pd
+from datetime import datetime
 
 # Tree Utilities 
 
@@ -1079,3 +1081,35 @@ def print_memory_stats(label=""):
         print(f"All Stats: {stats}")
     except Exception:
         print("--- MEMORY_STATS_PEAK: 0.0000 GB ---")
+
+def log_memory_to_csv(config, csv_path="", filename="memory_benchmark.csv"):
+    try:
+        # 1. Gather stats
+        jax.block_until_ready(None) # Ensure GPU is finished
+        device = jax.local_devices()[0]
+        stats = device.memory_stats()
+        peak_gb = stats['peak_bytes_in_use'] / 1e9
+        
+        # 2. Prepare the data row
+        data = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "algorithm": config.ALG,
+            "network": config.network,
+            "env_name": config.ENV_NAME,
+            "num_configs": config.SWEEP.num_configs,
+            "num_seeds": config.NUM_SEEDS,
+            "total_parallel": config.SWEEP.num_configs * config.NUM_SEEDS,
+            "peak_vram_gb": round(peak_gb, 4)
+        }
+        
+        # 3. Append to CSV (thread-safe enough for local machine)
+        df = pd.DataFrame([data])
+        full_path = os.path.join(csv_path, filename) 
+        file_exists = os.path.isfile(full_path)
+        df.to_csv(csv_path, mode='a', index=False, header=not file_exists)
+        
+        print(f"--> Memory benchmark saved to {csv_path}")
+        
+    except Exception as e:
+        print(f"Failed to log memory: {e}")
+

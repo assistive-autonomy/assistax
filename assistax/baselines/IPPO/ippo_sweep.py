@@ -39,6 +39,7 @@ from assistax.baselines.utils import (
     _tree_shape, _stack_tree, _concat_tree, _tree_split, upload_eval_data_to_wandb, 
     log_all_metrics, upload_html_visualizations_to_wandb, upload_model_parameters_to_wandb,
     upload_mujoco_trajectories_to_wandb, upload_mujoco_videos_to_wandb, print_memory_stats,
+    log_memory_to_csv,
     )
 
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
@@ -345,6 +346,8 @@ def main(config):
 
         if config["PRINT_MEMORY_STATS"]:
             print_memory_stats(f"IPPO Sweep: Final Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
+            log_memory_to_csv(config, "/home/leo/assistive-autonomy-github/assistax/memory_stats", f"{config['ALG']}_memory_stats.csv")
+            
 
 
 
