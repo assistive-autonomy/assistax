@@ -135,7 +135,6 @@ def main(config):
     """
     # ===== EXPERIMENT ORGANIZATION =====
     # Create unique directory for this sweep configuration
-    print("Main Starting succesfully") 
     config_key = hash(config) % 2**62
     config_key = urlsafe_b64encode(
         config_key.to_bytes(
@@ -168,7 +167,6 @@ def main(config):
             from ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with Parameter Sharing")
             network_type = "RNN_PS"
-    print()
     # ===== SWEEP SETUP =====
     rng = jax.random.PRNGKey(config["SEED"])
     train_rng, eval_rng, sweep_rng = jax.random.split(rng, 3)
