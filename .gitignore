@@ -54,6 +54,8 @@ config/
 slurm/
 */slurm/
 
+*.out
+
 MUJOCO_LOG.TXT
 MUJOCO_LOG.txt
 

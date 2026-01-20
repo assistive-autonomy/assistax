@@ -135,6 +135,7 @@ def main(config):
     """
     # ===== EXPERIMENT ORGANIZATION =====
     # Create unique directory for this sweep configuration
+    print("Main Starting succesfully") 
     config_key = hash(config) % 2**62
     config_key = urlsafe_b64encode(
         config_key.to_bytes(
@@ -167,7 +168,7 @@ def main(config):
             from ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with Parameter Sharing")
             network_type = "RNN_PS"
-   
+    print()
     # ===== SWEEP SETUP =====
     rng = jax.random.PRNGKey(config["SEED"])
     train_rng, eval_rng, sweep_rng = jax.random.split(rng, 3)
@@ -215,8 +216,8 @@ def main(config):
         print("Saving training metrics...")
         
         # Save training metrics (excluding large training states)
-        if config["PRINT_MEMORY_STATS"]:
-            print_memory_stats(f"IPPO Sweep: Training Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
+        #if config["PRINT_MEMORY_STATS"]:
+        #    print_memory_stats(f"IPPO Sweep: Training Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
        
         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"]) # this could be inefficient memory wise
         EXCLUDED_METRICS = ["train_state"]
@@ -320,8 +321,8 @@ def main(config):
         )
         eval_vmap = jax.vmap(eval_jit, in_axes=(None, 0, None))
          
-        if config["PRINT_MEMORY_STATS"]:
-            print_memory_stats(f"IPPO Sweep: Pre-Eval Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
+        #if config["PRINT_MEMORY_STATS"]:
+        #    print_memory_stats(f"IPPO Sweep: Pre-Eval Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
         # Run evaluation in batches for memory efficiency
         evals = _concat_tree([
             eval_vmap(eval_rng, ts, eval_log_config)

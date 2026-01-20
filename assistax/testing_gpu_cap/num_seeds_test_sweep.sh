@@ -2,13 +2,15 @@
 
 cd /home/s2618563/assistax
 # --- CONFIGURATION ---
-FIXED_SEEDS=12
-START_CONFIGS=56   # Start high (e.g., 64 or 128)
+FIXED_SEEDS=4
+START_CONFIGS=18   # Start high (e.g., 64 or 128)
 MIN_CONFIGS=1      # Floor
-DECREMENT=4        # How many configs to drop per failure
+DECREMENT=2        # How many configs to drop per failure
 PYTHON_SCRIPT="assistax/baselines/IPPO/ippo_sweep_old.py"
+NETWORK=rnn_nps
+ENV_NAME=scratchitch
 
-echo "Starting Pareto Frontier search..."
+echo "Starting Pareto Frontier search... $NETWORK"
 echo "Targeting $FIXED_SEEDS seeds. Adjusting num_configs..."
 
 current_configs=$START_CONFIGS
@@ -21,24 +23,25 @@ while [ $current_configs -ge $MIN_CONFIGS ]; do
     # Run the sweep with DISABLE_JIT=False for true memory testing
     # We use a very small TOTAL_TIMESTEPS so we only test the ALLOCATION phase
     uv run python $PYTHON_SCRIPT -cn ippo_sweep -m \
-        SWEEP.num_configs=$current_configs \
+        ENV_NAME=$ENV_NAME \
+	network=$NETWORK \
+	SWEEP.num_configs=$current_configs \
         NUM_SEEDS=$FIXED_SEEDS \
         TOTAL_TIMESTEPS=4e7 \
         WANDB_MODE=disabled \
+	NUM_ENVS=1024 \
         +DRY_RUN=True
     
     # Check if the last command succeeded
     if [ $? -eq 0 ]; then
         echo ""
         echo "SUCCESS! Your GPU can handle $current_configs configs with $FIXED_SEEDS seeds."
-        echo "Recommended Max Setting: SWEEP.num_configs=$current_configs"
-        exit 0
     else
         echo "FAILED: Out of Memory or Crash. Dropping config count..."
         current_configs=$((current_configs - DECREMENT))
         
         # Give the GPU a second to clear buffers
-        sleep 2
+        sleep 30 
     fi
 done
 
