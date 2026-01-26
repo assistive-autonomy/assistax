@@ -1,0 +1,30 @@
+name: Docker Image CI
+on:
+  push:
+    branches: [ "dev-main" ]
+  pull_request:
+    branches: [ "dev-main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Log in to Docker Hub
+      run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+
+    - name: Extract version from pyproject.toml
+      id: version
+      run: |
+        VERSION=$(grep 'version' pyproject.toml | cut -d '"' -f 2)
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Build the Docker image
+      run: docker build . --file Dockerfile --tag ${{ secrets.DOCKERHUB_USERNAME }}/assistax:${{ steps.version.outputs.VERSION }}
+
+    - name: Tag the Docker image as latest
+      run: docker tag ${{ secrets.DOCKERHUB_USERNAME }}/assistax:${{ steps.version.outputs.VERSION }} ${{ secrets.DOCKERHUB_USERNAME }}/assistax:latest
+
+    - name: Push the Docker image
+      run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/assistax --all-tags
