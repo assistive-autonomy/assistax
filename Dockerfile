@@ -21,7 +21,7 @@ ENV PATH="/root/.local/bin/:$PATH"
 RUN curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64' --output vscode_cli.tar.gz
 RUN tar -xf vscode_cli.tar.gz
 
-# copy above docker folder to /plancraft and set working directory
+# copy above docker folder to /plancraft and set the working directory
 COPY .. /assistax
 WORKDIR /assistax
 
