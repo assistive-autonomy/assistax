@@ -260,7 +260,7 @@ class Feeding(PipelineEnv):
         r_pour = jp.dot(current_target_vec, spoon_up_world)
         
         # Spoon feeding final orientation reward 
-        r_orientation = 1.0 * r_pour + (0.3 + 0.7 * proximity_signal) * r_aim
+        r_orientation = 1.0 * r_pour + (0.3 + 0.7 * proximity_signal) * r_aim # What this this reward exactly.
 
         # 3. Velocity Reward
         spoon_vel = (
@@ -286,7 +286,7 @@ class Feeding(PipelineEnv):
         
         # We square the difference to make a smooth Bell Curve peak at the target speed
         speed_error = current_speed - current_target_speed
-        r_velocity = jp.exp(-jp.square(speed_error) / (vel_sigma**2))
+        r_velocity = jp.exp(-jp.square(speed_error) / (vel_sigma**2)) # this is max 1 I believe i.e. Gaussian style reward
         
         # 4. Contact with mouth reward
         right_side_spoon_force = self._get_force_on_tool(pipeline_state, self.SPOON_RSIDE_CONTACT_ID)

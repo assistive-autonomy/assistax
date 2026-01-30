@@ -266,10 +266,25 @@ class DisabilityWrapper(Wrapper):
         tremor_action = jp.where(self.disability_mask, tremor_action, action)
         return tremor_action
     
+
 class PreferenceRewardWrapper(Wrapper):
-    """Simple wrapper that adds preference-based rewards using variables from state.info.
+    """Wrapper with normalized preference rewards.
     
-    Works with any environment that exposes the needed variables in state.info.
+    Supports three normalization modes:
+    - "budget": Max positive reward = reward_budget, weights determine relative proportions
+    - "fraction": Each component gets its fraction of total weight * reward_budget
+    - "none": Original behavior, raw weights applied directly
+    
+    Args:
+        env: The environment to wrap
+        preference_rewards: Config dict containing:
+            - preference_weights: Dict of reward component weights
+            - preference_ranges: Dict of preferred ranges for each metric
+            - overall_weight: Global scaling factor
+            - reward_budget: Max total preference reward per step (for normalized modes)
+            - normalization_mode: One of "budget", "fraction", "none"
+        touch_threshold: Threshold for detecting new contacts
+        variable_names: Mapping of variable names to keys in state.info
     """
     
     def __init__(
@@ -281,57 +296,85 @@ class PreferenceRewardWrapper(Wrapper):
     ):
         super().__init__(env)
         
+        preference_rewards = preference_rewards or {}
+        
+        # Normalization settings
+        self.reward_budget = preference_rewards.get("reward_budget", 1.0)
+        self.normalization_mode = preference_rewards.get("normalization_mode", "budget")
+        
         # Default preference weights
-        self.preference_weights = preference_rewards["preference_weights"] or {
+        self.preference_weights = preference_rewards.get("preference_weights", {
             'speed_preference': 1.0,
             'force_preference': 1.0, 
             'action_efficiency': 0.5,
             'touch_penalty': -0.1,
+        })
+        
+        # Separate positive and negative weights for proper normalization
+        self._positive_weights = {
+            k: v for k, v in self.preference_weights.items() if v > 0
         }
+        self._negative_weights = {
+            k: v for k, v in self.preference_weights.items() if v < 0
+        }
+        
+        # Compute normalization factors
+        self._positive_weight_sum = sum(self._positive_weights.values())
+        self._negative_weight_sum = sum(abs(v) for v in self._negative_weights.values())
+        
+        # Precompute normalization factor for efficiency
+        if self.normalization_mode == "budget":
+            self._norm_factor = self.reward_budget / self._positive_weight_sum if self._positive_weight_sum > 0 else 1.0
+        elif self.normalization_mode == "fraction":
+            self._total_weight = self._positive_weight_sum + self._negative_weight_sum
+        else:
+            self._norm_factor = 1.0
         
         # Default preference ranges
-        self.preference_ranges = preference_rewards["preference_ranges"] or {
-            'speed_range': (0.05, 0.2),   # Good scratching speed range
-            'force_range': (1.0, 5.0),   # Good scratching force range  
+        self.preference_ranges = preference_rewards.get("preference_ranges", {
+            'speed_range': (0.05, 0.2),
+            'force_range': (1.0, 5.0),
             'max_action_magnitude': 1.0,
-        }
+        })
+        
+        # Ensure ranges are tuples
+        if isinstance(self.preference_ranges.get('speed_range'), list):
+            self.preference_ranges['speed_range'] = tuple(self.preference_ranges['speed_range'])
+        if isinstance(self.preference_ranges.get('force_range'), list):
+            self.preference_ranges['force_range'] = tuple(self.preference_ranges['force_range'])
 
         self.pref_rew_weight = preference_rewards.get("overall_weight", 1.0)
+        self.touch_threshold = preference_rewards.get("touch_threshold", touch_threshold)
         
-        # Touch detection threshold
-        self.touch_threshold = touch_threshold
-        
-        # Variable names to look for in state.info (allows customization for different environments)
-        self.variable_names = variable_names or {
+        # Variable names to look for in state.info
+        self.variable_names = variable_names or preference_rewards.get("variable_names", {
             'speed': 'ee_speed',
             'force': 'ee_force', 
             'action_magnitude': 'action_magnitude',
-        }
+        })
         
     def reset(self, rng: jax.Array) -> State:
         state = self.env.reset(rng)
-        # Initialize preference tracking
         
+        # Initialize preference tracking
         state.info.update(
             preference_tracking={
-                'cumulative_touches': 0.0,
-                'last_contact_force': 0.0,
+                'cumulative_touches': jp.array(0.0),
+                'last_contact_force': jp.array(0.0),
             },
-            #preference_metrics={
-            #    'speed_pref_reward': 0.0,
-            #    'force_pref_reward': 0.0,
-            #    'action_eff_reward': 0.0,
-            #    'touch_penalty_reward': 0.0,
-            #    'total_pref_reward': 0.0,
-            #}
         )
 
+        # Initialize metrics for logging
         state.metrics.update(
-            speed_pref_reward = jp.array(0.0),
-            force_pref_reward = jp.array(0.0),
-            action_eff_reward = jp.array(0.0),
-            touch_penalty_reward = jp.array(0.0),
-            total_pref_reward = jp.array(0.0),
+            speed_pref_reward=jp.array(0.0),
+            force_pref_reward=jp.array(0.0),
+            action_eff_reward=jp.array(0.0),
+            touch_penalty_reward=jp.array(0.0),
+            total_pref_reward=jp.array(0.0),
+            # Also track raw values for debugging
+            pref_raw_speed=jp.array(0.0),
+            pref_raw_force=jp.array(0.0),
+            pref_raw_action_mag=jp.array(0.0),
         )
         return state
     
@@ -340,10 +383,13 @@ class PreferenceRewardWrapper(Wrapper):
         next_state = self.env.step(rng, state, action)
         
         # Extract variables from state.info (computed by the environment)
-        speed = next_state.info.get(self.variable_names['speed'], 0.0)
-        force = next_state.info.get(self.variable_names['force'], 0.0)
-        action_magnitude = next_state.info.get(self.variable_names['action_magnitude'], jp.linalg.norm(action))
-        contact_forces = force # At least in the case of ScratchItch might need to be adjusted based on the environment
+        speed = next_state.info.get(self.variable_names['speed'], jp.array(0.0))
+        force = next_state.info.get(self.variable_names['force'], jp.array(0.0))
+        action_magnitude = next_state.info.get(
+            self.variable_names.get('action_magnitude', 'action_magnitude'), 
+            jp.linalg.norm(action)
+        )
+        contact_forces = force  # May need adjustment based on environment
         
         # Compute preference rewards
         preference_rewards = self._compute_preference_rewards(
@@ -352,53 +398,83 @@ class PreferenceRewardWrapper(Wrapper):
         
         # Update tracking
         updated_tracking = self._update_tracking(contact_forces, state)
+
+        # Sum all preference rewards
+        total_preference_reward = (
+            preference_rewards['speed_pref_reward'] +
+            preference_rewards['force_pref_reward'] +
+            preference_rewards['action_eff_reward'] +
+            preference_rewards['touch_penalty_reward']
+        )
         
         # Add preference reward to original reward
-        total_preference_reward = sum(preference_rewards.values())
-        augmented_reward = next_state.reward + self.pref_rew_weight*total_preference_reward
+        augmented_reward = next_state.reward + self.pref_rew_weight * total_preference_reward
 
-        preference_rewards.update(
-            total_pref_reward=total_preference_reward
-        )
-
-        # TODO: add tracking to metrics so we can the influence of preference_rewards
-
+        # Update info with tracking
         next_state.info.update(
             preference_tracking=updated_tracking,
         )
 
-        next_state.metrics.update(preference_rewards)
+        # Update metrics for logging
+        next_state.metrics.update(
+            speed_pref_reward=preference_rewards['speed_pref_reward'],
+            force_pref_reward=preference_rewards['force_pref_reward'],
+            action_eff_reward=preference_rewards['action_eff_reward'],
+            touch_penalty_reward=preference_rewards['touch_penalty_reward'],
+            total_pref_reward=total_preference_reward,
+            # Raw values for debugging
+            pref_raw_speed=speed,
+            pref_raw_force=force,
+            pref_raw_action_mag=action_magnitude,
+        )
 
         return next_state.replace(reward=augmented_reward)
     
     def _compute_preference_rewards(
-        self, speed: float, force: float, action_magnitude: float, 
+        self, speed: jax.Array, force: jax.Array, action_magnitude: jax.Array, 
         contact_forces: jax.Array, prev_state: State
-    ) -> Dict[str, float | jax.Array]:
-        """Compute individual preference rewards."""
+    ) -> Dict[str, jax.Array]:
+        """Compute normalized preference rewards."""
         
-        # 1. Speed preference: reward for staying in preferred range
+        # Raw preference values (all in [0, 1] for positive, 0 or 1 for penalty)
         speed_pref = self._gaussian_preference(speed, self.preference_ranges['speed_range'])
-        
-        # 2. Force preference: reward for appropriate force application
         force_pref = self._gaussian_preference(force, self.preference_ranges['force_range'])
-        
-        # 3. Action efficiency: reward smaller actions
         action_eff = jp.exp(-action_magnitude / self.preference_ranges['max_action_magnitude'])
-        
-        # 4. Touch penalty: penalize new touches
         touch_penalty = self._compute_touch_penalty(contact_forces, prev_state)
         
-        # IMPORTANT: Always return the same keys in the same order
-        return {
-            'speed_pref_reward': self.preference_weights['speed_preference'] * speed_pref,
-            'force_pref_reward': self.preference_weights['force_preference'] * force_pref,
-            'action_eff_reward': self.preference_weights['action_efficiency'] * action_eff,
-            'touch_penalty_reward': self.preference_weights['touch_penalty'] * touch_penalty,
-        }
+        if self.normalization_mode == "budget":
+            # Normalize so max positive reward = reward_budget
+            # Each component contributes proportionally to its weight
+            return {
+                'speed_pref_reward': self._norm_factor * self.preference_weights['speed_preference'] * speed_pref,
+                'force_pref_reward': self._norm_factor * self.preference_weights['force_preference'] * force_pref,
+                'action_eff_reward': self._norm_factor * self.preference_weights['action_efficiency'] * action_eff,
+                'touch_penalty_reward': self._norm_factor * self.preference_weights['touch_penalty'] * touch_penalty,
+            }
+            
+        elif self.normalization_mode == "fraction":
+            # Each component normalized to its fraction of total weight
+            return {
+                'speed_pref_reward': (self.preference_weights['speed_preference'] / self._total_weight) * self.reward_budget * speed_pref,
+                'force_pref_reward': (self.preference_weights['force_preference'] / self._total_weight) * self.reward_budget * force_pref,
+                'action_eff_reward': (self.preference_weights['action_efficiency'] / self._total_weight) * self.reward_budget * action_eff,
+                'touch_penalty_reward': (self.preference_weights['touch_penalty'] / self._total_weight) * self.reward_budget * touch_penalty,
+            }
+        
+        else:  # "none" - original behavior
+            return {
+                'speed_pref_reward': self.preference_weights['speed_preference'] * speed_pref,
+                'force_pref_reward': self.preference_weights['force_preference'] * force_pref,
+                'action_eff_reward': self.preference_weights['action_efficiency'] * action_eff,
+                'touch_penalty_reward': self.preference_weights['touch_penalty'] * touch_penalty,
+            }
     
-    def _gaussian_preference(self, value: float, preferred_range: tuple) -> float:
-        """Gaussian-like preference function that peaks in the preferred range."""
+    def _gaussian_preference(self, value: jax.Array, preferred_range: tuple) -> jax.Array:
+        """Gaussian-like preference function that peaks in the preferred range.
+        
+        Returns 1.0 if value is within preferred_range, otherwise decays
+        with a Gaussian centered on the range midpoint.
+        """
         min_pref, max_pref = preferred_range
         center = (min_pref + max_pref) / 2
         width = (max_pref - min_pref) / 2
@@ -411,17 +487,17 @@ class PreferenceRewardWrapper(Wrapper):
         
         return jp.where(in_range, 1.0, gaussian_reward)
     
-    def _update_tracking(self, contact_forces: jax.Array, prev_state: State) -> Dict[str, float]:
-        """Update touch tracking."""
+    def _update_tracking(self, contact_forces: jax.Array, prev_state: State) -> Dict[str, jax.Array]:
+        """Update touch tracking information."""
         prev_tracking = prev_state.info.get('preference_tracking', {})
         
         current_contact_force = jp.linalg.norm(contact_forces)
-        prev_contact_force = prev_tracking.get('last_contact_force', 0.0)
+        prev_contact_force = prev_tracking.get('last_contact_force', jp.array(0.0))
         
-        # Detect new touch
+        # Detect new touch (transition from below to above threshold)
         new_touch = (prev_contact_force < self.touch_threshold) & (current_contact_force >= self.touch_threshold)
         
-        prev_touches = prev_tracking.get('cumulative_touches', 0.0)
+        prev_touches = prev_tracking.get('cumulative_touches', jp.array(0.0))
         updated_touches = prev_touches + jp.where(new_touch, 1.0, 0.0)
         
         return {
@@ -429,13 +505,188 @@ class PreferenceRewardWrapper(Wrapper):
             'last_contact_force': current_contact_force,
         }
     
-    def _compute_touch_penalty(self, contact_forces: jax.Array, prev_state: State) -> float:
-        """Compute penalty for new touches."""
+    def _compute_touch_penalty(self, contact_forces: jax.Array, prev_state: State) -> jax.Array:
+        """Compute penalty for new touches (returns 1.0 if new touch, 0.0 otherwise)."""
         prev_tracking = prev_state.info.get('preference_tracking', {})
         
         current_contact_force = jp.linalg.norm(contact_forces)
-        prev_contact_force = prev_tracking.get('last_contact_force', 0.0)
+        prev_contact_force = prev_tracking.get('last_contact_force', jp.array(0.0))
         
         new_touch = (prev_contact_force < self.touch_threshold) & (current_contact_force >= self.touch_threshold)
 
         return jp.where(new_touch, 1.0, 0.0)
+        
+
+
+#class PreferenceRewardWrapper(Wrapper):
+#    """Simple wrapper that adds preference-based rewards using variables from state.info.
+#    
+#    Works with any environment that exposes the needed variables in state.info.
+#    """
+#    
+#    def __init__(
+#        self, 
+#        env, 
+#        preference_rewards: Dict[str, Any] = None,
+#        touch_threshold: float = 0.3,
+#        variable_names: Dict[str, str] = None,
+#    ):
+#        super().__init__(env)
+#        
+#        # Default preference weights
+#        self.preference_weights = preference_rewards["preference_weights"] or {
+#            'speed_preference': 1.0,
+#            'force_preference': 1.0, 
+#            'action_efficiency': 0.5,
+#            'touch_penalty': -0.1,
+#        }
+#        
+#        # Default preference ranges
+#        self.preference_ranges = preference_rewards["preference_ranges"] or {
+#            'speed_range': (0.05, 0.2),   # Good scratching speed range
+#            'force_range': (1.0, 5.0),   # Good scratching force range  
+#            'max_action_magnitude': 1.0,
+#        }
+#
+#        self.pref_rew_weight = preference_rewards.get("overall_weight", 1.0)
+#        
+#        # Touch detection threshold
+#        self.touch_threshold = touch_threshold
+#        
+#        # Variable names to look for in state.info (allows customization for different environments)
+#        self.variable_names = variable_names or {
+#            'speed': 'ee_speed',
+#            'force': 'ee_force', 
+#            'action_magnitude': 'action_magnitude',
+#        }
+#        
+#    def reset(self, rng: jax.Array) -> State:
+#        state = self.env.reset(rng)
+#        # Initialize preference tracking
+#        
+#        state.info.update(
+#            preference_tracking={
+#                'cumulative_touches': 0.0,
+#                'last_contact_force': 0.0,
+#            },
+#            #preference_metrics={
+#            #    'speed_pref_reward': 0.0,
+#            #    'force_pref_reward': 0.0,
+#            #    'action_eff_reward': 0.0,
+#            #    'touch_penalty_reward': 0.0,
+#            #    'total_pref_reward': 0.0,
+#            #}
+#        )
+#
+#        state.metrics.update(
+#            speed_pref_reward = jp.array(0.0),
+#            force_pref_reward = jp.array(0.0),
+#            action_eff_reward = jp.array(0.0),
+#            touch_penalty_reward = jp.array(0.0),
+#            total_pref_reward = jp.array(0.0),
+#        )
+#        return state
+#    
+#    def step(self, rng: jax.Array, state: State, action: jax.Array) -> State:
+#        # Get state from wrapped environment
+#        next_state = self.env.step(rng, state, action)
+#        
+#        # Extract variables from state.info (computed by the environment)
+#        speed = next_state.info.get(self.variable_names['speed'], 0.0)
+#        force = next_state.info.get(self.variable_names['force'], 0.0)
+#        action_magnitude = next_state.info.get(self.variable_names['action_magnitude'], jp.linalg.norm(action))
+#        contact_forces = force # At least in the case of ScratchItch might need to be adjusted based on the environment
+#        
+#        # Compute preference rewards
+#        preference_rewards = self._compute_preference_rewards(
+#            speed, force, action_magnitude, contact_forces, state
+#        )
+#        
+#        # Update tracking
+#        updated_tracking = self._update_tracking(contact_forces, state)
+#        
+#        # Add preference reward to original reward
+#        total_preference_reward = sum(preference_rewards.values())
+#        augmented_reward = next_state.reward + self.pref_rew_weight*total_preference_reward
+#
+#        preference_rewards.update(
+#            total_pref_reward=total_preference_reward
+#        )
+#
+#        # TODO: add tracking to metrics so we can the influence of preference_rewards
+#
+#        next_state.info.update(
+#            preference_tracking=updated_tracking,
+#        )
+#
+#        next_state.metrics.update(preference_rewards)
+#
+#        return next_state.replace(reward=augmented_reward)
+#    
+#    def _compute_preference_rewards(
+#        self, speed: float, force: float, action_magnitude: float, 
+#        contact_forces: jax.Array, prev_state: State
+#    ) -> Dict[str, float | jax.Array]:
+#        """Compute individual preference rewards."""
+#        
+#        # 1. Speed preference: reward for staying in preferred range
+#        speed_pref = self._gaussian_preference(speed, self.preference_ranges['speed_range'])
+#        
+#        # 2. Force preference: reward for appropriate force application
+#        force_pref = self._gaussian_preference(force, self.preference_ranges['force_range'])
+#        
+#        # 3. Action efficiency: reward smaller actions
+#        action_eff = jp.exp(-action_magnitude / self.preference_ranges['max_action_magnitude'])
+#        
+#        # 4. Touch penalty: penalize new touches
+#        touch_penalty = self._compute_touch_penalty(contact_forces, prev_state)        
+#        # IMPORTANT: Always return the same keys in the same order
+#        return {
+#            'speed_pref_reward': self.preference_weights['speed_preference'] * speed_pref,
+#            'force_pref_reward': self.preference_weights['force_preference'] * force_pref,
+#            'action_eff_reward': self.preference_weights['action_efficiency'] * action_eff,
+#            'touch_penalty_reward': self.preference_weights['touch_penalty'] * touch_penalty,
+#        }
+#    
+#    def _gaussian_preference(self, value: float, preferred_range: tuple) -> float:
+#        """Gaussian-like preference function that peaks in the preferred range."""
+#        min_pref, max_pref = preferred_range
+#        center = (min_pref + max_pref) / 2
+#        width = (max_pref - min_pref) / 2
+#        
+#        # If within preferred range, give full reward
+#        in_range = (value >= min_pref) & (value <= max_pref)
+#        
+#        # If outside, use Gaussian decay
+#        gaussian_reward = jp.exp(-((value - center) ** 2) / (2 * width ** 2))
+#        
+#        return jp.where(in_range, 1.0, gaussian_reward)
+#    
+#    def _update_tracking(self, contact_forces: jax.Array, prev_state: State) -> Dict[str, float]:
+#        """Update touch tracking."""
+#        prev_tracking = prev_state.info.get('preference_tracking', {})
+#        
+#        current_contact_force = jp.linalg.norm(contact_forces)
+#        prev_contact_force = prev_tracking.get('last_contact_force', 0.0)
+#        
+#        # Detect new touch
+#        new_touch = (prev_contact_force < self.touch_threshold) & (current_contact_force >= self.touch_threshold)
+#        
+#        prev_touches = prev_tracking.get('cumulative_touches', 0.0)
+#        updated_touches = prev_touches + jp.where(new_touch, 1.0, 0.0)
+#        
+#        return {
+#            'cumulative_touches': updated_touches,
+#            'last_contact_force': current_contact_force,
+#        }
+#    
+#    def _compute_touch_penalty(self, contact_forces: jax.Array, prev_state: State) -> float:
+#        """Compute penalty for new touches."""
+#        prev_tracking = prev_state.info.get('preference_tracking', {})
+#        
+#        current_contact_force = jp.linalg.norm(contact_forces)
+#        prev_contact_force = prev_tracking.get('last_contact_force', 0.0)
+#        
+#        new_touch = (prev_contact_force < self.touch_threshold) & (current_contact_force >= self.touch_threshold)
+#
+#        return jp.where(new_touch, 1.0, 0.0)

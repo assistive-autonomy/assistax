@@ -3,6 +3,7 @@ defaults:
   - _self_
 
 ENV_NAME: scratchitch
+ALG: ISAC
 ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
@@ -87,8 +88,8 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/mabrax/${ENV_NAME}/${ALG}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/mabrax/${ENV_NAME}/${ALG}/${network.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ""
 

@@ -16,4 +16,4 @@ export XLA_PYTHON_CLIENT_MEM_FRACTION=.90
 cd /home/s2618563/assistax 
 ulimit -n 10000
 
-uv run python assistax/baselines/IPPO/ippo_sweep.py -cn ippo_sweep -m network=rnn_nps ++NUM_SEEDS=6 ++ENV_NAME=scratchitch ++TOTAL_TIMESTEPS=4e7 ++NUM_MINIBATCHES=4,8,16 ++UPDATE_EPOCHS=4,8,16 "++SEED=range(0,6)" SWEEP.num_configs=3
+uv run python assistax/baselines/IPPO/ippo_sweep.py -cn ippo_sweep -m network=rnn_nps ++NUM_SEEDS=6 ++ENV_NAME=scratchitch ++TOTAL_TIMESTEPS=4e7 ++NUM_MINIBATCHES=4,8,16 ++UPDATE_EPOCHS=4,8,16 "++SEED=range(0,5)" SWEEP.num_configs=3

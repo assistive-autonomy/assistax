@@ -824,14 +824,6 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         
         return mapping
     
-    # def _init_idxs(self):
-        
-    #     idxs = {}
-    #     for agent_type in self.loaded_agents:
-    #         idxs[agent_type] = jnp.arange(self.total_pop_size) # TODO: note this only works with one agent_type i.e. human in mabrax 
-        
-    #     return idxs
-
     @classmethod
     def load_from_zoo(
         cls,
@@ -906,64 +898,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
 
         return cls(env, load_agents)
 
-    
-    # @classmethod
-    # def load_from_zoo(
-    #     cls,
-    #     env: MultiAgentEnv,
-    #     zoo: ZooManager | str,
-    #     load_agents_uuids: Dict[str, str | list[str]],
-    # ):
-    #     """Loads agents from a zoo using ZooManager and groups them by algorithm."""
-    #     if isinstance(zoo, str):
-    #         zoo = ZooManager(zoo_path=zoo)
-
-    #     load_agents: Dict[str, Dict[str, LoadNetworkState]] = {}
-    #     for algorithm, agents_dict in load_agents_uuids.items():
-    #         if algorithm not in load_agents:
-    #             load_agents[algorithm] = {}
-    #         for agent, agent_uuids in agents_dict.items():
-    #             if isinstance(agent_uuids, str):
-    #                 # Single agent case.
-    #                 zoo_state = zoo.load_agent(agent_uuids)
-    #                 load_agents[algorithm][agent] = LoadNetworkState(
-    #                     apply_fn=jax.vmap(zoo_state.apply_fn, in_axes=(0, None, None)),
-    #                     hstate_reset_fn=zoo_state.hstate_reset_fn,
-    #                     params=jax.tree.map(lambda x: jnp.expand_dims(x, 0), zoo_state.params),
-    #                     pop_size=1,
-    #                     uuids=[agent_uuids],  # Store UUID
-    #                 )
-    #             else:
-    #                 # Multiple agents: load each zoo_state.
-    #                 zoo_states = [zoo.load_agent(agent_uuid) for agent_uuid in agent_uuids]
-
-    #                 # Group the zoo states by their parameter shapes.
-    #                 shape_groups = {}
-    #                 for agent_uuid, zs in zip(agent_uuids, zoo_states):
-    #                     flat_shapes, _ = jax.tree_util.tree_flatten(_tree_shape(zs.params))
-    #                     shape_key = tuple(flat_shapes)
-    #                     shape_groups.setdefault(shape_key, []).append(agent_uuid)
-                    
-    #                 if len(shape_groups) > 1:
-    #                     raise ValueError(
-    #                         f"Mismatching parameter shapes for agent '{agent}' under algorithm '{algorithm}'.\n"
-    #                         f"Groups by shape signature (each key is a tuple of shapes): {shape_groups}"
-    #                     )
-                    
-    #                 load_agents[algorithm][agent] = LoadNetworkState(
-    #                     apply_fn=jax.vmap(zoo_states[0].apply_fn, in_axes=(0, None, None)),
-    #                     hstate_reset_fn=zoo_states[0].hstate_reset_fn,
-    #                     params=_stack_tree([zs.params for zs in zoo_states]),
-    #                     pop_size=len(zoo_states),
-    #                     uuids=agent_uuids,  # Store the UUIDs
-    #                 )
-    #     return cls(env, load_agents)
-    
-    # def update_index(self, current_idx, total_pop_size):
-    #     new_idx = (current_idx + 1) % total_pop_size
-    #     return new_idx
-
-        
+            
     def take_internal_action(
         self,
         key: chex.PRNGKey,

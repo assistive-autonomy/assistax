@@ -3,6 +3,7 @@ defaults:
   - _self_
 
 ENV_NAME: scratchitch
+ALG: ISAC
 ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
@@ -69,12 +70,12 @@ SWEEP:
   q_lr:
     min: -5.0
     max: -2.0
-  alpha_lr: false
-    # min: -5.0
-    # max: -2.0
-  tau: false
-    # min: -4.0
-    # max: -1.0 
+  alpha_lr: 
+    min: -5.0
+    max: -2.0
+  tau: 
+    min: -4.0
+    max: -1.0 
 
 eval: # path to actor all params for eval
   path: ./path/to/actor_all_params.safetensors
@@ -85,6 +86,6 @@ hydra:
   run:
     dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/mabrax/${ENV_NAME}/${ALG}/${network.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ""
 

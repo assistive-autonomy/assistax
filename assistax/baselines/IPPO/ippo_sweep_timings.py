@@ -14,8 +14,6 @@ results systematically for later analysis.
 
 import os
 import time
-#from anyio import Path
-from pathlib import Path
 from tqdm import tqdm
 import jax
 import jax.numpy as jnp
@@ -45,13 +43,11 @@ from assistax.baselines.utils import (
     log_memory_to_csv,
     )
 
-from assistax.baselines.sweep_util import scan_completed_sweeps, config_already_run
-
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
 
 os.environ['XLA_FLAGS'] = (
-    '--xla_gpu_triton_gemm_any=True '
-    '--xla_gpu_enable_latency_hiding_scheduler=true '
+    '--xla_gpu_triton_gemm_any=True'
+    '--xla_gpu_enable_latency_hiding_scheduler=true'
 )
 
 # ================================ HYPERPARAMETER SWEEP UTILITIES ================================
@@ -141,39 +137,6 @@ def main(config):
     """
     # ===== EXPERIMENT ORGANIZATION =====
     # Create unique directory for this sweep configuration
-    #config_key = hash(config) % 2**62
-    #config_key = urlsafe_b64encode(
-    #    config_key.to_bytes(
-    #        (config_key.bit_length() + 8) // 8,
-    #        "big", signed=False
-    #    )
-    #).decode("utf-8").replace("=", "")
-    #
-    #os.makedirs(config_key, exist_ok=True)
-    #print(f"Experiment directory: {config_key}")
-
-    # Create unique directory for this sweep configuration
-    #config_key = hash(config) % 2**62
-    #config_key = urlsafe_b64encode(
-    #    config_key.to_bytes(
-    #        (config_key.bit_length() + 8) // 8,
-    #        "big", signed=False
-    #    )
-    #).decode("utf-8").replace("=", "")
-    #
-    ## ===== RESUME CHECK (NEW) =====
-    ## Check if this configuration has already completed
-    #results_file = f"{config_key}/returns.npy"
-    #if os.path.exists(results_file):
-    #    print(f"Skipping already completed configuration: {config_key}")
-    #    print(f"  Results found at: {results_file}")
-    #    return  # Exit early - this config is done
-    #
-    #os.makedirs(config_key, exist_ok=True)
-    #print(f"Experiment directory: {config_key}")
-    #
-    #config = OmegaConf.to_container(config, resolve=True)
-
     config_key = hash(config) % 2**62
     config_key = urlsafe_b64encode(
         config_key.to_bytes(
@@ -182,48 +145,10 @@ def main(config):
         )
     ).decode("utf-8").replace("=", "")
     
-    # Now convert to dict
-    config = OmegaConf.to_container(config, resolve=True)
-
-    rng = jax.random.PRNGKey(config["SEED"])
-    train_rng, eval_rng, sweep_rng = jax.random.split(rng, 3)
-    train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
-    
-    # Generate hyperparameter sweep configurations
-    sweep = _generate_sweep_axes(sweep_rng, config)
-
-
-    # ===== RESUME CHECK =====
-    # base_dir = f"multirun/{config['ENV_NAME']}/{config['ALG']}/{config['network']['name']}"
-    base_dir = Path.cwd().parent.parent
-    completed = scan_completed_sweeps(base_dir)
-
-    #import numpy as np
-    #base_path = base_dir 
-    #
-    #print(f"Base path exists: {base_path.exists()}")
-    #print(f"Base path absolute: {base_path.absolute()}")
-    #
-    ## Check what files exist
-    #print("\nAll .npy files found:")
-    #for f in base_path.rglob("*.npy"):
-    #    print(f"  {f}")
-    #
-    #print("\nAll hparams.npy files:")
-    #for hparams_file in base_path.rglob("hparams.npy"):
-    #    print(f"  {hparams_file}")
-    #    results_file = hparams_file.parent / "returns.npy"
-    #    print(f"    returns.npy exists: {results_file.exists()}")   
-    #breakpoint()    
-    if config_already_run(config, completed, sweep):
-        print(f"✓ SKIPPING - already completed:")
-        print(f"  update_epochs={config['UPDATE_EPOCHS']}, num_minibatches={config['NUM_MINIBATCHES']}")
-        return
-    
-    print(f"Found {len(completed)} completed configurations, this one is new.")
-    
     os.makedirs(config_key, exist_ok=True)
     print(f"Experiment directory: {config_key}")
+    
+    config = OmegaConf.to_container(config, resolve=True)
 
     # ===== DYNAMIC ALGORITHM SELECTION =====
     # Import the appropriate IPPO variant based on network architecture configuration
@@ -244,13 +169,14 @@ def main(config):
             from ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with Parameter Sharing")
             network_type = "RNN_PS"
+            
     # ===== SWEEP SETUP =====
-   # rng = jax.random.PRNGKey(config["SEED"])
-   # train_rng, eval_rng, sweep_rng = jax.random.split(rng, 3)
-   # train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
-   # 
-   # # Generate hyperparameter sweep configurations
-   # sweep = _generate_sweep_axes(sweep_rng, config)
+    rng = jax.random.PRNGKey(config["SEED"])
+    train_rng, eval_rng, sweep_rng = jax.random.split(rng, 3)
+    train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
+    
+    # Generate hyperparameter sweep configurations
+    sweep = _generate_sweep_axes(sweep_rng, config)
     
     print(f"Hyperparameter sweep configurations:")
     print(f"  Learning rates: {sweep['lr']['val'] if sweep['lr']['axis'] is not None else 'Fixed'}")
@@ -260,46 +186,55 @@ def main(config):
     
     # ===== TRAINING EXECUTION =====
     print("Starting hyperparameter sweep training...")
-    start = time.time()
+    
     with jax.disable_jit(config["DISABLE_JIT"]):
+        # Build the vmapped training function
         train_jit = jax.jit(
-            make_train(config, save_train_state=True),
+            jax.vmap(
+                jax.vmap(
+                    make_train(config, save_train_state=True),
+                    in_axes=(0, None, None, None)  # Vmap over seeds
+                ),
+                in_axes=(
+                    None,  # Seeds (broadcast to all hyperparameter configs)
+                    sweep["lr"]["axis"],        # Learning rate axis
+                    sweep["ent_coef"]["axis"],  # Entropy coefficient axis
+                    sweep["clip_eps"]["axis"],  # Clipping epsilon axis
+                )
+            ),
             device=jax.devices()[config["DEVICE"]]
         )
         
-        # Execute nested vmap for hyperparameter sweep
-        # Outer vmap: across hyperparameter configurations
-        # Inner vmap: across random seeds
-        out = jax.vmap(
-            jax.vmap(
-                train_jit,
-                in_axes=(0, None, None, None)  # Vmap over seeds
-            ),
-            in_axes=(
-                None,  # Seeds (broadcast to all hyperparameter configs)
-                sweep["lr"]["axis"],        # Learning rate axis
-                sweep["ent_coef"]["axis"],  # Entropy coefficient axis
-                sweep["clip_eps"]["axis"],  # Clipping epsilon axis
-            )
-        )(
+        # ===== TIMING: First call (compile + run) =====
+        train_start = time.time()
+        out = train_jit(
             train_rngs,
             sweep["lr"]["val"],
             sweep["ent_coef"]["val"],
             sweep["clip_eps"]["val"],
         )
-        
         jax.block_until_ready(out)
-        first_call = time.time() - start
-        print(f"First call (compile + run): {first_call:.2f}s")
+        first_call_time = time.time() - train_start
+        print(f"Training first call (compile + run): {first_call_time:.2f}s")
+        
+        # ===== TIMING: Second call (run only) - optional, for separating compile vs runtime =====
+        if config.get("TIME_SECOND_RUN", False):
+            second_start = time.time()
+            out = train_jit(
+                train_rngs,
+                sweep["lr"]["val"],
+                sweep["ent_coef"]["val"],
+                sweep["clip_eps"]["val"],
+            )
+            jax.block_until_ready(out)
+            second_call_time = time.time() - second_start
+            print(f"Training second call (run only): {second_call_time:.2f}s")
+            print(f"Estimated compile time: {first_call_time - second_call_time:.2f}s")
 
         # ===== SAVE TRAINING RESULTS =====
         print("Saving training metrics...")
-        
-        # Save training metrics (excluding large training states)
-        #if config["PRINT_MEMORY_STATS"]:
-        #    print_memory_stats(f"IPPO Sweep: Training Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
        
-        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"]) # this could be inefficient memory wise
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         EXCLUDED_METRICS = ["train_state"]
         jnp.save(f"{config_key}/metrics.npy", {
             key: val
@@ -319,13 +254,10 @@ def main(config):
             "num_envs": config["NUM_ENVS"],
             "update_epochs": config["UPDATE_EPOCHS"],
             "num_minibatches": config["NUM_MINIBATCHES"],
-            "seed": config["SEED"],
             }
         )
 
         # ===== SAVE MODEL PARAMETERS =====
-        # Save all training states (for analysis across training)
-        
         all_train_states = out["metrics"]["train_state"]
         final_train_state = out["runner_state"].train_state
 
@@ -337,12 +269,8 @@ def main(config):
                 f"{config_key}/all_params.safetensors"
             )
 
-        # Save final parameters (different format for parameter sharing vs independent)
         if config["SAVE_FINAL_TRAIN_STATE"]:
-            
             if not config["network"]["agent_param_sharing"]:
-                # For independent parameters: split by agent
-                # Note: Different axis manipulation for 3D sweep structure (hyperparams x seeds x agents)
                 split_params = _unstack_tree(
                     jax.tree.map(lambda x: jnp.moveaxis(x, 2, 0), final_train_state.params)
                 )
@@ -355,8 +283,6 @@ def main(config):
         # ===== EVALUATION SETUP =====
         print("Setting up evaluation...")
         
-        # Calculate evaluation batching for memory efficiency
-        # Note: 3D batch structure for sweep (hyperparams x seeds x envs)
         batch_dims = jax.tree.leaves(_tree_shape(all_train_states.params))[:3]
         n_sequential_evals = int(jnp.ceil(
             config["NUM_EVAL_EPISODES"] * jnp.prod(jnp.array(batch_dims))
@@ -364,12 +290,6 @@ def main(config):
         ))
         
         def _flatten_and_split_trainstate(train_state):
-            """
-            Flatten training states across all batch dimensions and split for sequential evaluation.
-            
-            For sweep experiments, we have 3D batch structure (hyperparams x seeds x envs)
-            that needs to be flattened for memory-efficient evaluation.
-            """
             flat_trainstate = jax.tree.map(
                 lambda x: x.reshape((x.shape[0] * x.shape[1] * x.shape[2], *x.shape[3:])),
                 train_state
@@ -382,7 +302,6 @@ def main(config):
         print("Running evaluation...")
         eval_env, run_eval = make_evaluation(config)
         
-        # Configure what information to log during evaluation
         eval_log_config = EvalInfoLogConfig(
             env_state=False,
             done=True,
@@ -395,20 +314,21 @@ def main(config):
             avail_actions=False,
         )
         
-        # JIT compile evaluation functions for efficiency
         eval_jit = jax.jit(
             run_eval,
             static_argnames=["log_eval_info"],
         )
         eval_vmap = jax.vmap(eval_jit, in_axes=(None, 0, None))
-         
-        #if config["PRINT_MEMORY_STATS"]:
-        #    print_memory_stats(f"IPPO Sweep: Pre-Eval Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
-        # Run evaluation in batches for memory efficiency
+        
+        # ===== TIMING: Evaluation =====
+        eval_start = time.time()
         evals = _concat_tree([
             eval_vmap(eval_rng, ts, eval_log_config)
             for ts in tqdm(split_trainstate, desc="Evaluation batches")
         ])
+        jax.block_until_ready(evals)
+        eval_time = time.time() - eval_start
+        print(f"Evaluation time: {eval_time:.2f}s")
         
         # Reshape evaluation results back to original 3D batch structure
         evals = jax.tree.map(
@@ -421,19 +341,25 @@ def main(config):
         first_episode_returns = _compute_episode_returns(evals)
         mean_episode_returns = first_episode_returns["__all__"].mean(axis=-1)
 
-        # Save evaluation results
         jnp.save(f"{config_key}/returns.npy", mean_episode_returns)
         
-        end = time.time()
-        print(f"Evaluation took {end - start:.2f} seconds")
+        # ===== TIMING SUMMARY =====
+        print("\n" + "="*50)
+        print("TIMING SUMMARY")
+        print("="*50)
+        print(f"Training (compile + run): {first_call_time:.2f}s")
+        if config.get("TIME_SECOND_RUN", False):
+            print(f"Training (run only):      {second_call_time:.2f}s")
+            print(f"Estimated compile time:   {first_call_time - second_call_time:.2f}s")
+        print(f"Evaluation:               {eval_time:.2f}s")
+        print(f"Total:                    {first_call_time + eval_time:.2f}s")
+        print("="*50 + "\n")
 
-        print("\nHyperparameter sweep completed successfully!")
+        print("Hyperparameter sweep completed successfully!")
 
         if config["PRINT_MEMORY_STATS"]:
             print_memory_stats(f"IPPO Sweep: Final Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
             log_memory_to_csv(config, "/home/leo/assistive-autonomy-github/assistax/memory_stats", f"{config['ALG']}_memory_stats.csv")
-            
-
 
 
 if __name__ == "__main__":

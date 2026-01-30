@@ -15,6 +15,7 @@ import os
 import time
 from typing import Dict, Any
 from base64 import urlsafe_b64encode
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -26,71 +27,85 @@ import safetensors.flax
 
 import assistax
 
+from assistax.baselines.utils import (
+    _tree_take, _unstack_tree, _take_episode,
+    _tree_shape, _stack_tree, _concat_tree, _tree_split, 
+    print_memory_stats
+    )
+
+from assistax.baselines.sweep_util import (
+    scan_completed_sweeps,
+    config_already_run_sac,
+    )
+
+from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
+
+
 
 # ============================================================================
 # TREE UTILITY FUNCTIONS
 # ============================================================================
 
-def _tree_take(pytree, indices, axis=None):
-    """Take elements from pytree along specified axis."""
-    return jax.tree.map(lambda x: x.take(indices, axis=axis), pytree)
-
-
-def _tree_shape(pytree):
-    """Get shapes of all leaves in pytree."""
-    return jax.tree.map(lambda x: x.shape, pytree)
-
-
-def _unstack_tree(pytree):
-    """Unstack a pytree along its first axis."""
-    leaves, treedef = jax.tree_util.tree_flatten(pytree)
-    unstacked_leaves = zip(*leaves)
-    return [jax.tree_util.tree_unflatten(treedef, leaves)
-            for leaves in unstacked_leaves]
-
-
-def _concat_tree(pytree_list, axis=0):
-    """Concatenate a list of pytrees along specified axis."""
-    return jax.tree.map(
-        lambda *leaf: jnp.concat(leaf, axis=axis),
-        *pytree_list
-    )
-
-
-def _tree_split(pytree, n, axis=0):
-    """Split pytree into n parts along specified axis."""
-    leaves, treedef = jax.tree.flatten(pytree)
-    split_leaves = zip(
-        *jax.tree.map(lambda x: jnp.array_split(x, n, axis), leaves)
-    )
-    return [
-        jax.tree.unflatten(treedef, leaves)
-        for leaves in split_leaves
-    ]
-
-
-# ============================================================================
-# EVALUATION UTILITY FUNCTIONS
-# ============================================================================
-
-def _compute_episode_returns(eval_info, common_reward=False, time_axis=-2):
-    """Compute undiscounted episode returns from evaluation info."""
-    done_arr = eval_info.done["__all__"]
-    first_timestep = [slice(None) for _ in range(done_arr.ndim)]
-    first_timestep[time_axis] = 0
-    episode_done = jnp.cumsum(done_arr, axis=time_axis, dtype=bool)
-    episode_done = jnp.roll(episode_done, 1, axis=time_axis)
-    episode_done = episode_done.at[tuple(first_timestep)].set(False)
-    undiscounted_returns = jax.tree.map(
-        lambda r: (r * (1 - episode_done)).sum(axis=time_axis),
-        eval_info.reward
-    )
-    if "__all__" not in undiscounted_returns:
-        undiscounted_returns.update({
-            "__all__": (sum(undiscounted_returns.values())
-                        / (len(undiscounted_returns) if common_reward else 1))
-        })
-    return undiscounted_returns
+#def _tree_take(pytree, indices, axis=None):
+#    """Take elements from pytree along specified axis."""
+#    return jax.tree.map(lambda x: x.take(indices, axis=axis), pytree)
+#
+#
+#def _tree_shape(pytree):
+#    """Get shapes of all leaves in pytree."""
+#    return jax.tree.map(lambda x: x.shape, pytree)
+#
+#
+#def _unstack_tree(pytree):
+#    """Unstack a pytree along its first axis."""
+#    leaves, treedef = jax.tree_util.tree_flatten(pytree)
+#    unstacked_leaves = zip(*leaves)
+#    return [jax.tree_util.tree_unflatten(treedef, leaves)
+#            for leaves in unstacked_leaves]
+#
+#
+#def _concat_tree(pytree_list, axis=0):
+#    """Concatenate a list of pytrees along specified axis."""
+#    return jax.tree.map(
+#        lambda *leaf: jnp.concat(leaf, axis=axis),
+#        *pytree_list
+#    )
+#
+#
+#def _tree_split(pytree, n, axis=0):
+#    """Split pytree into n parts along specified axis."""
+#    leaves, treedef = jax.tree.flatten(pytree)
+#    split_leaves = zip(
+#        *jax.tree.map(lambda x: jnp.array_split(x, n, axis), leaves)
+#    )
+#    return [
+#        jax.tree.unflatten(treedef, leaves)
+#        for leaves in split_leaves
+#    ]
+#
+#
+## ============================================================================
+## EVALUATION UTILITY FUNCTIONS
+## ============================================================================
+#
+#def _compute_episode_returns(eval_info, common_reward=False, time_axis=-2):
+#    """Compute undiscounted episode returns from evaluation info."""
+#    done_arr = eval_info.done["__all__"]
+#    first_timestep = [slice(None) for _ in range(done_arr.ndim)]
+#    first_timestep[time_axis] = 0
+#    episode_done = jnp.cumsum(done_arr, axis=time_axis, dtype=bool)
+#    episode_done = jnp.roll(episode_done, 1, axis=time_axis)
+#    episode_done = episode_done.at[tuple(first_timestep)].set(False)
+#    undiscounted_returns = jax.tree.map(
+#        lambda r: (r * (1 - episode_done)).sum(axis=time_axis),
+#        eval_info.reward
+#    )
+#    if "__all__" not in undiscounted_returns:
+#        undiscounted_returns.update({
+#            "__all__": (sum(undiscounted_returns.values())
+#                        / (len(undiscounted_returns) if common_reward else 1))
+#        })
+#    return undiscounted_returns
 
 
 # ============================================================================
@@ -331,8 +346,23 @@ def main(config):
         )
     ).decode("utf-8").replace("=", "")
     
-    os.makedirs(config_key, exist_ok=True)
     config = OmegaConf.to_container(config, resolve=True)
+
+    rng = jax.random.PRNGKey(config["SEED"])
+    train_rng, eval_rng, sweep_rng = jax.random.split(rng, 3)
+    train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
+   
+    sweep = _generate_sweep_axes(sweep_rng, config)
+    
+    base_dir = Path.cwd().parent.parent
+    completed = scan_completed_sweeps(base_dir)
+    if config_already_run_sac(config, completed, sweep):
+        print(f"✓ SKIPPING - already completed:")
+        print(f"  rollout_length={config['ROLLOUT_LENGTH']}, batch_size={config['BATCH_SIZE']}")
+        return   
+    
+    
+    os.makedirs(config_key, exist_ok=True)
     
     print(f"ISAC Hyperparameter Sweep")
     print(f"Experiment ID: {config_key}")
@@ -343,12 +373,12 @@ def main(config):
     
     from isac_ff_nps import make_train #TODO make this into one single import seems silly to import twice for the eval pipeline
     
-    rng = jax.random.PRNGKey(config["SEED"])
-    train_rng, eval_rng, sweep_rng = jax.random.split(rng, 3)
-    train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
-    
-    # Generate ISAC hyperparameter sweep
-    sweep = _generate_sweep_axes(sweep_rng, config)
+    #rng = jax.random.PRNGKey(config["SEED"])
+    #train_rng, eval_rng, sweep_rng = jax.random.split(rng, 3)
+    #train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
+    #
+    ## Generate ISAC hyperparameter sweep
+    #sweep = _generate_sweep_axes(sweep_rng, config)
     
     sweep_info = []
     for param_name, param_info in sweep.items():

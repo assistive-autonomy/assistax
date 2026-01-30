@@ -42,7 +42,8 @@ GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False
 DEVICE: 0
-PRINT_MEMORY_STATS: False
+PRINT_MEMORY_STATS: True
+TIME_SECOND_RUN: True
 
 # SWEEPER SETTINGS
 SWEEP:
@@ -73,5 +74,6 @@ hydra:
   run:
     dir: outputs/${ENV_NAME}/${ALG}/{now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/${ENV_NAME}/${ALG}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/${ENV_NAME}/${ALG}/${network.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ""
+ 

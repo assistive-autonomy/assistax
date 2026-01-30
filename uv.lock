@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'linux'",
@@ -159,7 +159,6 @@ dependencies = [
     { name = "hydra-core" },
     { name = "importlib-resources" },
     { name = "itsdangerous" },
-    { name = "jax", extra = ["cuda12"] },
     { name = "jinja2" },
     { name = "kiwisolver" },
     { name = "markdown-it-py" },
@@ -256,7 +255,6 @@ requires-dist = [
     { name = "importlib-resources", specifier = ">=6.5.2" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
     { name = "jax", marker = "extra == 'cpu'", specifier = ">=0.4.37" },
-    { name = "jax", extras = ["cuda12"], specifier = ">=0.4.37" },
     { name = "jax", extras = ["cuda12"], marker = "extra == 'cuda12'", specifier = ">=0.4.37,<=0.8.0" },
     { name = "jax", extras = ["cuda13"], marker = "extra == 'cuda13'", specifier = ">=0.4.37" },
     { name = "jinja2", specifier = ">=3.1.6" },

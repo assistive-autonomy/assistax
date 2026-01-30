@@ -23,15 +23,18 @@ from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict
 from base64 import urlsafe_b64encode
 import assistax
+from pathlib import Path
 
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode,
     _tree_shape, _stack_tree, _concat_tree, _tree_split
     )
+
+from assistax.baselines.sweep_util import scan_completed_sweeps, config_already_run
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
 
 os.environ['XLA_FLAGS'] = (
-    '--xla_gpu_triton_gemm_any=True ' 
+    '--xla_gpu_triton_gemm_any=True' 
 )
 
 # ================================ HYPERPARAMETER SWEEP UTILITIES ================================
@@ -87,6 +90,19 @@ def main(config):
     
     config = OmegaConf.to_container(config, resolve=True)
 
+    rng = jax.random.PRNGKey(config["SEED"])
+    train_rng, eval_rng, sweep_rng = jax.random.split(rng, 3)
+    train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
+    sweep = _generate_sweep_axes(sweep_rng, config)
+
+    base_dir = Path.cwd().parent.parent
+    completed = scan_completed_sweeps(base_dir)
+    if config_already_run(config, completed, sweep):
+        print(f"✓ SKIPPING - already completed:")
+        print(f"  update_epochs={config['UPDATE_EPOCHS']}, num_minibatches={config['NUM_MINIBATCHES']}")
+        return
+
+
     # ===== DYNAMIC ALGORITHM SELECTION =====
     match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
         case (False, False):
@@ -101,12 +117,6 @@ def main(config):
         case (True, True):
             from mappo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: MAPPO Recurrent - Parameter Sharing")
-
-    # ===== SWEEP SETUP =====
-    rng = jax.random.PRNGKey(config["SEED"])
-    train_rng, eval_rng, sweep_rng = jax.random.split(rng, 3)
-    train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
-    sweep = _generate_sweep_axes(sweep_rng, config)
 
     print(f"Hyperparameter sweep configurations:")
     print(f"  Learning rates: {sweep['lr']['val'] if sweep['lr']['axis'] is not None else 'Fixed'}")
@@ -148,6 +158,7 @@ def main(config):
             "num_envs": config["NUM_ENVS"],
             "update_epochs": config["UPDATE_EPOCHS"],
             "num_minibatches": config["NUM_MINIBATCHES"],
+            "seed": config["SEED"],
             }
         )
         # ===== EVALUATION PIPELINE =====
