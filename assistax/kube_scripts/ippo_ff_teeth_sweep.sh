@@ -50,9 +50,11 @@ uv run python assistax/baselines/IPPO/ippo_sweep.py \
     ++TOTAL_TIMESTEPS=4e7 \
     ++NUM_MINIBATCHES=4,8,16 \
     ++UPDATE_EPOCHS=4,8,16 \
-    "++SEED=range(0,2)" \
-    SWEEP.num_configs=8 \
+    "++SEED=range(0,4)" \
+    SWEEP.num_configs=4 \ 
     "$@"  # Pass any additional arguments
+
+# Scale down for A100 run 4 seeds and 4 num_configs
 
 # --- Cleanup ---
 rm -rf "$WORK_DIR"
