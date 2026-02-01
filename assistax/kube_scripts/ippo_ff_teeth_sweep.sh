@@ -43,10 +43,10 @@ echo "[$(ts)] Workspace: $WORK_DIR"
 echo "[$(ts)] Outputs symlinked to: /pvc/assistax/multirun"
 
 echo "DEBUG: uv run python assistax/baselines/IPPO/ippo_sweep.py \
-    -cn '$CONFIG' -m \
+    -cn $CONFIG -m \
     network=ff_nps \
     ++NUM_SEEDS=6 \
-    ++ENV_NAME='$ENV_NAME' \
+    ++ENV_NAME=$ENV_NAME \
     ++TOTAL_TIMESTEPS=4e7 \
     ++NUM_MINIBATCHES=4,8,16 \
     ++UPDATE_EPOCHS=4,8,16 \
@@ -54,10 +54,10 @@ echo "DEBUG: uv run python assistax/baselines/IPPO/ippo_sweep.py \
     SWEEP.num_configs=4"
 # --- Run training ---
 uv run python assistax/baselines/IPPO/ippo_sweep.py \
-    -cn "$CONFIG" -m \
+    -cn $CONFIG -m \
     network=ff_nps \
     ++NUM_SEEDS=6 \
-    ++ENV_NAME="$ENV_NAME" \
+    ++ENV_NAME=$ENV_NAME \
     ++TOTAL_TIMESTEPS=4e7 \
     ++NUM_MINIBATCHES=4,8,16 \
     ++UPDATE_EPOCHS=4,8,16 \
