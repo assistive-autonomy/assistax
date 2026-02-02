@@ -62,9 +62,8 @@ uv run python assistax/baselines/IPPO/ippo_sweep.py \
     ++NUM_MINIBATCHES=4,8,16 \
     ++UPDATE_EPOCHS=4,8,16 \
     "++SEED=range(0,4)" \
-    SWEEP.num_configs=4  
-
-# Scale down for A100 run 4 seeds and 4 num_configs
+    SWEEP.num_configs=4 \
+    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY # Scale down for A100 run 4 seeds and 4 num_configs
 
 # --- Cleanup ---
 rm -rf "$WORK_DIR"
