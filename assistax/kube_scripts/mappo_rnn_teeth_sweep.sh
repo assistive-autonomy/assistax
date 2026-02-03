@@ -32,10 +32,10 @@ ulimit -n 10000
 
 # --- Run training ---
 uv run python assistax/baselines/MAPPO/mappo_sweep.py \
-    -cn "$CONFIG" -m \
+    -cn $CONFIG -m \
     network=ff_nps \
     ++NUM_SEEDS=6 \
-    ++ENV_NAME="$ENV_NAME" \
+    ++ENV_NAME=$ENV_NAME \
     ++TOTAL_TIMESTEPS=4e7 \
     ++NUM_MINIBATCHES=4,8,16 \
     ++UPDATE_EPOCHS=4,8,16 \
