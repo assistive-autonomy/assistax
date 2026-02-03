@@ -90,6 +90,7 @@ dependencies = [
     "notebook>=7.4.7",
     "mediapy>=1.2.4",
     "tensorflow-probability>=0.25.0",
+    "tfp-nightly==0.26.0.dev20260114",
 ]
 
 [project.optional-dependencies]
