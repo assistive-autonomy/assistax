@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 # --- Parse arguments ---
 CONFIG=${1:-ippo_sweep}
-ENV_NAME=${2:-feding}
+ENV_NAME=${2:-feeding}
 GPU_ENV_CAPACITY=${3:-49152} # For H200, for A100 80 GB 24576 and for 4090 8192
 
 
