@@ -27,7 +27,7 @@ from pathlib import Path
 
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    _tree_shape, _stack_tree, _concat_tree, _tree_split, print_memory_stats
     )
 
 from assistax.baselines.sweep_util import scan_completed_sweeps, config_already_run
@@ -108,12 +108,14 @@ def main(config):
         case (False, False):
             from mappo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: MAPPO Feedforward - No Parameter Sharing")
+            network_type = "FF-NPS"
         case (False, True):
             from mappo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: MAPPO Feedforward - Parameter Sharing")
         case (True, False):
             from mappo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: MAPPO Recurrent - No Parameter Sharing")
+            network_type = "RNN-NPS"
         case (True, True):
             from mappo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: MAPPO Recurrent - Parameter Sharing")
@@ -234,6 +236,9 @@ def main(config):
 
         jnp.save(f"{config_key}/returns.npy", mean_episode_returns)
         print(f"\nSweep completed successfully. Results in: {config_key}")
+
+        if config["PRINT_MEMORY_STATS"]:
+            print_memory_stats(f"MAPPO Sweep: Final Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
 
 
 if __name__ == "__main__":

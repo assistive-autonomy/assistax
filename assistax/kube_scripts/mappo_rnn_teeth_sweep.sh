@@ -33,12 +33,12 @@ ulimit -n 10000
 # --- Run training ---
 uv run python assistax/baselines/MAPPO/mappo_sweep.py \
     -cn $CONFIG -m \
-    network=ff_nps \
+    network=rnn_nps \
     ++NUM_SEEDS=6 \
     ++ENV_NAME=$ENV_NAME \
     ++TOTAL_TIMESTEPS=4e7 \
     ++NUM_MINIBATCHES=4,8,16 \
     ++UPDATE_EPOCHS=4,8,16 \
-    "++SEED=range(0,5)" \
-    SWEEP.num_configs=3 \
-    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
+    "++SEED=range(0,8)" \
+    SWEEP.num_configs=2 \
+    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY 

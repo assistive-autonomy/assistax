@@ -431,10 +431,7 @@ def main(config):
 
         if config["PRINT_MEMORY_STATS"]:
             print_memory_stats(f"IPPO Sweep: Final Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
-            log_memory_to_csv(config, "/home/leo/assistive-autonomy-github/assistax/memory_stats", f"{config['ALG']}_memory_stats.csv")
             
-
-
 
 if __name__ == "__main__":
     main()
