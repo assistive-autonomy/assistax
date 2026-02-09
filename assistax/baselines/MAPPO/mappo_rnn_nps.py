@@ -847,7 +847,7 @@ def make_train(config, save_train_state=False, load_zoo=False):
             # Optionally save training state
             if save_train_state:
                 metric.update({"train_state": update_state.train_state})
-            
+
             # Update runner state
             runner_state = RunnerState(
                 train_state=update_state.train_state,
@@ -943,9 +943,9 @@ def make_evaluation(config, load_zoo=False):
         init_hstate_actor = jnp.zeros(
             (env.num_agents, config["NUM_EVAL_EPISODES"], config["network"]["gru_hidden_dim"])
         )
-        init_hstate_critic = jnp.zeros(
-            (config["NUM_EVAL_EPISODES"], config["network"]["gru_hidden_dim"])
-        )
+        #init_hstate_critic = jnp.zeros(
+        #    (config["NUM_EVAL_EPISODES"], config["network"]["gru_hidden_dim"])
+        #)
         
         runner_state = RunnerState(
             train_state=train_state,
@@ -955,7 +955,7 @@ def make_evaluation(config, load_zoo=False):
             last_all_done=init_all_dones,
             hstate=ActorCriticHiddenState(
                 actor=init_hstate_actor, 
-                critic=init_hstate_critic
+                critic=None
             ),
             update_step=0,
             rng=rng_env,
@@ -980,8 +980,9 @@ def make_evaluation(config, load_zoo=False):
             )
 
             # Select actions
-            actor_hstate, (actor_mean, actor_std) = runner_state.train_state.actor.apply_fn(
-                runner_state.train_state.actor.params,
+            breakpoint()
+            actor_hstate, (actor_mean, actor_std) = runner_state.train_state.apply_fn(
+                runner_state.train_state.params,
                 runner_state.hstate.actor, actor_in,
             )
             
@@ -993,19 +994,19 @@ def make_evaluation(config, load_zoo=False):
             env_act = unbatchify(action, env.agents)
 
             # Compute values if requested
-            if config["eval"]["compute_value"]:
-                critic_in = (
-                    jnp.expand_dims(runner_state.last_obs["global"], 0),
-                    jnp.expand_dims(runner_state.last_all_done.squeeze(0), 0),
-                )
-                critic_hstate, value = runner_state.train_state.critic.apply_fn(
-                    runner_state.train_state.critic.params,
-                    runner_state.hstate.critic, critic_in,
-                )
-                value = value.squeeze(0)
-                value = jnp.broadcast_to(value, (env.num_agents, *value.shape))
-            else:
-                value = None
+            #if config["eval"]["compute_value"]:
+            #    critic_in = (
+            #        jnp.expand_dims(runner_state.last_obs["global"], 0),
+            #        jnp.expand_dims(runner_state.last_all_done.squeeze(0), 0),
+            #    )
+            #    critic_hstate, value = runner_state.train_state.critic.apply_fn(
+            #        runner_state.train_state.critic.params,
+            #        runner_state.hstate.critic, critic_in,
+            #    )
+            #    value = value.squeeze(0)
+            #    value = jnp.broadcast_to(value, (env.num_agents, *value.shape))
+            #else:
+            #    value = None
 
             # Step environment
             rng, _rng = jax.random.split(rng)
@@ -1041,7 +1042,7 @@ def make_evaluation(config, load_zoo=False):
                 last_all_done=all_done,
                 hstate=ActorCriticHiddenState(
                     actor=actor_hstate, 
-                    critic=critic_hstate
+                    critic=None
                 ),
                 update_step=runner_state.update_step,
                 rng=rng,

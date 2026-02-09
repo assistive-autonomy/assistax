@@ -978,7 +978,7 @@ def make_evaluation(config):
                 jnp.expand_dims(runner_state.last_done, 0),
                 jnp.expand_dims(avail_actions, 0),
             )
-
+            
             # Select actions using shared policy
             actor_hstate, pi = runner_state.train_state.actor.apply_fn(
                 runner_state.train_state.actor.params,
@@ -1048,7 +1048,7 @@ def make_evaluation(config):
             )
             return runner_state, eval_info
             
-        # Run evaluation
+        # Run evaluation:w
         _, eval_info = jax.lax.scan(_env_step, runner_state, None, max_steps)
         return eval_info
         
