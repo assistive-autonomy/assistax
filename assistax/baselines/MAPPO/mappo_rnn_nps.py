@@ -980,7 +980,6 @@ def make_evaluation(config, load_zoo=False):
             )
 
             # Select actions
-            breakpoint()
             actor_hstate, (actor_mean, actor_std) = runner_state.train_state.apply_fn(
                 runner_state.train_state.params,
                 runner_state.hstate.actor, actor_in,
