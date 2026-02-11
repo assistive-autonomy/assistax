@@ -25,10 +25,22 @@ on_err(){
 }
 trap on_err ERR
 
+# --- Workspace isolation ---
+WORK_DIR="/pvc/tmp/${POD_NAME}"
+mkdir -p "$WORK_DIR"
+cp -r /pvc/assistax "$WORK_DIR/"
+cd "$WORK_DIR/assistax"
+
+export PYTHONPATH="$WORK_DIR/assistax:${PYTHONPATH:-}"
+export UV_CACHE_DIR=/pvc/.uv-cache
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.95 # Set to .90 for A100 and 4090
 
-cd /pvc/assistax
-ulimit -n 10000
+mkdir -p /pvc/assistax/multirun
+rm -rf  multirun
+ln -s /pvc/assistax/multirun multirun
+
+echo "[$(ts)] Workspace: $WORK_DIR"
+echo "[$(ts)] Outputs symlinked to: /pvc/assistax/multirun"
 
 # --- Run training ---
 uv run python assistax/baselines/MAPPO/mappo_sweep.py \
@@ -42,3 +54,6 @@ uv run python assistax/baselines/MAPPO/mappo_sweep.py \
     "++SEED=range(0,8)" \
     SWEEP.num_configs=2 \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY 
+
+# --- Cleanup ---
+rm -rf "$WORK_DIR"
