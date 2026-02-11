@@ -5,7 +5,7 @@ set -Eeuo pipefail
 # --- Parse arguments ---
 CONFIG=${1:-mappo_sweep}
 ENV_NAME=${2:-teethbrushing}
-GPU_ENV_CAPACITY=${3:-49152} # For H200, for A100 80 GB 24576 and for 4090 8192
+GPU_ENV_CAPACITY=${3:-24576} # For H200, for A100 80 GB 24576 and for 4090 8192
 
 
 # --- Logging setup ---

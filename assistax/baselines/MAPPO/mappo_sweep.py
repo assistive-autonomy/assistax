@@ -161,6 +161,7 @@ def main(config):
             "update_epochs": config["UPDATE_EPOCHS"],
             "num_minibatches": config["NUM_MINIBATCHES"],
             "seed": config["SEED"],
+            "total_timesteps": config["TOTAL_TIMESTEPS"],
             }
         )
         # ===== EVALUATION PIPELINE =====
