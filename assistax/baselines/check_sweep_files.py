@@ -98,30 +98,38 @@ def main():
 
     print(f"Found {len(run_dirs)} run directories\n")
 
-    # Track results
-    returns_valid = []
-    returns_invalid = []
-    yaml_missing = set()  # parent directories without multirun.yaml
-    recurrent_true = []
-    recurrent_false = []
-    recurrent_unclear = []
+    # Track results - separate by shape validity AND recurrent setting
+    rnn_valid_shape = []      # recurrent=True AND valid shape
+    rnn_invalid_shape = []    # recurrent=True BUT invalid shape
+    ff_valid_shape = []       # recurrent=False AND valid shape
+    ff_invalid_shape = []     # recurrent=False BUT invalid shape
+    yaml_missing = []         # no multirun.yaml found
+    recurrent_unclear = []    # YAML parse error or unclear setting
+    
+    all_returns_valid = []
+    all_returns_invalid = []
 
     for run_dir in sorted(run_dirs):
         returns_path = os.path.join(run_dir, "returns.npy")
         
         # Check returns.npy shape
+        shape_valid = False
+        shape_info = None
         if os.path.exists(returns_path):
             is_valid, shape, error = check_returns_shape(returns_path)
+            shape_valid = is_valid
+            shape_info = (shape, error)
             if is_valid:
-                returns_valid.append(run_dir)
+                all_returns_valid.append(run_dir)
                 if args.verbose:
                     print(f"✓ VALID SHAPE: {run_dir} | shape={shape}")
             else:
-                returns_invalid.append((run_dir, shape, error))
+                all_returns_invalid.append((run_dir, shape, error))
                 if args.verbose:
                     print(f"✗ INVALID SHAPE: {run_dir} | shape={shape} | {error}")
         else:
-            returns_invalid.append((run_dir, None, "returns.npy not found"))
+            shape_info = (None, "returns.npy not found")
+            all_returns_invalid.append((run_dir, None, "returns.npy not found"))
             if args.verbose:
                 print(f"✗ MISSING: {run_dir} | returns.npy not found")
         
@@ -129,26 +137,36 @@ def main():
         yaml_path, parent_dir = find_multirun_yaml(run_dir)
         
         if yaml_path is None:
-            yaml_missing.add(run_dir)
+            yaml_missing.append((run_dir, shape_valid, shape_info))
             if args.verbose:
                 print(f"  ⚠ No multirun.yaml found in parent directories")
         else:
             recurrent_val, error = check_recurrent_setting(yaml_path)
             
             if error:
-                recurrent_unclear.append((run_dir, parent_dir, error))
+                recurrent_unclear.append((run_dir, parent_dir, error, shape_valid, shape_info))
                 if args.verbose:
                     print(f"  ? YAML ISSUE: {yaml_path} | {error}")
             elif recurrent_val is True:
-                recurrent_true.append((run_dir, parent_dir, yaml_path))
-                if args.verbose:
-                    print(f"  RNN: {parent_dir} | recurrent=True")
+                if shape_valid:
+                    rnn_valid_shape.append((run_dir, parent_dir, yaml_path))
+                    if args.verbose:
+                        print(f"  ✓ RNN + VALID: {parent_dir} | recurrent=True")
+                else:
+                    rnn_invalid_shape.append((run_dir, parent_dir, yaml_path, shape_info))
+                    if args.verbose:
+                        print(f"  ✗ RNN + INVALID: {parent_dir} | recurrent=True | {shape_info[1]}")
             elif recurrent_val is False:
-                recurrent_false.append((run_dir, parent_dir, yaml_path))
-                if args.verbose:
-                    print(f"  FF: {parent_dir} | recurrent=False")
+                if shape_valid:
+                    ff_valid_shape.append((run_dir, parent_dir, yaml_path))
+                    if args.verbose:
+                        print(f"  ✓ FF + VALID: {parent_dir} | recurrent=False")
+                else:
+                    ff_invalid_shape.append((run_dir, parent_dir, yaml_path, shape_info))
+                    if args.verbose:
+                        print(f"  ✗ FF + INVALID: {parent_dir} | recurrent=False | {shape_info[1]}")
             else:
-                recurrent_unclear.append((run_dir, parent_dir, f"Unexpected value: {recurrent_val}"))
+                recurrent_unclear.append((run_dir, parent_dir, f"Unexpected value: {recurrent_val}", shape_valid, shape_info))
                 if args.verbose:
                     print(f"  ? UNEXPECTED: recurrent={recurrent_val}")
         
@@ -160,29 +178,47 @@ def main():
     print("=== SUMMARY ===")
     print("="*80)
     
-    print(f"\n📊 RETURNS.NPY SHAPE CHECK:")
-    print(f"  Valid (x, 6, 610): {len(returns_valid)}")
-    print(f"  Invalid/Missing: {len(returns_invalid)}")
+    print(f"\n📊 OVERALL SHAPE CHECK:")
+    print(f"  Valid (x, 6, 610): {len(all_returns_valid)}")
+    print(f"  Invalid/Missing: {len(all_returns_invalid)}")
     
-    if returns_invalid:
-        print(f"\n  Invalid/Missing runs (first 20):")
-        for run_dir, shape, error in returns_invalid[:20]:
+    print(f"\n🔄 RNN vs FF BREAKDOWN (by shape validity):")
+    print(f"\n  ✅ RNN with VALID shape (recurrent=True): {len(rnn_valid_shape)}")
+    print(f"  ❌ RNN with INVALID shape (recurrent=True): {len(rnn_invalid_shape)}")
+    print(f"  ✅ FF with VALID shape (recurrent=False): {len(ff_valid_shape)}")
+    print(f"  ❌ FF with INVALID shape (recurrent=False): {len(ff_invalid_shape)}")
+    print(f"  ⚠️  No multirun.yaml found: {len(yaml_missing)}")
+    print(f"  ❓ YAML unclear/error: {len(recurrent_unclear)}")
+    
+    # Show RNN with valid shape
+    if rnn_valid_shape:
+        print(f"\n✅ RNN Directories with VALID shape (recurrent=True + correct shape):")
+        by_parent = defaultdict(list)
+        for run_dir, parent_dir, yaml_path in rnn_valid_shape:
+            by_parent[parent_dir].append(run_dir)
+        
+        for parent_dir in sorted(by_parent.keys()):
+            print(f"    {parent_dir}/")
+            for run_dir in by_parent[parent_dir][:5]:
+                rel = os.path.relpath(run_dir, parent_dir)
+                print(f"      ├─ {rel}")
+            if len(by_parent[parent_dir]) > 5:
+                print(f"      └─ ... and {len(by_parent[parent_dir]) - 5} more runs")
+    
+    # Show RNN with invalid shape
+    if rnn_invalid_shape:
+        print(f"\n❌ RNN Directories with INVALID shape (recurrent=True but wrong shape):")
+        for run_dir, parent_dir, yaml_path, shape_info in rnn_invalid_shape[:20]:
             print(f"    {run_dir}")
-            print(f"      → {error} | shape={shape}")
-        if len(returns_invalid) > 20:
-            print(f"    ... and {len(returns_invalid) - 20} more")
+            print(f"      → {shape_info[1]} | shape={shape_info[0]}")
+        if len(rnn_invalid_shape) > 20:
+            print(f"    ... and {len(rnn_invalid_shape) - 20} more")
     
-    print(f"\n🔄 MULTIRUN.YAML RECURRENT SETTINGS:")
-    print(f"  Recurrent=True (RNN): {len(recurrent_true)}")
-    print(f"  Recurrent=False (FF): {len(recurrent_false)}")
-    print(f"  Unclear/Error: {len(recurrent_unclear)}")
-    print(f"  No multirun.yaml found: {len(yaml_missing)}")
-    
-    if recurrent_true:
-        print(f"\n  ✓ RNN Directories (recurrent=True):")
-        # Group by parent directory
+    # Show FF with valid shape
+    if ff_valid_shape:
+        print(f"\n✅ FF Directories with VALID shape (recurrent=False + correct shape):")
         by_parent = defaultdict(list)
-        for run_dir, parent_dir, yaml_path in recurrent_true:
+        for run_dir, parent_dir, yaml_path in ff_valid_shape:
             by_parent[parent_dir].append(run_dir)
         
         for parent_dir in sorted(by_parent.keys()):
@@ -193,44 +229,52 @@ def main():
             if len(by_parent[parent_dir]) > 5:
                 print(f"      └─ ... and {len(by_parent[parent_dir]) - 5} more runs")
     
-    if recurrent_false:
-        print(f"\n  ✓ FF Directories (recurrent=False):")
-        by_parent = defaultdict(list)
-        for run_dir, parent_dir, yaml_path in recurrent_false:
-            by_parent[parent_dir].append(run_dir)
-        
-        for parent_dir in sorted(by_parent.keys()):
-            print(f"    {parent_dir}/")
-            for run_dir in by_parent[parent_dir][:5]:
-                rel = os.path.relpath(run_dir, parent_dir)
-                print(f"      ├─ {rel}")
-            if len(by_parent[parent_dir]) > 5:
-                print(f"      └─ ... and {len(by_parent[parent_dir]) - 5} more runs")
+    # Show FF with invalid shape
+    if ff_invalid_shape:
+        print(f"\n❌ FF Directories with INVALID shape (recurrent=False but wrong shape):")
+        for run_dir, parent_dir, yaml_path, shape_info in ff_invalid_shape[:20]:
+            print(f"    {run_dir}")
+            print(f"      → {shape_info[1]} | shape={shape_info[0]}")
+        if len(ff_invalid_shape) > 20:
+            print(f"    ... and {len(ff_invalid_shape) - 20} more")
     
+    # Show missing YAML
     if yaml_missing:
-        print(f"\n  ⚠ Directories without multirun.yaml (first 20):")
-        for run_dir in sorted(yaml_missing)[:20]:
-            print(f"    {run_dir}")
+        print(f"\n⚠️  Directories without multirun.yaml (first 20):")
+        for run_dir, shape_valid, shape_info in yaml_missing[:20]:
+            status = "✓" if shape_valid else "✗"
+            print(f"    {status} {run_dir}")
         if len(yaml_missing) > 20:
             print(f"    ... and {len(yaml_missing) - 20} more")
     
+    # Show unclear YAML
     if recurrent_unclear:
-        print(f"\n  ? Unclear/Error reading YAML (first 20):")
-        for run_dir, parent_dir, error in recurrent_unclear[:20]:
-            print(f"    {run_dir}")
+        print(f"\n❓ Unclear/Error reading YAML (first 20):")
+        for run_dir, parent_dir, error, shape_valid, shape_info in recurrent_unclear[:20]:
+            status = "✓" if shape_valid else "✗"
+            print(f"    {status} {run_dir}")
             print(f"      → {error}")
         if len(recurrent_unclear) > 20:
             print(f"    ... and {len(recurrent_unclear) - 20} more")
     
     # Final verdict
     print("\n" + "="*80)
-    if len(recurrent_true) == 0:
-        print("⚠️  NO DIRECTORIES WITH recurrent=True FOUND")
+    print("KEY FINDINGS:")
+    if len(rnn_valid_shape) == 0:
+        print("⚠️  NO RNN directories with valid shape found")
     else:
-        print(f"✓ Found {len(recurrent_true)} directories with recurrent=True")
+        print(f"✓ Found {len(rnn_valid_shape)} RNN directories with valid shape (recurrent=True + correct shape)")
     
-    if len(recurrent_false) > 0:
-        print(f"✓ Found {len(recurrent_false)} directories with recurrent=False")
+    if len(ff_valid_shape) == 0:
+        print("⚠️  NO FF directories with valid shape found")
+    else:
+        print(f"✓ Found {len(ff_valid_shape)} FF directories with valid shape (recurrent=False + correct shape)")
+    
+    if len(rnn_invalid_shape) > 0:
+        print(f"⚠️  {len(rnn_invalid_shape)} RNN directories have INVALID shapes")
+    
+    if len(ff_invalid_shape) > 0:
+        print(f"⚠️  {len(ff_invalid_shape)} FF directories have INVALID shapes")
     
     print("="*80)
 
