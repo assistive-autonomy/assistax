@@ -100,11 +100,11 @@ def restructure_path(run_dir, root, subfolder):
         rel_path = os.path.relpath(run_dir, root)
         parts = rel_path.split(os.sep)
         
-        # Expected structure: env/algo/date/time/... (or env/algo/variant/date/time/...)
-        # We want: env/algo/subfolder/date/time/...
-        if len(parts) >= 2:
-            # Insert subfolder after algo (position 2)
-            new_parts = parts[:2] + [subfolder] + parts[2:]
+        # Expected structure: algo/date/time/... (when root is env)
+        # We want: algo/subfolder/date/time/...
+        if len(parts) >= 1:
+            # Insert subfolder after algo (position 1)
+            new_parts = parts[:1] + [subfolder] + parts[1:]
             new_path = os.path.join(root, *new_parts)
             return new_path
         else:
