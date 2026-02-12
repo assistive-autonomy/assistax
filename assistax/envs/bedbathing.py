@@ -165,9 +165,9 @@ class BedBathing(PipelineEnv):
             "reward_dist": zero,
             "reward_ctrl": zero,
             "reward_wiping": zero,
-            "contact_vector": jp.zeros(self.n_targets),
-            "distances": jp.zeros(self.n_targets),
-            "contacts_info": jp.zeros(self.n_targets)
+            #"contact_vector": jp.zeros(self.n_targets),
+            #"distances": jp.zeros(self.n_targets),
+            #"contacts_info": jp.zeros(self.n_targets)
         }
 
         info = {"contact_vector": contact_vector,
@@ -257,9 +257,9 @@ class BedBathing(PipelineEnv):
             reward_dist = self._dist_reward_weight*r_dist,
             reward_ctrl = self._ctrl_cost_weight*ctrl_cost,
             reward_wiping = self._wiping_reward_weight*new_contacts,
-            contact_vector = new_contact_vector,
-            distances = distances,
-            contacts_info = state.info["contact_vector"]
+            #contact_vector = new_contact_vector,
+            #distances = distances,
+            #contacts_info = state.info["contact_vector"]
         )
 
         return state.replace(

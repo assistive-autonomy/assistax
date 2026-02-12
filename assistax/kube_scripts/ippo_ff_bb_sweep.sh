@@ -53,6 +53,7 @@ uv run python assistax/baselines/IPPO/ippo_sweep.py \
     ++UPDATE_EPOCHS=4,8,16 \
     "++SEED=range(0,8)" \
     SWEEP.num_configs=2 \
+    ++NUM_ENVS=2048 \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
 
 # --- Cleanup ---
