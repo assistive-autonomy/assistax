@@ -34,7 +34,7 @@ class BedBathing(PipelineEnv):
         ctrl_cost_weight: float = 0,
         dist_reward_weight: float = 1.0,
         dist_scale: float = 0.1,
-        wiping_reward_weight: float = 2.0,
+        wiping_reward_weight: float = 3.0,
         reset_noise_scale=5e-3,
         backend="mjx",
         n_targets: int = 52,

@@ -84,10 +84,45 @@ def check_recurrent_setting(yaml_path):
     except Exception as e:
         return None, f"Error parsing YAML: {str(e)}"
 
+def restructure_path(run_dir, root, subfolder):
+    """
+    Transform path like: root/env/algo/variant/date/time/...
+    Into: root/env/algo/subfolder/variant/date/time/...
+    
+    Returns new path or None if transformation fails.
+    """
+    try:
+        # Normalize paths
+        run_dir = os.path.normpath(os.path.abspath(run_dir))
+        root = os.path.normpath(os.path.abspath(root))
+        
+        # Get relative path from root
+        rel_path = os.path.relpath(run_dir, root)
+        parts = rel_path.split(os.sep)
+        
+        # Expected structure: env/algo/variant/date/time/...
+        # We want: env/algo/subfolder/variant/date/time/...
+        if len(parts) >= 3:
+            # Insert subfolder after algo (position 2)
+            new_parts = parts[:2] + [subfolder] + parts[2:]
+            new_path = os.path.join(root, *new_parts)
+            return new_path
+        else:
+            return None
+    except Exception as e:
+        print(f"Error restructuring path {run_dir}: {e}")
+        return None
+
 def main():
     p = argparse.ArgumentParser(description="Check returns.npy shapes and multirun.yaml recurrent settings")
     p.add_argument("root", nargs="?", default=".", help="Root folder containing run directories.")
     p.add_argument("--verbose", action="store_true", help="Print detailed information for each run.")
+    p.add_argument("--restructure", action="store_true", 
+                   help="Restructure directories: move valid FF runs to ff_nps/ and valid RNN runs to rnn_nps/")
+    p.add_argument("--dry-run", action="store_true", 
+                   help="Show what would be moved without actually moving files (use with --restructure)")
+    p.add_argument("--copy", action="store_true",
+                   help="Copy instead of move (preserves originals, use with --restructure)")
     args = p.parse_args()
 
     run_dirs = find_run_dirs(args.root)
@@ -172,6 +207,60 @@ def main():
         
         if args.verbose:
             print()
+
+    # Restructure directories if requested
+    if args.restructure:
+        print("\n" + "="*80)
+        print("=== RESTRUCTURING DIRECTORIES ===")
+        print("="*80)
+        
+        if args.dry_run:
+            print("DRY RUN MODE - No files will be moved/copied\n")
+        
+        operation = "COPY" if args.copy else "MOVE"
+        moved_count = 0
+        
+        # Process FF runs (including those without multirun.yaml - treat as FF)
+        ff_from_missing = [(run_dir, None, None) for run_dir, shape_valid, _ in yaml_missing if shape_valid]
+        ff_runs_to_process = ff_valid_shape + ff_from_missing
+        
+        print(f"\nProcessing {len(ff_runs_to_process)} FF runs with valid shapes...")
+        for run_dir, parent_dir, yaml_path in ff_runs_to_process:
+            new_path = restructure_path(run_dir, args.root, "ff_nps")
+            
+            if new_path and new_path != run_dir:
+                print(f"{operation}: {run_dir}")
+                print(f"  → {new_path}")
+                
+                if not args.dry_run:
+                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                    if args.copy:
+                        shutil.copytree(run_dir, new_path)
+                    else:
+                        shutil.move(run_dir, new_path)
+                moved_count += 1
+        
+        # Process RNN runs
+        print(f"\nProcessing {len(rnn_valid_shape)} RNN runs with valid shapes...")
+        for run_dir, parent_dir, yaml_path in rnn_valid_shape:
+            new_path = restructure_path(run_dir, args.root, "rnn_nps")
+            
+            if new_path and new_path != run_dir:
+                print(f"{operation}: {run_dir}")
+                print(f"  → {new_path}")
+                
+                if not args.dry_run:
+                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                    if args.copy:
+                        shutil.copytree(run_dir, new_path)
+                    else:
+                        shutil.move(run_dir, new_path)
+                moved_count += 1
+        
+        print(f"\n{operation} complete: {moved_count} directories processed")
+        if args.dry_run:
+            print("(No actual changes made - remove --dry-run to execute)")
+        print("="*80 + "\n")
 
     # Print summary
     print("\n" + "="*80)
