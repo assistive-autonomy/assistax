@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 # --- Parse arguments ---
-CONFIG=${1:-ippo_sweep}
+CONFIG=${1:-mappo_sweep}
 ENV_NAME=${2:-bedbathing}
 GPU_ENV_CAPACITY=${3:-49152} # For H200, for A100 80 GB 24576 and for 4090 8192
 
