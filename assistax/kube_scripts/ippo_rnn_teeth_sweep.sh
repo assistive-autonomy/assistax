@@ -42,6 +42,3 @@ uv run python assistax/baselines/IPPO/ippo_sweep.py \
     "++SEED=range(0,5)" \
     SWEEP.num_configs=3 \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY 
-
-# --- Cleanup ---
-rm -rf "$WORK_DIR"
