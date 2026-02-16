@@ -5,7 +5,7 @@ set -Eeuo pipefail
 # --- Parse arguments ---
 CONFIG=${1:-mappo_sweep}
 ENV_NAME=${2:-scratchitch}
-GPU_ENV_CAPACITY=${3:-24576} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
+GPU_ENV_CAPACITY=${3:-49152} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
 
 # --- Logging setup ---
 ts(){ date +'%Y-%m-%dT%H:%M:%S%z'; }
@@ -24,27 +24,15 @@ on_err(){
 }
 trap on_err ERR
 
-# --- Workspace isolation ---
-WORK_DIR="/pvc/tmp/${POD_NAME}"
-mkdir -p "$WORK_DIR"
-cp -r /pvc/assistax "$WORK_DIR/"
-cd "$WORK_DIR/assistax"
-
-export PYTHONPATH="$WORK_DIR/assistax:${PYTHONPATH:-}"
-export UV_CACHE_DIR=/pvc/.uv-cache
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.95 # Set to .90 for A100 and 4090
 
-mkdir -p /pvc/assistax/multirun
-rm -rf  multirun
-ln -s /pvc/assistax/multirun multirun
-
-echo "[$(ts)] Workspace: $WORK_DIR"
-echo "[$(ts)] Outputs symlinked to: /pvc/assistax/multirun"
+cd /pvc/assistax
+ulimit -n 10000
 
 # --- Run training ---
 uv run python assistax/baselines/MAPPO/mappo_sweep.py \
     -cn $CONFIG -m \
-    network=ff_nps \
+    network=rnn_nps \
     ++NUM_SEEDS=6 \
     ++ENV_NAME=$ENV_NAME \
     ++TOTAL_TIMESTEPS=4e7 \
@@ -52,7 +40,4 @@ uv run python assistax/baselines/MAPPO/mappo_sweep.py \
     ++UPDATE_EPOCHS=4,8,16 \
     "++SEED=range(0,8)" \
     SWEEP.num_configs=2 \
-    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
-
-# --- Cleanup ---
-rm -rf "$WORK_DIR"
+    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY 

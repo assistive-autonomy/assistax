@@ -14,13 +14,13 @@ ENV_KWARGS:
   #   joint_restriction_factor:   1.0
   #   joint_strength: 1.0
   #   tremor_magnitude: 0.0
-TOTAL_TIMESTEPS: 1e5
+TOTAL_TIMESTEPS: 4e7
 
 # NUM_STEPS: 256
 NUM_ENVS: 32
 NUM_SEEDS: 2
 SEED: 1
-NUM_EVAL_EPISODES: 64 # lower for rendering
+NUM_EVAL_EPISODES: 16 # lower for rendering
 NUM_CHECKPOINTS: 128 # how often to save the training parameters for evaluating later
 
 TEST_DURING_TRAINING: True # not currently in use for SAC
@@ -58,8 +58,12 @@ WANDB_RUN: test
 GPU_ENV_CAPACITY: 8192
 DISABLE_JIT: False
 DEVICE: 0
+PRINT_MEMORY_STATS: True
 
 DETERMINISTIC_EVAL: False
+
+SAVE_ALL_TRAIN_STATES: false
+SAVE_FINAL_TRAIN_STATE: false
 
 # SWEEPER SETTINGS
 SWEEP:
@@ -84,8 +88,8 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/${ENV_NAME}/${ALG}/${network.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${ALG}/${network.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/${ENV_NAME}/${ALG}/${network.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ""
 

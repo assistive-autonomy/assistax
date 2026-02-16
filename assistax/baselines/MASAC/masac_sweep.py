@@ -587,7 +587,7 @@ def main(config):
         network_type = "MASAC_FF_NPS"
 
         if config["PRINT_MEMORY_STATS"]:
-            print_memory_stats(f"IPPO Sweep: Final Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']}, Batch_size={config['BATCH_SIZE']}")
+            print_memory_stats(f"MASAC Sweep: Final Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']}, Batch_size={config['BATCH_SIZE']}")
 
 
 
