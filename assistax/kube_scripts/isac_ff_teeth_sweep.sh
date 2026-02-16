@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 # --- Parse arguments ---
 CONFIG=${1:-isac_sweep}
-ENV_NAME=${2:-scratchitch}
+ENV_NAME=${2:-teethbrushing}
 GPU_ENV_CAPACITY=${3:-24576} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
 
 # --- Logging setup ---

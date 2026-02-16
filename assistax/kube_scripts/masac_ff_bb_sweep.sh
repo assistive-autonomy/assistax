@@ -3,8 +3,8 @@
 set -Eeuo pipefail
 
 # --- Parse arguments ---
-CONFIG=${1:-isac_sweep}
-ENV_NAME=${2:-scratchitch}
+CONFIG=${1:-masac_sweep}
+ENV_NAME=${2:-bedbathing}
 GPU_ENV_CAPACITY=${3:-24576} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
 
 # --- Logging setup ---
@@ -43,7 +43,7 @@ echo "[$(ts)] Workspace: $WORK_DIR"
 echo "[$(ts)] Outputs symlinked to: /pvc/assistax/multirun"
 
 # --- Run training ---
-uv run python assistax/baselines/ISAC/isac_sweep.py \
+uv run python assistax/baselines/MASAC/masac_sweep.py \
     -cn $CONFIG -m \
     network=ff_nps \
     ++NUM_SEEDS=6 \
@@ -51,34 +51,8 @@ uv run python assistax/baselines/ISAC/isac_sweep.py \
     ++TOTAL_TIMESTEPS=4e7 \
     ++NUM_MINIBATCHES=4,8,16 \
     ++UPDATE_EPOCHS=4,8,16 \
-    "++SEED=range(0,2)" \
-    SWEEP.num_configs=7 \
-    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
-
-# 2 extra runs
-
-uv run python assistax/baselines/ISAC/isac_sweep.py \
-    -cn $CONFIG -m \
-    network=ff_nps \
-    ++NUM_SEEDS=6 \
-    ++ENV_NAME="$ENV_NAME" \
-    ++TOTAL_TIMESTEPS=4e7 \
-    ++NUM_MINIBATCHES=16 \
-    ++UPDATE_EPOCHS=4 \
-    "++SEED=2" \
-    SWEEP.num_configs=1 \
-    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
-
-uv run python assistax/baselines/ISAC/isac_sweep.py \
-    -cn $CONFIG -m \
-    network=ff_nps \
-    ++NUM_SEEDS=6 \
-    ++ENV_NAME="$ENV_NAME" \
-    ++TOTAL_TIMESTEPS=4e7 \
-    ++NUM_MINIBATCHES=8 \
-    ++UPDATE_EPOCHS=16 \
-    "++SEED=2" \
-    SWEEP.num_configs=1 \
+    "++SEED=range(0,3)" \
+    SWEEP.num_configs=5 \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
 
 # --- Cleanup ---
