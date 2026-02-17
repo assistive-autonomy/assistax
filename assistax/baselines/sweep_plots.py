@@ -649,7 +649,7 @@ def analyze_performance(
         # Store metrics
         performance_metrics[config_idx] = {
             'config_idx': config_idx,
-            'hyperparams': {k: v[config_idx] for k, v in hp_dict.items()},
+            'hyperparams': {k: v[config_idx] for k, v in hp_dict.items() if k != 'seed'},
             'final_performance': final_performance,
             'auc': auc,
             'max_performance': np.max(mean_curve),
