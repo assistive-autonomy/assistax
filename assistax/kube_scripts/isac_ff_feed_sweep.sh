@@ -77,7 +77,7 @@ uv run python assistax/baselines/ISAC/isac_sweep.py \
     ++TOTAL_TIMESTEPS=4e7 \
     ++NUM_MINIBATCHES=8 \
     ++UPDATE_EPOCHS=16 \
-    "++SEED=2" \
+    "++SEED=3" \
     SWEEP.num_configs=1 \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
 

@@ -49,36 +49,11 @@ uv run python assistax/baselines/ISAC/isac_sweep.py \
     ++NUM_SEEDS=6 \
     ++ENV_NAME="$ENV_NAME" \
     ++TOTAL_TIMESTEPS=4e7 \
-    ++NUM_MINIBATCHES=4,8,16 \
-    ++UPDATE_EPOCHS=4,8,16 \
-    "++SEED=range(0,2)" \
-    SWEEP.num_configs=7 \
-    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
-
-# 2 extra runs
-
-uv run python assistax/baselines/ISAC/isac_sweep.py \
-    -cn $CONFIG -m \
-    network=ff_nps \
-    ++NUM_SEEDS=6 \
-    ++ENV_NAME="$ENV_NAME" \
-    ++TOTAL_TIMESTEPS=4e7 \
-    ++NUM_MINIBATCHES=16 \
-    ++UPDATE_EPOCHS=4 \
-    "++SEED=2" \
-    SWEEP.num_configs=1 \
-    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
-
-uv run python assistax/baselines/ISAC/isac_sweep.py \
-    -cn $CONFIG -m \
-    network=ff_nps \
-    ++NUM_SEEDS=6 \
-    ++ENV_NAME="$ENV_NAME" \
-    ++TOTAL_TIMESTEPS=4e7 \
-    ++NUM_MINIBATCHES=8 \
-    ++UPDATE_EPOCHS=16 \
-    "++SEED=2" \
-    SWEEP.num_configs=1 \
+    ++NUM_SAC_UPDATES=32,64,128 \
+    ++ROLLOUT_LENGTH=8,16,32 \
+    ++BATCH_SIZE=128,256,512 \
+    ++SEED=0 \
+    SWEEP.num_configs=5 \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
 
 # --- Cleanup ---

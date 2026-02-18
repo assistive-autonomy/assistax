@@ -49,9 +49,10 @@ uv run python assistax/baselines/MASAC/masac_sweep.py \
     ++NUM_SEEDS=6 \
     ++ENV_NAME="$ENV_NAME" \
     ++TOTAL_TIMESTEPS=4e7 \
-    ++NUM_MINIBATCHES=4,8,16 \
-    ++UPDATE_EPOCHS=4,8,16 \
-    "++SEED=range(0,3)" \
+    ++NUM_SAC_UPDATES=32,64,128 \
+    ++ROLLOUT_LENGTH=8,16,32 \
+    ++BATCH_SIZE=128,256,512 \
+    ++SEED=0 \
     SWEEP.num_configs=5 \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
 
