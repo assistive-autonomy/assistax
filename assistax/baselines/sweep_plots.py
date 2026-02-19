@@ -232,6 +232,11 @@ ALGORITHM_CONFIGS = {
         'display_names': ['Learning Rate', 'Clip Epsilon', 'Entropy Coef'],
         'log_scale': [True, False, False],
     },
+    'mappo': {
+        'params': ['lr', 'clip_eps', 'ent_coef'],
+        'display_names': ['Learning Rate', 'Clip Epsilon', 'Entropy Coef'],
+        'log_scale': [True, False, False],
+    },
     'ppo': {
         'params': ['lr', 'clip_eps', 'ent_coef'],
         'display_names': ['Learning Rate', 'Clip Epsilon', 'Entropy Coef'],
@@ -649,7 +654,7 @@ def analyze_performance(
         # Store metrics
         performance_metrics[config_idx] = {
             'config_idx': config_idx,
-            'hyperparams': {k: v[config_idx] for k, v in hp_dict.items() if k != 'seed'},
+            'hyperparams': {k: v[config_idx] for k, v in hp_dict.items() if k != 'seed' and k != 'total_timesteps'},
             'final_performance': final_performance,
             'auc': auc,
             'max_performance': np.max(mean_curve),

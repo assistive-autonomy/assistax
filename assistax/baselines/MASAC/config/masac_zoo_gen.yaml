@@ -25,10 +25,10 @@ ENV_KWARGS:
       max_action_magnitude: 0.8
     touch_threshold: 0.3
     variable_names:
-      speed: "scratcher_speed"
-      force: "scratcher_force"
+      speed: "ee_speed"
+      force: "ee_force"
       action_magnitude: "action_magnitude"
-      contact_forces: "contact_forces"  
+
 TOTAL_TIMESTEPS: 10e6
 
 # NUM_STEPS: 256
@@ -79,6 +79,38 @@ DETERMINISTIC_EVAL: False
 
 # ZOO SETTINGS
 ZOO_PATH: /home/leo/assistax/zoo2
+
+# Preference sweep for diverse zoo generation
+# Remove/comment out to disable preference vmapping
+PREFERENCE_SWEEP:
+  num_configs: 4
+  w_speed:
+    min: 0.1
+    max: 0.5
+  w_force:
+    min: 0.1
+    max: 0.6
+  w_action:
+    min: 0.05
+    max: 0.3
+  w_touch:
+    min: -0.1
+    max: -0.01
+  speed_range_min:
+    min: 0.03
+    max: 0.08
+  speed_range_max:
+    min: 0.10
+    max: 0.20
+  force_range_min:
+    min: 1.0
+    max: 2.0
+  force_range_max:
+    min: 3.0
+    max: 5.0
+  max_action_magnitude:
+    min: 0.5
+    max: 1.0
 
 eval: # path to actor all params for eval
   path: ./path/to/actor_all_params.safetensors

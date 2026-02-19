@@ -515,7 +515,82 @@ class PreferenceRewardWrapper(Wrapper):
         new_touch = (prev_contact_force < self.touch_threshold) & (current_contact_force >= self.touch_threshold)
 
         return jp.where(new_touch, 1.0, 0.0)
-        
+
+
+def compute_preference_reward(
+    speed: jax.Array,
+    force: jax.Array,
+    action_magnitude: jax.Array,
+    prev_contact_force: jax.Array,
+    w_speed: jax.Array,
+    w_force: jax.Array,
+    w_action: jax.Array,
+    w_touch: jax.Array,
+    speed_range_min: jax.Array,
+    speed_range_max: jax.Array,
+    force_range_min: jax.Array,
+    force_range_max: jax.Array,
+    max_action_magnitude: jax.Array,
+    reward_budget: jax.Array,
+    overall_weight: jax.Array,
+    touch_threshold: jax.Array,
+) -> Tuple[jax.Array, jax.Array]:
+    """Pure-function preference reward computation for vmapped preference sweeps.
+
+    All parameters are explicit JAX arrays so outer vmaps can broadcast
+    scalar weight configs over batched environment quantities.
+
+    Args:
+        speed: End-effector speed, shape ``(num_envs,)``.
+        force: End-effector force, shape ``(num_envs,)``.
+        action_magnitude: Action magnitude, shape ``(num_envs,)``.
+        prev_contact_force: Previous contact force, shape ``(num_envs,)``.
+        w_speed: Weight for speed preference (scalar).
+        w_force: Weight for force preference (scalar).
+        w_action: Weight for action efficiency (scalar).
+        w_touch: Weight for touch penalty, typically negative (scalar).
+        speed_range_min: Lower bound of preferred speed range (scalar).
+        speed_range_max: Upper bound of preferred speed range (scalar).
+        force_range_min: Lower bound of preferred force range (scalar).
+        force_range_max: Upper bound of preferred force range (scalar).
+        max_action_magnitude: Normalisation constant for action efficiency (scalar).
+        reward_budget: Maximum total positive preference reward (scalar).
+        overall_weight: Global scaling factor applied to total reward (scalar).
+        touch_threshold: Force threshold for detecting new contacts (scalar).
+
+    Returns:
+        ``(total_pref_reward, updated_contact_force)`` both shape ``(num_envs,)``.
+    """
+    def _gaussian_pref(value, range_min, range_max):
+        center = (range_min + range_max) / 2.0
+        width = (range_max - range_min) / 2.0
+        in_range = (value >= range_min) & (value <= range_max)
+        gaussian = jp.exp(-((value - center) ** 2) / (2.0 * width ** 2))
+        return jp.where(in_range, 1.0, gaussian)
+
+    speed_pref = _gaussian_pref(speed, speed_range_min, speed_range_max)
+    force_pref = _gaussian_pref(force, force_range_min, force_range_max)
+    action_eff = jp.exp(-action_magnitude / max_action_magnitude)
+
+    # Touch penalty: detect new contact transitions
+    current_cf = jp.linalg.norm(force)
+    new_touch = (prev_contact_force < touch_threshold) & (current_cf >= touch_threshold)
+    touch_penalty = jp.where(new_touch, 1.0, 0.0)
+
+    # Budget normalisation (matches PreferenceRewardWrapper default mode)
+    positive_weight_sum = w_speed + w_force + w_action
+    norm_factor = jp.where(positive_weight_sum > 0, reward_budget / positive_weight_sum, 1.0)
+
+    total = (
+        norm_factor * w_speed * speed_pref
+        + norm_factor * w_force * force_pref
+        + norm_factor * w_action * action_eff
+        + norm_factor * w_touch * touch_penalty
+    )
+    total_pref_reward = overall_weight * total
+
+    return total_pref_reward, current_cf
+
 
 
 #class PreferenceRewardWrapper(Wrapper):

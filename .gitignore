@@ -28,6 +28,12 @@ multirun/
 *.png
 CLAUDE.md
 
+zoo*/
+*zoo/
+*zoo*/
+
+*.csv
+
 # Build outputs
 build/
 dist/

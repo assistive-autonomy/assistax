@@ -23,8 +23,11 @@ from assistax.wrappers.aht import ZooManager
 from typing import Dict, Any
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    _tree_shape, _stack_tree, _concat_tree, _tree_split,
+    generate_preference_configs, extract_pref_config_at_index,
     )
+import copy
+import uuid
 
 
 # ================================ TREE MANIPULATION UTILITIES ================================
@@ -302,102 +305,151 @@ def main(config):
         config: Hydra configuration object containing training and zoo parameters
     """
     config = OmegaConf.to_container(config, resolve=True)
-    
+
+    pref_sweep_config = config.get("PREFERENCE_SWEEP", None)
+    use_dynamic_prefs = pref_sweep_config is not None
+
     print(f"Starting MASAC zoo generation")
     print(f"Environment: {config['ENV_NAME']}")
     print(f"Number of seeds: {config['NUM_SEEDS']}")
     print(f"Zoo path: {config['ZOO_PATH']}")
     print(f"Total timesteps per agent: {config['TOTAL_TIMESTEPS']}")
-    
+    if use_dynamic_prefs:
+        print(f"Preference sweep: {pref_sweep_config['num_configs']} configs")
+
     # ===== IMPORT ALGORITHM COMPONENTS =====
     from masac_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
-    
+
     # ===== ENVIRONMENT SETUP =====
     env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     print(f"Environment agents: {env.agents}")
-    print(f"Total agents to train: {len(env.agents) * config['NUM_SEEDS']}")
-    
+
     # ===== RANDOM NUMBER GENERATOR SETUP =====
     rng = jax.random.PRNGKey(config["SEED"])
-    train_rng, eval_rng = jax.random.split(rng)
+    train_rng, eval_rng, pref_rng = jax.random.split(rng, 3)
     train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
-    
+
     # ===== TRAINING EXECUTION =====
     with jax.disable_jit(config["DISABLE_JIT"]):
-        print("Compiling training function...")
-        train_jit = jax.jit(
-            make_train(config, save_train_state=False),  # Don't save training states for zoo generation
-            device=jax.devices()[config["DEVICE"]]
-        )
-        
-        # Train agents across all seeds using vmap for efficiency
-        out = jax.vmap(train_jit, in_axes=(0, None, None, None, None))(
-            train_rngs,
-            config["POLICY_LR"],
-            config["Q_LR"],
-            config["ALPHA_LR"],
-            config["TAU"],
-        )
-        
-        # Extract final trained parameters
-        final_train_state = out["runner_state"].train_states.actor.params
-        print(f"Training completed! Final parameters shape: {jax.tree.leaves(_tree_shape(final_train_state))[0]}")
-        
-        # ===== ZOO MANAGEMENT SETUP =====
-        print("Setting up zoo management...")
-        zoo = ZooManager(config["ZOO_PATH"])
-        
-        # ===== SAVE AGENTS TO ZOO =====
-        print("Saving trained agents to zoo...")
-        total_agents_saved = 0
-        
-        # Iterate through each agent type in the environment
-        for agent_idx, agent_id in enumerate(env.agents):
-            print(f"\nProcessing agent: {agent_id} (index {agent_idx})")
-            
-            # Save agent from each training seed
+        if use_dynamic_prefs:
+            # === PREFERENCE SWEEP PATH ===
+            pref_configs = generate_preference_configs(pref_rng, pref_sweep_config, config)
+            print(f"Sampled {pref_sweep_config['num_configs']} preference configs")
+
+            print("Compiling training function (dynamic preferences)...")
+            train_jit = jax.jit(
+                make_train(config, save_train_state=False, dynamic_preferences=True),
+                device=jax.devices()[config["DEVICE"]]
+            )
+
+            # Nested vmap: outer=preference configs, inner=seeds
+            out = jax.vmap(
+                jax.vmap(train_jit, in_axes=(0, None, None, None, None, None)),  # seeds
+                in_axes=(None, None, None, None, None, 0),  # pref configs
+            )(train_rngs, config["POLICY_LR"], config["Q_LR"],
+              config["ALPHA_LR"], config["TAU"], pref_configs)
+
+            # Shape: (num_pref_configs, num_seeds, num_agents, ...)
+            final_train_state = out["runner_state"].train_states.actor.params
+            print(f"Training completed! Final parameters shape: {jax.tree.leaves(_tree_shape(final_train_state))[0]}")
+
+            # Three-level extraction and per-agent saving
+            print("Setting up zoo management...")
+            zoo = ZooManager(config["ZOO_PATH"])
+            total_agents_saved = 0
+
+            for pref_idx in range(pref_sweep_config["num_configs"]):
+                agent_config = copy.deepcopy(config)
+                pref_at_idx = extract_pref_config_at_index(pref_configs, pref_idx)
+                agent_config["ENV_KWARGS"]["preference_rewards"]["preference_weights"] = {
+                    "speed_preference": pref_at_idx["w_speed"],
+                    "force_preference": pref_at_idx["w_force"],
+                    "action_efficiency": pref_at_idx["w_action"],
+                    "touch_penalty": pref_at_idx["w_touch"],
+                }
+                agent_config["ENV_KWARGS"]["preference_rewards"]["preference_ranges"] = {
+                    "speed_range": [pref_at_idx["speed_range_min"], pref_at_idx["speed_range_max"]],
+                    "force_range": [pref_at_idx["force_range_min"], pref_at_idx["force_range_max"]],
+                    "max_action_magnitude": pref_at_idx["max_action_magnitude"],
+                }
+                print(f"Pref config {pref_idx}: w_speed={pref_at_idx['w_speed']:.3f}, "
+                      f"w_force={pref_at_idx['w_force']:.3f}")
+
+                pref_weights_for_index = {
+                    "w_speed": round(pref_at_idx["w_speed"], 4),
+                    "w_force": round(pref_at_idx["w_force"], 4),
+                    "w_action": round(pref_at_idx["w_action"], 4),
+                    "w_touch": round(pref_at_idx["w_touch"], 4),
+                }
+
+                for seed_idx in range(config["NUM_SEEDS"]):
+                    team_uuid = str(uuid.uuid4())
+                    for agent_idx, agent_id in enumerate(env.agents):
+                        agent_params = _tree_take(
+                            _tree_take(
+                                _tree_take(final_train_state, pref_idx, axis=0),
+                                seed_idx, axis=0,
+                            ),
+                            agent_idx, axis=0,
+                        )
+                        zoo.save_agent(
+                            config=agent_config,
+                            param_dict=agent_params,
+                            scenario_agent_id=agent_id,
+                            team_uuid=team_uuid,
+                            preference_weights=pref_weights_for_index,
+                        )
+                        total_agents_saved += 1
+
+        else:
+            # === ORIGINAL PATH (unchanged) ===
+            print("Compiling training function...")
+            train_jit = jax.jit(
+                make_train(config, save_train_state=False),
+                device=jax.devices()[config["DEVICE"]]
+            )
+
+            out = jax.vmap(train_jit, in_axes=(0, None, None, None, None))(
+                train_rngs,
+                config["POLICY_LR"],
+                config["Q_LR"],
+                config["ALPHA_LR"],
+                config["TAU"],
+            )
+
+            final_train_state = out["runner_state"].train_states.actor.params
+            print(f"Training completed! Final parameters shape: {jax.tree.leaves(_tree_shape(final_train_state))[0]}")
+
+            print("Setting up zoo management...")
+            zoo = ZooManager(config["ZOO_PATH"])
+            total_agents_saved = 0
+
             for seed_idx in range(config["NUM_SEEDS"]):
-                print(f"  Saving agent from seed {seed_idx}...")
-                
-                # Extract parameters for this specific agent and seed
-                # First extract seed, then extract agent from the seed's parameters
-                agent_params = _tree_take(  # Extract agent parameters
-                    _tree_take(  # Extract seed parameters
-                        final_train_state,
-                        seed_idx,
-                        axis=0,  # Seed axis
-                    ),
-                    agent_idx,
-                    axis=0,  # Agent axis
-                )
-                
-                # Save agent to zoo with metadata
-                zoo.save_agent(
-                    config=config,
-                    param_dict=agent_params,
-                    scenario_agent_id=agent_id
-                )
-                
-                total_agents_saved += 1
-                print(f"    ✓ Saved {agent_id}_seed{seed_idx} to zoo")
-        
+                team_uuid = str(uuid.uuid4())
+                for agent_idx, agent_id in enumerate(env.agents):
+                    agent_params = _tree_take(
+                        _tree_take(final_train_state, seed_idx, axis=0),
+                        agent_idx, axis=0,
+                    )
+                    zoo.save_agent(
+                        config=config,
+                        param_dict=agent_params,
+                        scenario_agent_id=agent_id,
+                        team_uuid=team_uuid,
+                    )
+                    total_agents_saved += 1
+
         # ===== DISPLAY COMPLETION SUMMARY =====
         print("\n" + "="*60)
         print("ZOO GENERATION COMPLETED")
         print("="*60)
         print(f"Total agents saved to zoo: {total_agents_saved}")
-        print(f"Agents per type: {config['NUM_SEEDS']}")
         print(f"Agent types: {', '.join(env.agents)}")
+        print(f"Seeds per type: {config['NUM_SEEDS']}")
+        if use_dynamic_prefs:
+            print(f"Preference configs: {pref_sweep_config['num_configs']}")
         print(f"Zoo location: {config['ZOO_PATH']}")
-        print(f"")
-        print("The zoo now contains trained agents that can be used for:")
-        print("- Mixed training scenarios")
-        print("- Curriculum learning")
-        print("- Robust policy evaluation")
-        print("- Population-based training")
         print("="*60)
-        
-        print("Zoo generation completed successfully!")
 
 
 if __name__ == "__main__":

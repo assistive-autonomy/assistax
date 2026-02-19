@@ -25,14 +25,15 @@ ENV_KWARGS:
       max_action_magnitude: 0.8
     touch_threshold: 0.3
     variable_names:
-      speed: "scratcher_speed"
-      force: "scratcher_force"
+      speed: "ee_speed"
+      force: "ee_force"
       action_magnitude: "action_magnitude"
-      contact_forces: "contact_forces"  
+    overall_weight: 1
+    reward_budget: 1.5
 
-TOTAL_TIMESTEPS: 30e6
+TOTAL_TIMESTEPS: 4e7 
 NUM_STEPS: 256
-NUM_ENVS: 2048
+NUM_ENVS: 1024
 NUM_SEEDS: 1  
 SEED: 0
 NUM_EVAL_EPISODES: 5 
@@ -57,9 +58,44 @@ GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False
 DEVICE: 0
+PRINT_MEMORY_STATS: True
 
 # ZOO SETTINGS
-ZOO_PATH: /home/lhin/assistax/zoo
+ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo
+
+# Preference sweep for diverse zoo generation
+# Remove/comment out to disable preference vmapping
+PREFERENCE_SWEEP:
+  num_configs: 4  # number of unique preference combinations to sample
+  # Meta-ranges for preference weights (uniform sampling)
+  w_speed:
+    min: 0.1
+    max: 0.5
+  w_force:
+    min: 0.1
+    max: 0.6
+  w_action:
+    min: 0.05
+    max: 0.3
+  w_touch:  # negative range for penalty
+    min: -0.1
+    max: -0.01
+  # Meta-ranges for preference ranges
+  speed_range_min:
+    min: 0.03
+    max: 0.08
+  speed_range_max:
+    min: 0.10
+    max: 0.20
+  force_range_min:
+    min: 1.0
+    max: 2.0
+  force_range_max:
+    min: 3.0
+    max: 5.0
+  max_action_magnitude:
+    min: 0.5
+    max: 1.0
 
 hydra:
   job:

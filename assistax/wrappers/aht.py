@@ -376,10 +376,21 @@ class ZooManager:
             "algorithm",
             "is_rnn",
             "rnn_dim",
+            "team_uuid",
+            "w_speed",
+            "w_force",
+            "w_action",
+            "w_touch",
         ]
 
         self._init_zoo(zoo_path)
         self.index = pd.read_csv(self.index_path)
+        # Migrate old zoo index files that lack newer columns
+        missing_cols = [c for c in self.index_cols if c not in self.index.columns]
+        if missing_cols:
+            for col in missing_cols:
+                self.index[col] = ""
+            self.index.to_csv(self.index_path, index=False)
 
     def load_agent(self, agent_uuid: str) -> ZooState:
         """Load an agent from the zoo given an agent UUID."""
@@ -471,12 +482,12 @@ class ZooManager:
         with open(self.index_path, "a", encoding="utf-8") as f:
             f.write(','.join(str(index_dict[col]) for col in self.index_cols) + '\n')
 
-    def save_agent(self, config, param_dict, scenario_agent_id):
+    def save_agent(self, config, param_dict, scenario_agent_id, team_uuid="", preference_weights=None):
         """Saves the current agent to the zoo."""
         agent_uuid = str(uuid.uuid4())
-        # save params
         self._save_safetensors(agent_uuid, param_dict)
         self._save_config(agent_uuid, config)
+        pw = preference_weights or {}
         self._write_index({
             "agent_uuid": agent_uuid,
             "scenario": config["ENV_NAME"],
@@ -484,6 +495,11 @@ class ZooManager:
             "algorithm": config["ALGORITHM"],
             "is_rnn": config["network"]["recurrent"],
             "rnn_dim": config["network"].get("gru_hidden_dim", 0),
+            "team_uuid": team_uuid,
+            "w_speed": pw.get("w_speed", ""),
+            "w_force": pw.get("w_force", ""),
+            "w_action": pw.get("w_action", ""),
+            "w_touch": pw.get("w_touch", ""),
         })
 
 

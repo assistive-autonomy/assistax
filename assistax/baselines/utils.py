@@ -1068,6 +1068,99 @@ def upload_mujoco_videos_to_wandb(eval_env, episodes_dict, run, fps=30, quality=
     
     print("MuJoCo videos uploaded to wandb!")
 
+
+# ================================ PREFERENCE SWEEP UTILITIES ================================
+
+def generate_preference_configs(
+    rng: jax.random.PRNGKey,
+    pref_sweep_config: Dict,
+    base_config: Dict,
+) -> Dict[str, jnp.ndarray]:
+    """Sample unique preference weight + range combinations for vmapped zoo generation.
+
+    For each parameter, if a ``{min, max}`` meta-range is specified in
+    *pref_sweep_config* the value is sampled uniformly.  Otherwise the
+    fixed value from *base_config* is broadcast to ``(num_configs,)``.
+
+    Range constraints ``speed_range_min < speed_range_max`` and
+    ``force_range_min < force_range_max`` are enforced by sampling min
+    first, then max from ``[sampled_min, meta_max]``.
+
+    Args:
+        rng: JAX PRNG key.
+        pref_sweep_config: Dict with ``num_configs`` and optional
+            per-parameter ``{min, max}`` sub-dicts.
+        base_config: Full training config (used for fallback values).
+
+    Returns:
+        Dict of JAX arrays each shaped ``(num_configs,)``.
+    """
+    n = pref_sweep_config["num_configs"]
+    pref_base = base_config["ENV_KWARGS"]["preference_rewards"]
+
+    def _sample_or_fixed(rng_key, param_name, fallback):
+        spec = pref_sweep_config.get(param_name, None)
+        if spec is not None and isinstance(spec, dict):
+            return jax.random.uniform(rng_key, shape=(n,), minval=spec["min"], maxval=spec["max"])
+        return jnp.full((n,), fallback)
+
+    keys = jax.random.split(rng, 12)
+
+    w_speed = _sample_or_fixed(keys[0], "w_speed", pref_base["preference_weights"]["speed_preference"])
+    w_force = _sample_or_fixed(keys[1], "w_force", pref_base["preference_weights"]["force_preference"])
+    w_action = _sample_or_fixed(keys[2], "w_action", pref_base["preference_weights"]["action_efficiency"])
+    w_touch = _sample_or_fixed(keys[3], "w_touch", pref_base["preference_weights"]["touch_penalty"])
+
+    # Speed range: enforce min < max
+    speed_range_min = _sample_or_fixed(keys[4], "speed_range_min", pref_base["preference_ranges"]["speed_range"][0])
+    speed_max_spec = pref_sweep_config.get("speed_range_max", None)
+    if speed_max_spec is not None and isinstance(speed_max_spec, dict):
+        speed_range_max = jax.random.uniform(keys[5], shape=(n,), minval=speed_range_min, maxval=speed_max_spec["max"])
+    else:
+        speed_range_max = jnp.full((n,), pref_base["preference_ranges"]["speed_range"][1])
+
+    # Force range: enforce min < max
+    force_range_min = _sample_or_fixed(keys[6], "force_range_min", pref_base["preference_ranges"]["force_range"][0])
+    force_max_spec = pref_sweep_config.get("force_range_max", None)
+    if force_max_spec is not None and isinstance(force_max_spec, dict):
+        force_range_max = jax.random.uniform(keys[7], shape=(n,), minval=force_range_min, maxval=force_max_spec["max"])
+    else:
+        force_range_max = jnp.full((n,), pref_base["preference_ranges"]["force_range"][1])
+
+    max_action_magnitude = _sample_or_fixed(keys[8], "max_action_magnitude", pref_base["preference_ranges"]["max_action_magnitude"])
+    reward_budget = _sample_or_fixed(keys[9], "reward_budget", pref_base.get("reward_budget", 1.0))
+    overall_weight = _sample_or_fixed(keys[10], "overall_weight", pref_base.get("overall_weight", 1.0))
+    touch_threshold = _sample_or_fixed(keys[11], "touch_threshold", pref_base.get("touch_threshold", 0.3))
+
+    return {
+        "w_speed": w_speed,
+        "w_force": w_force,
+        "w_action": w_action,
+        "w_touch": w_touch,
+        "speed_range_min": speed_range_min,
+        "speed_range_max": speed_range_max,
+        "force_range_min": force_range_min,
+        "force_range_max": force_range_max,
+        "max_action_magnitude": max_action_magnitude,
+        "reward_budget": reward_budget,
+        "overall_weight": overall_weight,
+        "touch_threshold": touch_threshold,
+    }
+
+
+def extract_pref_config_at_index(pref_configs: Dict[str, jnp.ndarray], idx: int) -> Dict[str, float]:
+    """Extract a single preference config from batched arrays as Python floats.
+
+    Args:
+        pref_configs: Dict of arrays each shaped ``(num_configs,)``.
+        idx: Index to extract.
+
+    Returns:
+        Dict of Python floats for the given index.
+    """
+    return {k: float(v[idx]) for k, v in pref_configs.items()}
+
+
 def print_memory_stats(label=""):
     """Prints the true peak memory used by JAX on the primary GPU."""
     try:
