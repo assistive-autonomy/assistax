@@ -43,9 +43,27 @@ GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False
 DEVICE: 0
+PRINT_MEMORY_STATS: True
 
 # ZOO SETTINGS
 ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo
+
+# Visualization settings
+SAVE_MUJOCO_TRAJECTORIES: True
+SAVE_HTML_RENDER: True
+RENDER_VIDEOS: False
+VIDEO_FPS: 30
+VIDEO_WIDTH: 1920
+VIDEO_HEIGHT: 1080
+VIDEO_QUALITY: "high"
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}
+
+# WandB Params
+ALG: PPO_AHT
+ENTITY: "lh-from-kb"
+PROJECT: "assistax-dev"
+WANDB_MODE: "online"
+EXP_TAGS: ["ZSC","PPO","AHT"]
 
 hydra:
   job:
