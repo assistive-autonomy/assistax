@@ -12,7 +12,7 @@ Assistax is a Python library that provides hardware-accelerated environments in 
 
 ## 🏄 Installation
 
-We use `uv` for environment and package management. We highly recommend using `uv` when working with this project. For installing `uv`, see [uv installation](https://docs.astral.sh/uv/getting-started/installation/), and for more information and further documentation, see [uv docs](https://docs.astral.sh/uv/).
+We use `uv` for environment and package management. We highly recommend using `uv` when working with this project. For installing `uv`, see [uv installation](https://docs.astral.sh/uv/getting-started/installation/).
 
 1. Clone the repository
 ```bash
