@@ -241,6 +241,7 @@ def main(config):
             obs=False,
             info=False,
             avail_actions=False,
+            env_metrics=config.get("SAVE_METRICS", False)
         )
 
         # ===== DUAL EVALUATION EXECUTION =====
