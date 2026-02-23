@@ -29,22 +29,22 @@ ENV_KWARGS:
       force: "ee_force"
       action_magnitude: "action_magnitude"
     overall_weight: 1
-    reward_budget: 1.5
+    reward_budget: 2 
 
 TOTAL_TIMESTEPS: 4e7 
-NUM_STEPS: 256
+NUM_STEPS: 64 
 NUM_ENVS: 1024
 NUM_SEEDS: 1  
 SEED: 0
 NUM_EVAL_EPISODES: 5 
 # RL HYPERPARAMETERS
 ALGORITHM: IPPO
-UPDATE_EPOCHS: 4
-NUM_MINIBATCHES: 4
+UPDATE_EPOCHS: 8 
+NUM_MINIBATCHES: 16 
 ANNEAL_LR: False
-LR: 1e-3
-ENT_COEF: 1e-4
-CLIP_EPS:  0.3
+LR: 3.34e-04 
+ENT_COEF: 0.0016 
+CLIP_EPS: 0.17 
 SCALE_CLIP_EPS: False
 RATIO_CLIP_EPS: False
 GAMMA: 0.99
@@ -61,8 +61,7 @@ DEVICE: 0
 PRINT_MEMORY_STATS: True
 
 # ZOO SETTINGS
-ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo
-
+ZOO_PATH: /pvc/assistax/zoo
 # Preference sweep for diverse zoo generation
 # Remove/comment out to disable preference vmapping
 PREFERENCE_SWEEP:

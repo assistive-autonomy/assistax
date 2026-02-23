@@ -276,7 +276,6 @@ def main(config):
         if use_dynamic_prefs:
             # === PREFERENCE SWEEP PATH ===
             pref_configs = generate_preference_configs(pref_rng, pref_sweep_config, config)
-            breakpoint()
             print(f"Sampled {pref_sweep_config['num_configs']} preference configs")
 
             train_jit = jax.jit(
