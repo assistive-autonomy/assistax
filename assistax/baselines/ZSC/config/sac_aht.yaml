@@ -53,10 +53,6 @@ INIT_ALPHA: 0.1  # initial entropy value when not using autotune
 
 SPLIT_RATIO: 0.2 # The train/test split ratio e.g. 0.2 means 20% train, 80% test
 
-# WANDB
-# WANDB_GROUP: scratchitch
-# WANDB_RUN: test
-
 # COMPUTE OPTIONS
 GPU_ENV_CAPACITY: 8192
 DISABLE_JIT: False
@@ -67,6 +63,23 @@ DETERMINISTIC_EVAL: False
 # ZOO SETTINGS
 ZOO_PATH: /home/lhin/assistax/zoo 
 
+
+# Visualization settings
+SAVE_MUJOCO_TRAJECTORIES: True
+SAVE_HTML_RENDER: True
+RENDER_VIDEOS: False
+VIDEO_FPS: 30
+VIDEO_WIDTH: 1920
+VIDEO_HEIGHT: 1080
+VIDEO_QUALITY: "high"
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}
+
+# WandB Params
+ALG: SAC_AHT
+ENTITY: "lh-from-kb"
+PROJECT: "assistax-dev"
+WANDB_MODE: "online"
+EXP_TAGS: ["ZSC","SAC","AHT"]
 
 hydra:
   job:

@@ -30,7 +30,7 @@ ENV_KWARGS:
       force_range: [1.5, 3.5]
       max_action_magnitude: 0.8
     touch_threshold: 0.1
-    reward_budget:  1.5
+    reward_budget: 2 
     overall_weight: 1
     normalization_mode: "budget"
     variable_names:

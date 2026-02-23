@@ -686,6 +686,197 @@ def log_all_metrics(config, out, evals, env):
     print("ALL METRICS LOGGING COMPLETE")
     print("="*70 + "\n")
 
+def log_all_metrics_zsc(config: dict, out: dict, evals_train, evals_test, env) -> None:
+    """
+    Log training and dual evaluation metrics (train-partner + test-partner) to wandb.
+
+    Follows the same 3-phase pattern as ``log_all_metrics`` but logs two evaluation
+    sets under ``eval_train/`` and ``eval_test/`` prefixes for ZSC generalization analysis.
+
+    Args:
+        config: Configuration dictionary.
+        out: Training output containing ``out["metrics"]``.
+        evals_train: Evaluation info from train-partner set.
+        evals_test: Evaluation info from test-partner set.
+        env: Environment (used for agent names).
+    """
+    from assistax.baselines.utils import _compute_episode_returns, _compute_episode_metrics
+
+    print("\n" + "=" * 70)
+    print("LOGGING ALL METRICS (TRAINING + EVAL_TRAIN + EVAL_TEST)")
+    print("=" * 70)
+
+    # Agent names
+    if hasattr(env, "agents"):
+        agent_names = env.agents
+    else:
+        agent_names = [f"agent_{i}" for i in range(env.num_agents)]
+
+    # ===== EXTRACT TRAINING DATA =====
+    train_metrics = out["metrics"]
+    env_steps = train_metrics["env_step"]  # (num_seeds, num_updates)
+    x_axis = env_steps[0]
+    num_checkpoints = len(x_axis)
+
+    # ===== PRE-COMPUTE TRAINING STATISTICS =====
+    print("\nPre-computing training statistics...")
+    train_stats = {}
+
+    if "returned_episode_returns" in train_metrics:
+        returns = train_metrics["returned_episode_returns"]
+        if len(returns.shape) == 3:
+            for agent_idx, agent_name in enumerate(agent_names):
+                agent_returns = returns[:, :, agent_idx]
+                train_stats[f"train/returns/{agent_name}_return"] = {
+                    "mean": jnp.mean(agent_returns, axis=0),
+                    "std": jnp.std(agent_returns, axis=0),
+                }
+
+    loss_metrics = [
+        "total_loss", "actor_loss", "critic_loss", "entropy",
+        "approx_kl", "clip_frac_min", "clip_frac_max",
+    ]
+    for metric_key in loss_metrics:
+        if metric_key not in train_metrics:
+            continue
+        metric_values = train_metrics[metric_key]
+        if len(metric_values.shape) == 3:
+            for agent_idx, agent_name in enumerate(agent_names):
+                agent_metric = metric_values[:, :, agent_idx]
+                prefix = (
+                    "train/loss"
+                    if metric_key in ["total_loss", "actor_loss", "critic_loss", "entropy", "approx_kl"]
+                    else "train/diagnostics"
+                )
+                train_stats[f"{prefix}/{agent_name}_{metric_key}"] = {
+                    "mean": jnp.mean(agent_metric, axis=0),
+                    "std": jnp.std(agent_metric, axis=0),
+                }
+        else:
+            prefix = (
+                "train/loss"
+                if metric_key in ["total_loss", "actor_loss", "critic_loss", "entropy", "approx_kl"]
+                else "train/diagnostics"
+            )
+            train_stats[f"{prefix}/{metric_key}"] = {
+                "mean": jnp.mean(metric_values, axis=0),
+                "std": jnp.std(metric_values, axis=0),
+            }
+
+    print(f"Pre-computed {len(train_stats)} training metrics")
+
+    # ===== HELPER: pre-compute eval statistics for one eval set =====
+    def _precompute_eval_stats(evals, prefix: str) -> dict:
+        stats = {}
+        if evals.reward is None or evals.done is None:
+            return stats
+
+        episode_returns = _compute_episode_returns(evals, time_axis=2)
+        agent_keys = [k for k in episode_returns.keys() if k != "__all__"]
+
+        for agent_key in agent_keys:
+            agent_returns = episode_returns[agent_key]
+            mean_per_cp = jnp.mean(agent_returns, axis=2)
+            stats[f"{prefix}/{agent_key}_return"] = {
+                "mean": jnp.mean(mean_per_cp, axis=0),
+                "std": jnp.std(mean_per_cp, axis=0),
+                "max": jnp.max(mean_per_cp, axis=0),
+                "min": jnp.min(mean_per_cp, axis=0),
+            }
+
+        if "__all__" in episode_returns:
+            all_returns = episode_returns["__all__"]
+            mean_returns = jnp.mean(all_returns, axis=2)
+            stats[f"{prefix}/team_return"] = {
+                "mean": jnp.mean(mean_returns, axis=0),
+                "std": jnp.std(mean_returns, axis=0),
+                "max": jnp.max(mean_returns, axis=0),
+                "min": jnp.min(mean_returns, axis=0),
+            }
+
+        # Environment metrics
+        if evals.env_metrics is not None:
+            for metric_name, metric_values in evals.env_metrics.items():
+                if not isinstance(metric_values, (jnp.ndarray, np.ndarray)):
+                    continue
+                is_reward_component = "reward" in metric_name.lower() or "weighted" in metric_name.lower()
+                if is_reward_component and evals.done is not None:
+                    metric_ep = _compute_episode_metrics(metric_values, evals.done["__all__"], time_axis=2)
+                    mean_metric_per_cp = jnp.mean(metric_ep, axis=2)
+                    stats[f"{prefix}/env_metrics/{metric_name}"] = {
+                        "mean": jnp.mean(mean_metric_per_cp, axis=0),
+                        "std": jnp.std(mean_metric_per_cp, axis=0),
+                    }
+                else:
+                    if len(metric_values.shape) == 4:
+                        mean_metric = jnp.mean(metric_values, axis=(2, 3))
+                    elif len(metric_values.shape) == 3:
+                        mean_metric = jnp.mean(metric_values, axis=2)
+                    else:
+                        continue
+                    stats[f"{prefix}/env_metrics/{metric_name}"] = {
+                        "mean": jnp.mean(mean_metric, axis=0),
+                        "std": jnp.std(mean_metric, axis=0),
+                    }
+        return stats
+
+    # ===== PRE-COMPUTE EVAL STATISTICS FOR BOTH SETS =====
+    print("\nPre-computing eval_train statistics...")
+    eval_train_stats = _precompute_eval_stats(evals_train, "eval_train")
+    print(f"Pre-computed {len(eval_train_stats)} eval_train metrics")
+
+    print("Pre-computing eval_test statistics...")
+    eval_test_stats = _precompute_eval_stats(evals_test, "eval_test")
+    print(f"Pre-computed {len(eval_test_stats)} eval_test metrics")
+
+    # ===== LOG ALL METRICS TOGETHER AT EACH CHECKPOINT =====
+    print(f"\nLogging {num_checkpoints} checkpoints...")
+
+    all_eval_stats = {**eval_train_stats, **eval_test_stats}
+
+    for checkpoint_idx in range(num_checkpoints):
+        step_value = int(x_axis[checkpoint_idx])
+        log_dict = {}
+
+        for metric_name, stats in train_stats.items():
+            log_dict[f"{metric_name}_mean"] = float(stats["mean"][checkpoint_idx])
+            log_dict[f"{metric_name}_std"] = float(stats["std"][checkpoint_idx])
+
+        for metric_name, stats in all_eval_stats.items():
+            log_dict[f"{metric_name}_mean"] = float(stats["mean"][checkpoint_idx])
+            log_dict[f"{metric_name}_std"] = float(stats["std"][checkpoint_idx])
+            if "max" in stats:
+                log_dict[f"{metric_name}_max"] = float(stats["max"][checkpoint_idx])
+            if "min" in stats:
+                log_dict[f"{metric_name}_min"] = float(stats["min"][checkpoint_idx])
+
+        wandb.log(log_dict, step=step_value)
+
+    print(f"Logged {num_checkpoints} checkpoints successfully!")
+
+    # ===== LOG FINAL STATISTICS =====
+    print("\nLogging final statistics...")
+    final_stats = {}
+    final_window = min(10, num_checkpoints)
+
+    for metric_name, stats in train_stats.items():
+        final_stats[f"{metric_name}_final_mean"] = float(jnp.mean(stats["mean"][-final_window:]))
+        final_stats[f"{metric_name}_final_std"] = float(jnp.mean(stats["std"][-final_window:]))
+
+    for metric_name, stats in all_eval_stats.items():
+        final_stats[f"{metric_name}_final_mean"] = float(jnp.mean(stats["mean"][-final_window:]))
+        final_stats[f"{metric_name}_final_std"] = float(jnp.mean(stats["std"][-final_window:]))
+        if "max" in stats:
+            final_stats[f"{metric_name}_final_max"] = float(jnp.max(stats["max"][-final_window:]))
+        if "min" in stats:
+            final_stats[f"{metric_name}_final_min"] = float(jnp.min(stats["min"][-final_window:]))
+
+    wandb.log(final_stats)
+
+    print("=" * 70)
+    print("ALL METRICS LOGGING COMPLETE")
+    print("=" * 70 + "\n")
+
 #def upload_html_visualizations_to_wandb(eval_env, episodes_dict, run):
 #    """
 #    Upload HTML visualizations to wandb as artifacts.

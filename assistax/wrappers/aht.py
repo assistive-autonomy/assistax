@@ -15,6 +15,7 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 import safetensors.flax
 from assistax.envs.multi_agent_env import State, MultiAgentEnv
 from assistax.wrappers.baselines import JaxMARLWrapper
+from assistax.wrappers.training import compute_preference_reward
 from typing import Sequence, NamedTuple, Any, Dict, Optional, Callable, Tuple, List
 import functools
 from omegaconf import OmegaConf
@@ -39,6 +40,62 @@ def get_param_keys(zoo_state) -> list[str]:
 
 def _tree_shape(pytree):
     return jax.tree.map(lambda x: x.shape, pytree)
+
+
+def _default_pref_config() -> Dict[str, float]:
+    """Return zero-weight preference config (produces zero reward)."""
+    return {
+        "w_speed": 0.0, "w_force": 0.0, "w_action": 0.0, "w_touch": 0.0,
+        "speed_range_min": 0.0, "speed_range_max": 1.0,
+        "force_range_min": 0.0, "force_range_max": 1.0,
+        "max_action_magnitude": 1.0,
+        "reward_budget": 0.0, "overall_weight": 0.0, "touch_threshold": 0.1,
+    }
+
+
+def _extract_pref_config(zoo: "ZooManager", agent_uuid: str) -> Dict[str, float]:
+    """Extract preference reward parameters from a zoo agent's config.
+
+    Returns zero weights if the agent has no preference_rewards section,
+    so ``compute_preference_reward`` will return 0.
+    """
+    try:
+        config = zoo._load_config(agent_uuid)
+    except Exception:
+        return _default_pref_config()
+
+    pref = config.get("ENV_KWARGS", {}).get("preference_rewards", None)
+    if pref is None:
+        return _default_pref_config()
+
+    pw = pref.get("preference_weights", {})
+    pr = pref.get("preference_ranges", {})
+    speed_range = pr.get("speed_range", [0.0, 1.0])
+    force_range = pr.get("force_range", [0.0, 1.0])
+
+    return {
+        "w_speed": float(pw.get("speed_preference", 0.0)),
+        "w_force": float(pw.get("force_preference", 0.0)),
+        "w_action": float(pw.get("action_efficiency", 0.0)),
+        "w_touch": float(pw.get("touch_penalty", 0.0)),
+        "speed_range_min": float(speed_range[0]),
+        "speed_range_max": float(speed_range[1]),
+        "force_range_min": float(force_range[0]),
+        "force_range_max": float(force_range[1]),
+        "max_action_magnitude": float(pr.get("max_action_magnitude", 1.0)),
+        "reward_budget": float(pref.get("reward_budget", 1.5)),
+        "overall_weight": float(pref.get("overall_weight", 1.0)),
+        "touch_threshold": float(pref.get("touch_threshold", 0.1)),
+    }
+
+
+def _stack_pref_configs(pref_config_list: List[Dict[str, float]]) -> Dict[str, jnp.ndarray]:
+    """Stack per-agent pref config dicts into a dict of JAX arrays, each shaped ``(pop_size,)``."""
+    return {
+        key: jnp.array([cfg[key] for cfg in pref_config_list])
+        for key in pref_config_list[0]
+    }
+
 
 @struct.dataclass
 class ActorCriticOutput:
@@ -358,6 +415,7 @@ class LoadAgentState:
     ag_idx: Dict[str, chex.Array]
     load_agent_actions: Dict[str, chex.Array]
     hstate: Optional[Dict[str, chex.Array]] = None
+    prev_contact_force: Optional[jnp.ndarray] = None
 
     def __getattr__(self, name: str):
         return getattr(self._state, name)
@@ -504,11 +562,17 @@ class ZooManager:
 
 
 class LoadAgentWrapper(JaxMARLWrapper):
-    def __init__(self, env: MultiAgentEnv, load_agents: Dict[str, LoadNetworkState]):
+    def __init__(
+        self,
+        env: MultiAgentEnv,
+        load_agents: Dict[str, LoadNetworkState],
+        pref_configs: Optional[Dict[str, Dict[str, jnp.ndarray]]] = None,
+    ):
         super().__init__(env)
-        
+
         self.loaded_agents = ['human']
         self.loaded_params = load_agents
+        self.pref_configs = pref_configs
         self.agents = [
             agent
             for agent in self._env.agents
@@ -533,13 +597,17 @@ class LoadAgentWrapper(JaxMARLWrapper):
             zoo = ZooManager(zoo_path=zoo)
 
         load_agents: Dict[str, Dict[str, LoadNetworkState]] = {}
+        pref_config_lists: Dict[str, List[Dict[str, float]]] = {}
         for algorithm, agents_dict in load_agents_uuids.items():
             if algorithm not in load_agents:
                 load_agents[algorithm] = {}
             for agent, agent_uuids in agents_dict.items():
+                if agent not in pref_config_lists:
+                    pref_config_lists[agent] = []
                 if isinstance(agent_uuids, str):
                     # Single agent case.
                     zoo_state = zoo.load_agent(agent_uuids)
+                    pref_config_lists[agent].append(_extract_pref_config(zoo, agent_uuids))
                     load_agents[algorithm][agent] = LoadNetworkState(
                         apply_fn=jax.vmap(zoo_state.apply_fn, in_axes=(0, None, None)),
                         hstate_reset_fn=zoo_state.hstate_reset_fn,
@@ -549,30 +617,38 @@ class LoadAgentWrapper(JaxMARLWrapper):
                 else:
                     # Multiple agents: load each zoo_state.
                     zoo_states = [zoo.load_agent(agent_uuid) for agent_uuid in agent_uuids]
+                    for agent_uuid in agent_uuids:
+                        pref_config_lists[agent].append(_extract_pref_config(zoo, agent_uuid))
 
                     # group the zoo states by their parameter shapes
                     shape_groups = {}
                     for agent_uuid, zs in zip(agent_uuids, zoo_states):
-                        
+
                         flat_shapes, _ = jax.tree_util.tree_flatten(_tree_shape(zs.params))
                         shape_key = tuple(flat_shapes)
                         shape_groups.setdefault(shape_key, []).append(agent_uuid)
-                    
+
                     # if more than one group exists there is a shape mismatch raise error and return which uuids are wrong to help fix
                     if len(shape_groups) > 1:
                         raise ValueError(
                             f"Mismatching parameter shapes for agent '{agent}' under algorithm '{algorithm}'.\n"
                             f"Groups by shape signature (each key is a tuple of shapes): {shape_groups}"
                         )
-                    
-                   
+
+
                     load_agents[algorithm][agent] = LoadNetworkState(
-                        apply_fn=jax.vmap(zoo_states[0].apply_fn, in_axes=(0, None, None)), #TODO and NOTE! this throughs an error when wrong zoo path is provided which is not very insightful we should have a better error 
+                        apply_fn=jax.vmap(zoo_states[0].apply_fn, in_axes=(0, None, None)), #TODO and NOTE! this throughs an error when wrong zoo path is provided which is not very insightful we should have a better error
                         hstate_reset_fn=zoo_states[0].hstate_reset_fn,
                         params=_stack_tree([zs.params for zs in zoo_states]),
                         pop_size=len(zoo_states),
                     )
-        return cls(env, load_agents)
+
+        stacked_pref_configs = {
+            agent: _stack_pref_configs(configs)
+            for agent, configs in pref_config_lists.items()
+            if configs
+        }
+        return cls(env, load_agents, pref_configs=stacked_pref_configs or None)
     
     def take_internal_action(
         self,
@@ -678,6 +754,36 @@ class LoadAgentWrapper(JaxMARLWrapper):
 
         return indices
 
+    def _compute_partner_pref_reward(
+        self,
+        states_st: State,
+        ag_idx: Dict[str, chex.Array],
+        prev_contact_force: jnp.ndarray,
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Compute preference reward for the current partner (single env, no inner vmap)."""
+        human_idx = ag_idx["human"]
+        pref = self.pref_configs["human"]
+
+        total_pref_reward, updated_cf = compute_preference_reward(
+            speed=states_st.info["ee_speed"],
+            force=states_st.info["ee_force"],
+            action_magnitude=states_st.info["action_magnitude"],
+            prev_contact_force=prev_contact_force,
+            w_speed=pref["w_speed"][human_idx],
+            w_force=pref["w_force"][human_idx],
+            w_action=pref["w_action"][human_idx],
+            w_touch=pref["w_touch"][human_idx],
+            speed_range_min=pref["speed_range_min"][human_idx],
+            speed_range_max=pref["speed_range_max"][human_idx],
+            force_range_min=pref["force_range_min"][human_idx],
+            force_range_max=pref["force_range_max"][human_idx],
+            max_action_magnitude=pref["max_action_magnitude"][human_idx],
+            reward_budget=pref["reward_budget"][human_idx],
+            overall_weight=pref["overall_weight"][human_idx],
+            touch_threshold=pref["touch_threshold"][human_idx],
+        )
+        return total_pref_reward, updated_cf
+
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], LoadAgentState]:
         """Resets the environment and initialises the loaded agent state."""
         key_env, key_hstate, key_action, key_ag_idx = jax.random.split(key, 4)
@@ -689,17 +795,20 @@ class LoadAgentWrapper(JaxMARLWrapper):
         load_agent_actions, hstate = self.take_internal_action(
             key_action, obs, dones, avail_actions, hstate
         )
-        
+
         ag_idx = self.reset_agent_index(key_ag_idx)
         load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, load_agent_actions)
-        
+
         #jax.debug.print("Agent Indexes on Reset: {ag_idx}", ag_idx=ag_idx)
-  
+
+        init_prev_cf = jnp.array(0.0) if self.pref_configs is not None else None
+
         state = LoadAgentState(
             _state=state,
             load_agent_actions=load_agent_actions,
             hstate=hstate,
             ag_idx=ag_idx,
+            prev_contact_force=init_prev_cf,
         )
         return obs, state
 
@@ -722,7 +831,17 @@ class LoadAgentWrapper(JaxMARLWrapper):
         obs_st, states_st, rewards, dones, infos = self._env.step_env(
             key_step, state._state, actions
         )
-        
+
+        # Augment rewards with the current partner's preference reward
+        if self.pref_configs is not None:
+            pref_reward, new_cf = self._compute_partner_pref_reward(
+                states_st, state.ag_idx, state.prev_contact_force
+            )
+            rewards = {agent: rewards[agent] + pref_reward for agent in rewards}
+            new_prev_cf = jnp.where(dones["__all__"], 0.0, new_cf)
+        else:
+            new_prev_cf = state.prev_contact_force
+
         if reset_state is None:
             obs_re, states_re = self._env.reset(key_reset)
             ag_idx_re = self.reset_agent_index(key_ag_idx)
@@ -744,18 +863,19 @@ class LoadAgentWrapper(JaxMARLWrapper):
 
         # Take the next action with the loaded agents
         avail_actions = self._env.get_avail_actions(state)
-        
+
         load_agent_actions, load_agent_hstate = self.take_internal_action(
             key_action, obs, dones, avail_actions, state.hstate,
         )
 
         load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, load_agent_actions)
-        
+
         states = LoadAgentState(
             _state=states,
             load_agent_actions=load_agent_actions,
             hstate=load_agent_hstate,
             ag_idx=ag_idx,
+            prev_contact_force=new_prev_cf,
         )
 
         return obs, states, rewards, dones, infos
@@ -799,13 +919,19 @@ def extract_uuids_from_eval_results(env_wrapper, eval_results):
     return uuid_info
 
 class LoadEvalAgentWrapper(JaxMARLWrapper):
-    def __init__(self, env: MultiAgentEnv, load_agents: Dict[str, LoadNetworkState]):
+    def __init__(
+        self,
+        env: MultiAgentEnv,
+        load_agents: Dict[str, LoadNetworkState],
+        pref_configs: Optional[Dict[str, Dict[str, jnp.ndarray]]] = None,
+    ):
         super().__init__(env)
         self.loaded_agents = ['human'] # also currently hard coded this works for assistax but not other JaxMARL envs
         self.loaded_params = load_agents
+        self.pref_configs = pref_configs
         self.agents = [
             agent for agent in self._env.agents if agent not in self.loaded_agents
-        ] # might need to change this to avoid breaking eval 
+        ] # might need to change this to avoid breaking eval
         # self.agents = self._env.agents
         self.num_agents = len(self.agents)
         self.num_loaded_agents = len(self.loaded_agents)
@@ -853,13 +979,16 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
             zoo = ZooManager(zoo_path=zoo)
 
         load_agents: Dict[str, Dict[str, LoadNetworkState]] = {}
-        
+        pref_config_lists: Dict[str, List[Dict[str, float]]] = {}
+
         for algorithm, agents_dict in load_agents_uuids.items():
             if algorithm not in load_agents:
                 load_agents[algorithm] = {}
-            
+
             for agent, agent_uuids in agents_dict.items():
-                
+                if agent not in pref_config_lists:
+                    pref_config_lists[agent] = []
+
                 if isinstance(agent_uuids, str):
                     try:
                         zoo_state = zoo.load_agent(agent_uuids)
@@ -868,6 +997,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
                             f"Agent file for UUID {agent_uuids} not found; skipping agent '{agent}' under algorithm '{algorithm}'."
                         )
                         continue
+                    pref_config_lists[agent].append(_extract_pref_config(zoo, agent_uuids))
                     load_agents[algorithm][agent] = LoadNetworkState(
                         apply_fn=jax.vmap(zoo_state.apply_fn, in_axes=(0, None, None)),
                         hstate_reset_fn=zoo_state.hstate_reset_fn,
@@ -891,19 +1021,22 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
                         )
                         continue
 
+                    for agent_uuid in successful_agent_uuids:
+                        pref_config_lists[agent].append(_extract_pref_config(zoo, agent_uuid))
+
                     # Group the zoo states by their parameter shapes.
                     shape_groups = {}
                     for agent_uuid, zs in zip(successful_agent_uuids, zoo_states):
                         flat_shapes, _ = jax.tree_util.tree_flatten(_tree_shape(zs.params))
                         shape_key = tuple(flat_shapes)
                         shape_groups.setdefault(shape_key, []).append(agent_uuid)
-                    
+
                     if len(shape_groups) > 1:
                         raise ValueError(
                             f"Mismatching parameter shapes for agent '{agent}' under algorithm '{algorithm}'.\n"
                             f"Groups by shape signature (each key is a tuple of shapes): {shape_groups}"
                         )
-                    
+
                     load_agents[algorithm][agent] = LoadNetworkState(
                         apply_fn=jax.vmap(zoo_states[0].apply_fn, in_axes=(0, None, None)),
                         hstate_reset_fn=zoo_states[0].hstate_reset_fn,
@@ -912,7 +1045,12 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
                         uuids=successful_agent_uuids,
                     )
 
-        return cls(env, load_agents)
+        stacked_pref_configs = {
+            agent: _stack_pref_configs(configs)
+            for agent, configs in pref_config_lists.items()
+            if configs
+        }
+        return cls(env, load_agents, pref_configs=stacked_pref_configs or None)
 
             
     def take_internal_action(
@@ -969,25 +1107,55 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
             }
         return hstates
 
+    def _compute_partner_pref_reward(
+        self,
+        states_st: State,
+        ag_idx: Dict[str, chex.Array],
+        prev_contact_force: jnp.ndarray,
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Compute preference reward for the current partner (single env, no inner vmap)."""
+        human_idx = ag_idx["human"]
+        pref = self.pref_configs["human"]
+
+        total_pref_reward, updated_cf = compute_preference_reward(
+            speed=states_st.info["ee_speed"],
+            force=states_st.info["ee_force"],
+            action_magnitude=states_st.info["action_magnitude"],
+            prev_contact_force=prev_contact_force,
+            w_speed=pref["w_speed"][human_idx],
+            w_force=pref["w_force"][human_idx],
+            w_action=pref["w_action"][human_idx],
+            w_touch=pref["w_touch"][human_idx],
+            speed_range_min=pref["speed_range_min"][human_idx],
+            speed_range_max=pref["speed_range_max"][human_idx],
+            force_range_min=pref["force_range_min"][human_idx],
+            force_range_max=pref["force_range_max"][human_idx],
+            max_action_magnitude=pref["max_action_magnitude"][human_idx],
+            reward_budget=pref["reward_budget"][human_idx],
+            overall_weight=pref["overall_weight"][human_idx],
+            touch_threshold=pref["touch_threshold"][human_idx],
+        )
+        return total_pref_reward, updated_cf
+
     def reset_agent_index( # probably actually don't even need this anymore
         self, current_idx: Dict[str, chex.Array]
     ) -> Dict[str, int]:
         """
         Instead of sampling a random index for each loaded agent, cycle through all agents.
-        
-        We use multiply the arange index array by the onehot current index to get the index. 
+
+        We use multiply the arange index array by the onehot current index to get the index.
         After this we roll the onehot mask forward by +1
         """
-        
+
         ag_index = {}
         for agent_type in self.loaded_agents:
             if current_idx is None:
                 ag_index[agent_type] = -1
             else:
                 ag_index[agent_type] = (current_idx[agent_type]) + 1 % self.total_pop_size
-            
+
         return ag_index
-    
+
     def reset(self, key: chex.PRNGKey, current_idx: Optional[Dict[str, chex.Array]]) -> Tuple[Dict[str, chex.Array], LoadAgentState]:
         """
         Reset the environment and initialize the loaded agent state.
@@ -1001,24 +1169,27 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         load_agent_actions, hstate = self.take_internal_action(
             key_action, obs, dones, avail_actions, hstate
         )
-        
+
         # Initialize indices deterministically (starting at 0).
         current_idx = self.reset_agent_index(current_idx)
-  
+
         current_idx = self._preprocess_current_idx(current_idx) # ensure its not int
         # Ensure each index is a scalar
         current_idx = jax.tree.map(self._ensure_scalar_idx, current_idx)
-        
+
         # Use indices to select actions
         load_agent_actions = jax.tree.map(lambda i, a: a[i], current_idx, load_agent_actions)
-        
+
         # Remove breakpoint for JIT compatibility
-    
+
+        init_prev_cf = jnp.array(0.0) if self.pref_configs is not None else None
+
         state = LoadAgentState(
             _state=state,
             load_agent_actions=load_agent_actions,
             hstate=hstate,
             ag_idx=current_idx,
+            prev_contact_force=init_prev_cf,
         )
         return obs, state
 
@@ -1031,16 +1202,25 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         reset_state: Optional[LoadAgentState] = None,
     ):
         key_step, key_reset, key_action = jax.random.split(key, 3)
- 
+
         actions = {**state.load_agent_actions, **actions}
 
         obs_st, states_st, rewards, dones, infos = self._env.step_env(
             key_step, state._state, actions
         )
-        # Store agent indices in info - this is JAX-compatible
+
+        # Augment rewards with the current partner's preference reward
+        if self.pref_configs is not None:
+            pref_reward, new_cf = self._compute_partner_pref_reward(
+                states_st, state.ag_idx, state.prev_contact_force
+            )
+            rewards = {agent: rewards[agent] + pref_reward for agent in rewards}
+            new_prev_cf = jnp.where(dones["__all__"], 0.0, new_cf)
+        else:
+            new_prev_cf = state.prev_contact_force
 
         if reset_state is None:
-            obs_re, states_re = self._env.reset(key_reset) # TODO: Below is very hacky either get rid entirely or 
+            obs_re, states_re = self._env.reset(key_reset) # TODO: Below is very hacky either get rid entirely or
             ag_idx_re = self.reset_agent_index(state.ag_idx) # This makes it more robust but as we don't have early termination we probs dont need this
         else:
             states_re = reset_state
@@ -1055,7 +1235,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         )
         ag_idx = jax.tree.map(lambda x, y: jax.lax.select(dones["__all__"], x, y), ag_idx_re, state.ag_idx # get rid of this grimm_stuff
         )
-  
+
         avail_actions = self._env.get_avail_actions(state)
         load_agent_actions, load_agent_hstate = self.take_internal_action(
             key_action, obs, dones, avail_actions, state.hstate,
@@ -1068,6 +1248,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
             load_agent_actions=load_agent_actions,
             hstate=load_agent_hstate,
             ag_idx=ag_idx,
+            prev_contact_force=new_prev_cf,
         )
 
         return obs, states, rewards, dones, infos

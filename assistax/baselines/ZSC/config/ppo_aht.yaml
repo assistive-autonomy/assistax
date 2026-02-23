@@ -17,7 +17,7 @@ TOTAL_TIMESTEPS: 4e7
 NUM_STEPS: 64 
 NUM_ENVS: 1024
 NUM_SEEDS: 12 
-SEED: 12 
+SEED: 0 
 NUM_EVAL_EPISODES: 64 
 
 # RL HYPERPARAMETERS
@@ -36,16 +36,35 @@ GAE_LAMBDA: 0.95
 VF_COEF: 1.0
 MAX_GRAD_NORM: 0.5
 ADAM_EPS: 1e-8
-SPLIT_RATIO: 0.2 # The train/test split ratio e.g. 0.2 means 20% train, 80% test
+SPLIT_RATIO: 0.1 # The train/test split ratio e.g. 0.2 means 20% train, 80% test
 
 # COMPUTE OPTIONS
 GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False
 DEVICE: 0
+PRINT_MEMORY_STATS: True
+SAVE_METRICS: True
 
 # ZOO SETTINGS
 ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo
+
+# Visualization settings
+SAVE_MUJOCO_TRAJECTORIES: True
+SAVE_HTML_RENDER: True
+RENDER_VIDEOS: False
+VIDEO_FPS: 30
+VIDEO_WIDTH: 1920
+VIDEO_HEIGHT: 1080
+VIDEO_QUALITY: "high"
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}
+
+# WandB Params
+ALG: PPO_AHT
+ENTITY: "lh-from-kb"
+PROJECT: "assistax-dev"
+WANDB_MODE: "online"
+EXP_TAGS: ["ZSC","PPO","AHT"]
 
 hydra:
   job:
