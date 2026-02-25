@@ -305,8 +305,7 @@ class PreferenceRewardWrapper(Wrapper):
         # Default preference weights
         self.preference_weights = preference_rewards.get("preference_weights", {
             'speed_preference': 1.0,
-            'force_preference': 1.0, 
-            'action_efficiency': 0.5,
+            'force_preference': 1.0,
             'touch_penalty': -0.1,
         })
         
@@ -334,7 +333,6 @@ class PreferenceRewardWrapper(Wrapper):
         self.preference_ranges = preference_rewards.get("preference_ranges", {
             'speed_range': (0.05, 0.2),
             'force_range': (1.0, 5.0),
-            'max_action_magnitude': 1.0,
         })
         
         # Ensure ranges are tuples
@@ -349,8 +347,7 @@ class PreferenceRewardWrapper(Wrapper):
         # Variable names to look for in state.info
         self.variable_names = variable_names or preference_rewards.get("variable_names", {
             'speed': 'ee_speed',
-            'force': 'ee_force', 
-            'action_magnitude': 'action_magnitude',
+            'force': 'ee_force',
         })
         
     def reset(self, rng: jax.Array) -> State:
@@ -368,13 +365,11 @@ class PreferenceRewardWrapper(Wrapper):
         state.metrics.update(
             speed_pref_reward=jp.array(0.0),
             force_pref_reward=jp.array(0.0),
-            action_eff_reward=jp.array(0.0),
             touch_penalty_reward=jp.array(0.0),
             total_pref_reward=jp.array(0.0),
             # Also track raw values for debugging
             pref_raw_speed=jp.array(0.0),
             pref_raw_force=jp.array(0.0),
-            pref_raw_action_mag=jp.array(0.0),
         )
         return state
     
@@ -385,15 +380,11 @@ class PreferenceRewardWrapper(Wrapper):
         # Extract variables from state.info (computed by the environment)
         speed = next_state.info.get(self.variable_names['speed'], jp.array(0.0))
         force = next_state.info.get(self.variable_names['force'], jp.array(0.0))
-        action_magnitude = next_state.info.get(
-            self.variable_names.get('action_magnitude', 'action_magnitude'), 
-            jp.linalg.norm(action)
-        )
         contact_forces = force  # May need adjustment based on environment
-        
+
         # Compute preference rewards
         preference_rewards = self._compute_preference_rewards(
-            speed, force, action_magnitude, contact_forces, state
+            speed, force, contact_forces, state
         )
         
         # Update tracking
@@ -403,7 +394,6 @@ class PreferenceRewardWrapper(Wrapper):
         total_preference_reward = (
             preference_rewards['speed_pref_reward'] +
             preference_rewards['force_pref_reward'] +
-            preference_rewards['action_eff_reward'] +
             preference_rewards['touch_penalty_reward']
         )
         
@@ -419,53 +409,47 @@ class PreferenceRewardWrapper(Wrapper):
         next_state.metrics.update(
             speed_pref_reward=preference_rewards['speed_pref_reward'],
             force_pref_reward=preference_rewards['force_pref_reward'],
-            action_eff_reward=preference_rewards['action_eff_reward'],
             touch_penalty_reward=preference_rewards['touch_penalty_reward'],
             total_pref_reward=total_preference_reward,
             # Raw values for debugging
             pref_raw_speed=speed,
             pref_raw_force=force,
-            pref_raw_action_mag=action_magnitude,
         )
 
         return next_state.replace(reward=augmented_reward)
     
     def _compute_preference_rewards(
-        self, speed: jax.Array, force: jax.Array, action_magnitude: jax.Array, 
+        self, speed: jax.Array, force: jax.Array,
         contact_forces: jax.Array, prev_state: State
     ) -> Dict[str, jax.Array]:
         """Compute normalized preference rewards."""
-        
+
         # Raw preference values (all in [0, 1] for positive, 0 or 1 for penalty)
         speed_pref = self._gaussian_preference(speed, self.preference_ranges['speed_range'])
         force_pref = self._gaussian_preference(force, self.preference_ranges['force_range'])
-        action_eff = jp.exp(-action_magnitude / self.preference_ranges['max_action_magnitude'])
         touch_penalty = self._compute_touch_penalty(contact_forces, prev_state)
-        
+
         if self.normalization_mode == "budget":
             # Normalize so max positive reward = reward_budget
             # Each component contributes proportionally to its weight
             return {
                 'speed_pref_reward': self._norm_factor * self.preference_weights['speed_preference'] * speed_pref,
                 'force_pref_reward': self._norm_factor * self.preference_weights['force_preference'] * force_pref,
-                'action_eff_reward': self._norm_factor * self.preference_weights['action_efficiency'] * action_eff,
                 'touch_penalty_reward': self._norm_factor * self.preference_weights['touch_penalty'] * touch_penalty,
             }
-            
+
         elif self.normalization_mode == "fraction":
             # Each component normalized to its fraction of total weight
             return {
                 'speed_pref_reward': (self.preference_weights['speed_preference'] / self._total_weight) * self.reward_budget * speed_pref,
                 'force_pref_reward': (self.preference_weights['force_preference'] / self._total_weight) * self.reward_budget * force_pref,
-                'action_eff_reward': (self.preference_weights['action_efficiency'] / self._total_weight) * self.reward_budget * action_eff,
                 'touch_penalty_reward': (self.preference_weights['touch_penalty'] / self._total_weight) * self.reward_budget * touch_penalty,
             }
-        
+
         else:  # "none" - original behavior
             return {
                 'speed_pref_reward': self.preference_weights['speed_preference'] * speed_pref,
                 'force_pref_reward': self.preference_weights['force_preference'] * force_pref,
-                'action_eff_reward': self.preference_weights['action_efficiency'] * action_eff,
                 'touch_penalty_reward': self.preference_weights['touch_penalty'] * touch_penalty,
             }
     
@@ -520,21 +504,18 @@ class PreferenceRewardWrapper(Wrapper):
 def compute_preference_reward(
     speed: jax.Array,
     force: jax.Array,
-    action_magnitude: jax.Array,
     prev_contact_force: jax.Array,
     w_speed: jax.Array,
     w_force: jax.Array,
-    w_action: jax.Array,
     w_touch: jax.Array,
     speed_range_min: jax.Array,
     speed_range_max: jax.Array,
     force_range_min: jax.Array,
     force_range_max: jax.Array,
-    max_action_magnitude: jax.Array,
     reward_budget: jax.Array,
     overall_weight: jax.Array,
     touch_threshold: jax.Array,
-) -> Tuple[jax.Array, jax.Array]:
+) -> Tuple[jax.Array, jax.Array, Dict[str, jax.Array]]:
     """Pure-function preference reward computation for vmapped preference sweeps.
 
     All parameters are explicit JAX arrays so outer vmaps can broadcast
@@ -543,23 +524,21 @@ def compute_preference_reward(
     Args:
         speed: End-effector speed, shape ``(num_envs,)``.
         force: End-effector force, shape ``(num_envs,)``.
-        action_magnitude: Action magnitude, shape ``(num_envs,)``.
         prev_contact_force: Previous contact force, shape ``(num_envs,)``.
         w_speed: Weight for speed preference (scalar).
         w_force: Weight for force preference (scalar).
-        w_action: Weight for action efficiency (scalar).
         w_touch: Weight for touch penalty, typically negative (scalar).
         speed_range_min: Lower bound of preferred speed range (scalar).
         speed_range_max: Upper bound of preferred speed range (scalar).
         force_range_min: Lower bound of preferred force range (scalar).
         force_range_max: Upper bound of preferred force range (scalar).
-        max_action_magnitude: Normalisation constant for action efficiency (scalar).
         reward_budget: Maximum total positive preference reward (scalar).
         overall_weight: Global scaling factor applied to total reward (scalar).
         touch_threshold: Force threshold for detecting new contacts (scalar).
 
     Returns:
-        ``(total_pref_reward, updated_contact_force)`` both shape ``(num_envs,)``.
+        ``(total_pref_reward, updated_contact_force, pref_components)`` where
+        ``pref_components`` is a dict of individual weighted reward components.
     """
     def _gaussian_pref(value, range_min, range_max):
         center = (range_min + range_max) / 2.0
@@ -570,7 +549,6 @@ def compute_preference_reward(
 
     speed_pref = _gaussian_pref(speed, speed_range_min, speed_range_max)
     force_pref = _gaussian_pref(force, force_range_min, force_range_max)
-    action_eff = jp.exp(-action_magnitude / max_action_magnitude)
 
     # Touch penalty: detect new contact transitions
     current_cf = jp.linalg.norm(force)
@@ -578,18 +556,26 @@ def compute_preference_reward(
     touch_penalty = jp.where(new_touch, 1.0, 0.0)
 
     # Budget normalisation (matches PreferenceRewardWrapper default mode)
-    positive_weight_sum = w_speed + w_force + w_action
+    positive_weight_sum = w_speed + w_force
     norm_factor = jp.where(positive_weight_sum > 0, reward_budget / positive_weight_sum, 1.0)
 
-    total = (
-        norm_factor * w_speed * speed_pref
-        + norm_factor * w_force * force_pref
-        + norm_factor * w_action * action_eff
-        + norm_factor * w_touch * touch_penalty
-    )
+    speed_component = norm_factor * w_speed * speed_pref
+    force_component = norm_factor * w_force * force_pref
+    touch_component = norm_factor * w_touch * touch_penalty
+
+    total = speed_component + force_component + touch_component
     total_pref_reward = overall_weight * total
 
-    return total_pref_reward, current_cf
+    pref_components = {
+        "speed_pref_reward": speed_component,
+        "force_pref_reward": force_component,
+        "touch_penalty_reward": touch_component,
+        "total_pref_reward": total_pref_reward,
+        "pref_raw_speed": speed,
+        "pref_raw_force": force,
+    }
+
+    return total_pref_reward, current_cf, pref_components
 
 
 

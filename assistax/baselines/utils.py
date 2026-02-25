@@ -1295,44 +1295,40 @@ def generate_preference_configs(
             return jax.random.uniform(rng_key, shape=(n,), minval=spec["min"], maxval=spec["max"])
         return jnp.full((n,), fallback)
 
-    keys = jax.random.split(rng, 12)
+    keys = jax.random.split(rng, 10)
 
     w_speed = _sample_or_fixed(keys[0], "w_speed", pref_base["preference_weights"]["speed_preference"])
     w_force = _sample_or_fixed(keys[1], "w_force", pref_base["preference_weights"]["force_preference"])
-    w_action = _sample_or_fixed(keys[2], "w_action", pref_base["preference_weights"]["action_efficiency"])
-    w_touch = _sample_or_fixed(keys[3], "w_touch", pref_base["preference_weights"]["touch_penalty"])
+    w_touch = _sample_or_fixed(keys[2], "w_touch", pref_base["preference_weights"]["touch_penalty"])
 
     # Speed range: enforce min < max
-    speed_range_min = _sample_or_fixed(keys[4], "speed_range_min", pref_base["preference_ranges"]["speed_range"][0])
+    speed_range_min = _sample_or_fixed(keys[3], "speed_range_min", pref_base["preference_ranges"]["speed_range"][0])
     speed_max_spec = pref_sweep_config.get("speed_range_max", None)
     if speed_max_spec is not None and isinstance(speed_max_spec, dict):
-        speed_range_max = jax.random.uniform(keys[5], shape=(n,), minval=speed_range_min, maxval=speed_max_spec["max"])
+        speed_range_max = jax.random.uniform(keys[4], shape=(n,), minval=speed_range_min, maxval=speed_max_spec["max"])
     else:
         speed_range_max = jnp.full((n,), pref_base["preference_ranges"]["speed_range"][1])
 
     # Force range: enforce min < max
-    force_range_min = _sample_or_fixed(keys[6], "force_range_min", pref_base["preference_ranges"]["force_range"][0])
+    force_range_min = _sample_or_fixed(keys[5], "force_range_min", pref_base["preference_ranges"]["force_range"][0])
     force_max_spec = pref_sweep_config.get("force_range_max", None)
     if force_max_spec is not None and isinstance(force_max_spec, dict):
-        force_range_max = jax.random.uniform(keys[7], shape=(n,), minval=force_range_min, maxval=force_max_spec["max"])
+        force_range_max = jax.random.uniform(keys[6], shape=(n,), minval=force_range_min, maxval=force_max_spec["max"])
     else:
         force_range_max = jnp.full((n,), pref_base["preference_ranges"]["force_range"][1])
 
-    max_action_magnitude = _sample_or_fixed(keys[8], "max_action_magnitude", pref_base["preference_ranges"]["max_action_magnitude"])
-    reward_budget = _sample_or_fixed(keys[9], "reward_budget", pref_base.get("reward_budget", 1.0))
-    overall_weight = _sample_or_fixed(keys[10], "overall_weight", pref_base.get("overall_weight", 1.0))
-    touch_threshold = _sample_or_fixed(keys[11], "touch_threshold", pref_base.get("touch_threshold", 0.3))
+    reward_budget = _sample_or_fixed(keys[7], "reward_budget", pref_base.get("reward_budget", 1.0))
+    overall_weight = _sample_or_fixed(keys[8], "overall_weight", pref_base.get("overall_weight", 1.0))
+    touch_threshold = _sample_or_fixed(keys[9], "touch_threshold", pref_base.get("touch_threshold", 0.3))
 
     return {
         "w_speed": w_speed,
         "w_force": w_force,
-        "w_action": w_action,
         "w_touch": w_touch,
         "speed_range_min": speed_range_min,
         "speed_range_max": speed_range_max,
         "force_range_min": force_range_min,
         "force_range_max": force_range_max,
-        "max_action_magnitude": max_action_magnitude,
         "reward_budget": reward_budget,
         "overall_weight": overall_weight,
         "touch_threshold": touch_threshold,

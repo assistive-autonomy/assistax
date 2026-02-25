@@ -705,7 +705,7 @@ def make_train(config, save_train_state=True, load_zoo=False, dynamic_preference
                 brax_info = env_state.env_state.info
                 var_names = config["ENV_KWARGS"]["preference_rewards"]["variable_names"]
 
-                pref_reward, new_cf = compute_preference_reward(
+                pref_reward, new_cf, _ = compute_preference_reward(
                     speed=brax_info[var_names["speed"]],
                     force=brax_info[var_names["force"]],
                     action_magnitude=brax_info[var_names["action_magnitude"]],
@@ -819,7 +819,7 @@ def make_train(config, save_train_state=True, load_zoo=False, dynamic_preference
                         brax_info = env_state.env_state.info
                         var_names = config["ENV_KWARGS"]["preference_rewards"]["variable_names"]
 
-                        pref_reward, new_cf = compute_preference_reward(
+                        pref_reward, new_cf, _ = compute_preference_reward(
                             speed=brax_info[var_names["speed"]],
                             force=brax_info[var_names["force"]],
                             action_magnitude=brax_info[var_names["action_magnitude"]],

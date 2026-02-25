@@ -569,13 +569,11 @@ def quick_ippo_preference_test(config_path: str = None, config_dict: Dict[str, A
                     "preference_weights": {
                         "speed_preference": 0.25,
                         "force_preference": 0.35,
-                        "action_efficiency": 0.15,
                         "touch_penalty": -0.03,
                     },
                     "preference_ranges": {
                         "speed_range": [0.06, 0.14],
                         "force_range": [1.5, 3.5],
-                        "max_action_magnitude": 0.8,
                     },
                     "touch_threshold": 0.3,
                 },

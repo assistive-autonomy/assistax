@@ -364,13 +364,11 @@ def main(config):
                 agent_config["ENV_KWARGS"]["preference_rewards"]["preference_weights"] = {
                     "speed_preference": pref_at_idx["w_speed"],
                     "force_preference": pref_at_idx["w_force"],
-                    "action_efficiency": pref_at_idx["w_action"],
                     "touch_penalty": pref_at_idx["w_touch"],
                 }
                 agent_config["ENV_KWARGS"]["preference_rewards"]["preference_ranges"] = {
                     "speed_range": [pref_at_idx["speed_range_min"], pref_at_idx["speed_range_max"]],
                     "force_range": [pref_at_idx["force_range_min"], pref_at_idx["force_range_max"]],
-                    "max_action_magnitude": pref_at_idx["max_action_magnitude"],
                 }
                 print(f"Pref config {pref_idx}: w_speed={pref_at_idx['w_speed']:.3f}, "
                       f"w_force={pref_at_idx['w_force']:.3f}")
@@ -378,7 +376,6 @@ def main(config):
                 pref_weights_for_index = {
                     "w_speed": round(pref_at_idx["w_speed"], 4),
                     "w_force": round(pref_at_idx["w_force"], 4),
-                    "w_action": round(pref_at_idx["w_action"], 4),
                     "w_touch": round(pref_at_idx["w_touch"], 4),
                 }
 

@@ -45,10 +45,9 @@ def _tree_shape(pytree):
 def _default_pref_config() -> Dict[str, float]:
     """Return zero-weight preference config (produces zero reward)."""
     return {
-        "w_speed": 0.0, "w_force": 0.0, "w_action": 0.0, "w_touch": 0.0,
+        "w_speed": 0.0, "w_force": 0.0, "w_touch": 0.0,
         "speed_range_min": 0.0, "speed_range_max": 1.0,
         "force_range_min": 0.0, "force_range_max": 1.0,
-        "max_action_magnitude": 1.0,
         "reward_budget": 0.0, "overall_weight": 0.0, "touch_threshold": 0.1,
     }
 
@@ -76,13 +75,11 @@ def _extract_pref_config(zoo: "ZooManager", agent_uuid: str) -> Dict[str, float]
     return {
         "w_speed": float(pw.get("speed_preference", 0.0)),
         "w_force": float(pw.get("force_preference", 0.0)),
-        "w_action": float(pw.get("action_efficiency", 0.0)),
         "w_touch": float(pw.get("touch_penalty", 0.0)),
         "speed_range_min": float(speed_range[0]),
         "speed_range_max": float(speed_range[1]),
         "force_range_min": float(force_range[0]),
         "force_range_max": float(force_range[1]),
-        "max_action_magnitude": float(pr.get("max_action_magnitude", 1.0)),
         "reward_budget": float(pref.get("reward_budget", 1.5)),
         "overall_weight": float(pref.get("overall_weight", 1.0)),
         "touch_threshold": float(pref.get("touch_threshold", 0.1)),
@@ -437,7 +434,6 @@ class ZooManager:
             "team_uuid",
             "w_speed",
             "w_force",
-            "w_action",
             "w_touch",
         ]
 
@@ -556,7 +552,6 @@ class ZooManager:
             "team_uuid": team_uuid,
             "w_speed": pw.get("w_speed", ""),
             "w_force": pw.get("w_force", ""),
-            "w_action": pw.get("w_action", ""),
             "w_touch": pw.get("w_touch", ""),
         })
 
@@ -759,30 +754,27 @@ class LoadAgentWrapper(JaxMARLWrapper):
         states_st: State,
         ag_idx: Dict[str, chex.Array],
         prev_contact_force: jnp.ndarray,
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    ) -> Tuple[jnp.ndarray, jnp.ndarray, Dict[str, jnp.ndarray]]:
         """Compute preference reward for the current partner (single env, no inner vmap)."""
         human_idx = ag_idx["human"]
         pref = self.pref_configs["human"]
 
-        total_pref_reward, updated_cf = compute_preference_reward(
+        total_pref_reward, updated_cf, pref_components = compute_preference_reward(
             speed=states_st.info["ee_speed"],
             force=states_st.info["ee_force"],
-            action_magnitude=states_st.info["action_magnitude"],
             prev_contact_force=prev_contact_force,
             w_speed=pref["w_speed"][human_idx],
             w_force=pref["w_force"][human_idx],
-            w_action=pref["w_action"][human_idx],
             w_touch=pref["w_touch"][human_idx],
             speed_range_min=pref["speed_range_min"][human_idx],
             speed_range_max=pref["speed_range_max"][human_idx],
             force_range_min=pref["force_range_min"][human_idx],
             force_range_max=pref["force_range_max"][human_idx],
-            max_action_magnitude=pref["max_action_magnitude"][human_idx],
             reward_budget=pref["reward_budget"][human_idx],
             overall_weight=pref["overall_weight"][human_idx],
             touch_threshold=pref["touch_threshold"][human_idx],
         )
-        return total_pref_reward, updated_cf
+        return total_pref_reward, updated_cf, pref_components
 
     def reset(self, key: chex.PRNGKey) -> Tuple[Dict[str, chex.Array], LoadAgentState]:
         """Resets the environment and initialises the loaded agent state."""
@@ -797,11 +789,23 @@ class LoadAgentWrapper(JaxMARLWrapper):
         )
 
         ag_idx = self.reset_agent_index(key_ag_idx)
+        # jax.debug.print("Agent Indexes on Reset: {ag_idx}", ag_idx=ag_idx)
         load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, load_agent_actions)
 
         #jax.debug.print("Agent Indexes on Reset: {ag_idx}", ag_idx=ag_idx)
 
         init_prev_cf = jnp.array(0.0) if self.pref_configs is not None else None
+
+        if self.pref_configs is not None:
+            state = state.replace(metrics={
+                **state.metrics,
+                "speed_pref_reward": jnp.zeros(()),
+                "force_pref_reward": jnp.zeros(()),
+                "touch_penalty_reward": jnp.zeros(()),
+                "total_pref_reward": jnp.zeros(()),
+                "pref_raw_speed": jnp.zeros(()),
+                "pref_raw_force": jnp.zeros(()),
+            })
 
         state = LoadAgentState(
             _state=state,
@@ -834,10 +838,11 @@ class LoadAgentWrapper(JaxMARLWrapper):
 
         # Augment rewards with the current partner's preference reward
         if self.pref_configs is not None:
-            pref_reward, new_cf = self._compute_partner_pref_reward(
+            pref_reward, new_cf, pref_components = self._compute_partner_pref_reward(
                 states_st, state.ag_idx, state.prev_contact_force
             )
             rewards = {agent: rewards[agent] + pref_reward for agent in rewards}
+            states_st = states_st.replace(metrics={**states_st.metrics, **pref_components})
             new_prev_cf = jnp.where(dones["__all__"], 0.0, new_cf)
         else:
             new_prev_cf = state.prev_contact_force
@@ -849,6 +854,11 @@ class LoadAgentWrapper(JaxMARLWrapper):
             states_re = reset_state
             obs_re = self.get_obs(states_re)
             ag_idx_re = reset_state.ag_idx
+
+        # Pad reset metrics with zero-valued pref keys so pytree structures match
+        if self.pref_configs is not None:
+            zero_pref = {k: jnp.zeros_like(v) for k, v in pref_components.items()}
+            states_re = states_re.replace(metrics={**states_re.metrics, **zero_pref})
 
         # Auto-reset environment based on termination
         states = jax.tree.map(
@@ -867,9 +877,9 @@ class LoadAgentWrapper(JaxMARLWrapper):
         load_agent_actions, load_agent_hstate = self.take_internal_action(
             key_action, obs, dones, avail_actions, state.hstate,
         )
-
+        # jax.debug.print("Agent Indexes on Step: {ag_idx}", ag_idx=ag_idx)
         load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, load_agent_actions)
-
+        # jax.debug.print("actions taken: {actions}", actions=load_agent_actions)
         states = LoadAgentState(
             _state=states,
             load_agent_actions=load_agent_actions,
@@ -1112,30 +1122,27 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         states_st: State,
         ag_idx: Dict[str, chex.Array],
         prev_contact_force: jnp.ndarray,
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    ) -> Tuple[jnp.ndarray, jnp.ndarray, Dict[str, jnp.ndarray]]:
         """Compute preference reward for the current partner (single env, no inner vmap)."""
         human_idx = ag_idx["human"]
         pref = self.pref_configs["human"]
 
-        total_pref_reward, updated_cf = compute_preference_reward(
+        total_pref_reward, updated_cf, pref_components = compute_preference_reward(
             speed=states_st.info["ee_speed"],
             force=states_st.info["ee_force"],
-            action_magnitude=states_st.info["action_magnitude"],
             prev_contact_force=prev_contact_force,
             w_speed=pref["w_speed"][human_idx],
             w_force=pref["w_force"][human_idx],
-            w_action=pref["w_action"][human_idx],
             w_touch=pref["w_touch"][human_idx],
             speed_range_min=pref["speed_range_min"][human_idx],
             speed_range_max=pref["speed_range_max"][human_idx],
             force_range_min=pref["force_range_min"][human_idx],
             force_range_max=pref["force_range_max"][human_idx],
-            max_action_magnitude=pref["max_action_magnitude"][human_idx],
             reward_budget=pref["reward_budget"][human_idx],
             overall_weight=pref["overall_weight"][human_idx],
             touch_threshold=pref["touch_threshold"][human_idx],
         )
-        return total_pref_reward, updated_cf
+        return total_pref_reward, updated_cf, pref_components
 
     def reset_agent_index( # probably actually don't even need this anymore
         self, current_idx: Dict[str, chex.Array]
@@ -1184,6 +1191,17 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
 
         init_prev_cf = jnp.array(0.0) if self.pref_configs is not None else None
 
+        if self.pref_configs is not None:
+            state = state.replace(metrics={
+                **state.metrics,
+                "speed_pref_reward": jnp.zeros(()),
+                "force_pref_reward": jnp.zeros(()),
+                "touch_penalty_reward": jnp.zeros(()),
+                "total_pref_reward": jnp.zeros(()),
+                "pref_raw_speed": jnp.zeros(()),
+                "pref_raw_force": jnp.zeros(()),
+            })
+
         state = LoadAgentState(
             _state=state,
             load_agent_actions=load_agent_actions,
@@ -1211,10 +1229,11 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
 
         # Augment rewards with the current partner's preference reward
         if self.pref_configs is not None:
-            pref_reward, new_cf = self._compute_partner_pref_reward(
+            pref_reward, new_cf, pref_components = self._compute_partner_pref_reward(
                 states_st, state.ag_idx, state.prev_contact_force
             )
             rewards = {agent: rewards[agent] + pref_reward for agent in rewards}
+            states_st = states_st.replace(metrics={**states_st.metrics, **pref_components})
             new_prev_cf = jnp.where(dones["__all__"], 0.0, new_cf)
         else:
             new_prev_cf = state.prev_contact_force
@@ -1226,6 +1245,12 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
             states_re = reset_state
             obs_re = self.get_obs(states_re)
             ag_idx_re = reset_state.ag_idx
+
+        # Pad reset metrics with zero-valued pref keys so pytree structures match
+        if self.pref_configs is not None:
+            zero_pref = {k: jnp.zeros_like(v) for k, v in pref_components.items()}
+            states_re = states_re.replace(metrics={**states_re.metrics, **zero_pref})
+
         # Auto-reset environment based on termination.
         states = jax.tree.map(
             lambda x, y: jax.lax.select(dones["__all__"], x, y), states_re, states_st,
