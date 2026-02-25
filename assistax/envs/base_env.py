@@ -154,6 +154,17 @@ class MABraxEnv(MultiAgentEnv):
         self.agent_action_mapping = _agent_action_mapping[env_name]
         self.agents = list(self.agent_action_mapping.keys())
         self.num_agents = len(self.agents)
+
+        # Extend obs mapping if preference obs are appended by PreferenceRewardWrapper
+        self._num_pref_obs = getattr(self.env, '_num_pref_obs', 0)
+        if self._num_pref_obs > 0:
+            base_obs_size = self.env.observation_size - self._num_pref_obs
+            pref_indices = jnp.arange(base_obs_size, self.env.observation_size)
+            self.agent_obs_mapping = {
+                agent: jnp.concatenate([indices, pref_indices])
+                for agent, indices in self.agent_obs_mapping.items()
+            }
+
         self.max_agent_obs_size = max(
             o.size 
             for a,o in self.agent_obs_mapping.items()

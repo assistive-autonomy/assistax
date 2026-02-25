@@ -28,7 +28,7 @@ ENV_KWARGS:
       speed_range: [0.06, 0.14]
       force_range: [1.5, 3.5]
     touch_threshold: 0.1
-    reward_budget: 2 
+    reward_budget: 1 
     overall_weight: 1
     normalization_mode: "budget"
     variable_names:

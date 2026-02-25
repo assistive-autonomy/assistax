@@ -239,7 +239,7 @@ class ScratchItch(PipelineEnv):
         scratcher_force = jp.linalg.norm(human_obs["force_on_human"])
         # Chosen Boltzmann-like reward functions for scratcher speed and force, but we could swap with alternatives.
         r_scratching = (
-                (r_dist < self._dist_scale)
+                (jp.abs(dist) < self._dist_scale)
                 * scratcher_speed/self._target_scratcher_speed * jp.exp(-scratcher_speed/self._target_scratcher_speed)
                 * scratcher_force/self._target_scratcher_force * jp.exp(-scratcher_force/self._target_scratcher_force)
         )

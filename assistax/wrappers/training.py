@@ -349,10 +349,34 @@ class PreferenceRewardWrapper(Wrapper):
             'speed': 'ee_speed',
             'force': 'ee_force',
         })
-        
+
+        # Build preference observation vector (7 values appended to obs)
+        self._num_pref_obs = 7
+        self._pref_obs_vector = jp.array([
+            self.preference_weights.get('speed_preference', 0.0),
+            self.preference_weights.get('force_preference', 0.0),
+            self.preference_weights.get('touch_penalty', 0.0),
+            self.preference_ranges['speed_range'][0],
+            self.preference_ranges['speed_range'][1],
+            self.preference_ranges['force_range'][0],
+            self.preference_ranges['force_range'][1],
+        ])
+
+    @property
+    def observation_size(self) -> int:
+        """Observation size including appended preference values."""
+        return self.env.observation_size + self._num_pref_obs
+
+    def _augment_obs(self, obs: jax.Array) -> jax.Array:
+        """Append preference observation vector to the last axis of obs."""
+        pref_broadcast = jp.broadcast_to(
+            self._pref_obs_vector, obs.shape[:-1] + (self._num_pref_obs,)
+        )
+        return jp.concatenate([obs, pref_broadcast], axis=-1)
+
     def reset(self, rng: jax.Array) -> State:
         state = self.env.reset(rng)
-        
+
         # Initialize preference tracking
         state.info.update(
             preference_tracking={
@@ -371,9 +395,16 @@ class PreferenceRewardWrapper(Wrapper):
             pref_raw_speed=jp.array(0.0),
             pref_raw_force=jp.array(0.0),
         )
+
+        # Append preference obs to state observations
+        state = state.replace(obs=self._augment_obs(state.obs))
+        state.info["pref_obs"] = self._pref_obs_vector
         return state
     
     def step(self, rng: jax.Array, state: State, action: jax.Array) -> State:
+        # Strip augmented pref obs before passing to inner env (prevents scan shape mismatch)
+        state = state.replace(obs=state.obs[..., :-self._num_pref_obs])
+
         # Get state from wrapped environment
         next_state = self.env.step(rng, state, action)
         
@@ -416,7 +447,9 @@ class PreferenceRewardWrapper(Wrapper):
             pref_raw_force=force,
         )
 
-        return next_state.replace(reward=augmented_reward)
+        # Append preference obs to state observations
+        augmented_obs = self._augment_obs(next_state.obs)
+        return next_state.replace(reward=augmented_reward, obs=augmented_obs)
     
     def _compute_preference_rewards(
         self, speed: jax.Array, force: jax.Array,

@@ -15,6 +15,7 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 import safetensors.flax
 from assistax.envs.multi_agent_env import State, MultiAgentEnv
 from assistax.wrappers.baselines import JaxMARLWrapper
+from gymnax.environments import spaces
 from assistax.wrappers.training import compute_preference_reward
 from typing import Sequence, NamedTuple, Any, Dict, Optional, Callable, Tuple, List
 import functools
@@ -576,6 +577,17 @@ class LoadAgentWrapper(JaxMARLWrapper):
         self.num_agents = len(self.agents)
         self.num_loaded_agents = len(self.loaded_agents)
 
+        # Expand observation spaces if preference configs are present
+        self._num_pref_obs = 7 if self.pref_configs is not None else 0
+        if self._num_pref_obs > 0:
+            self._env.observation_spaces = {
+                agent: spaces.Box(
+                    -jnp.inf, jnp.inf,
+                    shape=(space.shape[0] + self._num_pref_obs,),
+                )
+                for agent, space in self._env.observation_spaces.items()
+            }
+
     @classmethod
     def load_from_zoo(
         cls,
@@ -749,6 +761,23 @@ class LoadAgentWrapper(JaxMARLWrapper):
 
         return indices
 
+    def _get_pref_obs_vector(self, ag_idx: Dict[str, chex.Array]) -> jnp.ndarray:
+        """Build the 7-value preference obs vector for the current partner."""
+        idx = ag_idx["human"]
+        pref = self.pref_configs["human"]
+        return jnp.array([
+            pref["w_speed"][idx], pref["w_force"][idx], pref["w_touch"][idx],
+            pref["speed_range_min"][idx], pref["speed_range_max"][idx],
+            pref["force_range_min"][idx], pref["force_range_max"][idx],
+        ])
+
+    def _append_pref_to_obs(
+        self, obs: Dict[str, jnp.ndarray], ag_idx: Dict[str, chex.Array],
+    ) -> Dict[str, jnp.ndarray]:
+        """Append the current partner's pref vector to each agent's observation."""
+        pref_vec = self._get_pref_obs_vector(ag_idx)
+        return {agent: jnp.concatenate([o, pref_vec]) for agent, o in obs.items()}
+
     def _compute_partner_pref_reward(
         self,
         states_st: State,
@@ -806,6 +835,10 @@ class LoadAgentWrapper(JaxMARLWrapper):
                 "pref_raw_speed": jnp.zeros(()),
                 "pref_raw_force": jnp.zeros(()),
             })
+
+        # Append preference obs to each agent's observation
+        if self.pref_configs is not None:
+            obs = self._append_pref_to_obs(obs, ag_idx)
 
         state = LoadAgentState(
             _state=state,
@@ -871,6 +904,10 @@ class LoadAgentWrapper(JaxMARLWrapper):
             lambda x, y: jax.lax.select(dones["__all__"], x, y), ag_idx_re, state.ag_idx
         )
 
+        # Append preference obs to each agent's observation
+        if self.pref_configs is not None:
+            obs = self._append_pref_to_obs(obs, ag_idx)
+
         # Take the next action with the loaded agents
         avail_actions = self._env.get_avail_actions(state)
 
@@ -889,7 +926,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
         )
 
         return obs, states, rewards, dones, infos
-    
+
 
 def extract_uuids_from_eval_results(env_wrapper, eval_results):
     """
@@ -950,6 +987,17 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         # self.idxs = self._init_idxs()
         # self.current_idx = {agent_type: 0 for agent_type in self.loaded_agents}
         # self.idx_mask = {agent_type: jax.nn.one_hot(0, self.total_pop_size, dtype=int) for agent_type in self.loaded_agents}
+
+        # Expand observation spaces if preference configs are present
+        self._num_pref_obs = 7 if self.pref_configs is not None else 0
+        if self._num_pref_obs > 0:
+            self._env.observation_spaces = {
+                agent: spaces.Box(
+                    -jnp.inf, jnp.inf,
+                    shape=(space.shape[0] + self._num_pref_obs,),
+                )
+                for agent, space in self._env.observation_spaces.items()
+            }
 
     
     def _create_uuid_mapping(self):
@@ -1117,6 +1165,23 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
             }
         return hstates
 
+    def _get_pref_obs_vector(self, ag_idx: Dict[str, chex.Array]) -> jnp.ndarray:
+        """Build the 7-value preference obs vector for the current partner."""
+        idx = ag_idx["human"]
+        pref = self.pref_configs["human"]
+        return jnp.array([
+            pref["w_speed"][idx], pref["w_force"][idx], pref["w_touch"][idx],
+            pref["speed_range_min"][idx], pref["speed_range_max"][idx],
+            pref["force_range_min"][idx], pref["force_range_max"][idx],
+        ])
+
+    def _append_pref_to_obs(
+        self, obs: Dict[str, jnp.ndarray], ag_idx: Dict[str, chex.Array],
+    ) -> Dict[str, jnp.ndarray]:
+        """Append the current partner's pref vector to each agent's observation."""
+        pref_vec = self._get_pref_obs_vector(ag_idx)
+        return {agent: jnp.concatenate([o, pref_vec]) for agent, o in obs.items()}
+
     def _compute_partner_pref_reward(
         self,
         states_st: State,
@@ -1202,6 +1267,10 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
                 "pref_raw_force": jnp.zeros(()),
             })
 
+        # Append preference obs to each agent's observation
+        if self.pref_configs is not None:
+            obs = self._append_pref_to_obs(obs, current_idx)
+
         state = LoadAgentState(
             _state=state,
             load_agent_actions=load_agent_actions,
@@ -1260,6 +1329,10 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         )
         ag_idx = jax.tree.map(lambda x, y: jax.lax.select(dones["__all__"], x, y), ag_idx_re, state.ag_idx # get rid of this grimm_stuff
         )
+
+        # Append preference obs to each agent's observation
+        if self.pref_configs is not None:
+            obs = self._append_pref_to_obs(obs, ag_idx)
 
         avail_actions = self._env.get_avail_actions(state)
         load_agent_actions, load_agent_hstate = self.take_internal_action(

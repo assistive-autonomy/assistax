@@ -368,6 +368,8 @@ def make_train(config, save_train_state=False, load_zoo=False, dynamic_preferenc
                     runner_state.train_state.params,
                     ac_in,
                 )
+
+            
                 
                 # Sample actions from policy
                 actor_std = jnp.expand_dims(actor_std, axis=1)
@@ -383,7 +385,6 @@ def make_train(config, save_train_state=False, load_zoo=False, dynamic_preferenc
                 obsv, env_state, reward, done, info = jax.vmap(env.step)(
                     rng_step, runner_state.env_state, env_act,
                 )
-
                 # Dynamic preference rewards (applied when vmapping over pref configs)
                 new_prev_cf = runner_state.prev_contact_force
                 if dynamic_preferences and pref_weights is not None:
