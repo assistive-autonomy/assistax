@@ -48,7 +48,8 @@ uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
     ++ENT_COEF=0.00010842521 \
     ++NUM_STEPS=64 \
     ++ENV_KWARGS.disability.joint_restriction_factor=0 \
-    ++ENV_KWARGS.disability.joint_strength=0
+    ++ENV_KWARGS.disability.joint_strength=0 \
+    ++ENV_KWARGS.preference_rewards.reward_budget=7.52
 
 
 uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
@@ -64,7 +65,8 @@ uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
     ++ENT_COEF=0.00010842521 \
     ++NUM_STEPS=64 \
     ++ENV_KWARGS.disability.joint_restriction_factor=0.5 \
-    ++ENV_KWARGS.disability.joint_strength=0.5
+    ++ENV_KWARGS.disability.joint_strength=0.5 \
+    ++ENV_KWARGS.preference_rewards.reward_budget=7.52
 
 uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
     -cn $CONFIG -m\
@@ -79,8 +81,9 @@ uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
     ++ENT_COEF=0.00010842521 \
     ++NUM_STEPS=64 \
     ++ENV_KWARGS.disability.joint_restriction_factor=1 \
-    ++ENV_KWARGS.disability.joint_strength=1
-
+    ++ENV_KWARGS.disability.joint_strength=1 \
+    ++ENV_KWARGS.preference_rewards.reward_budget=7.52
+#
 # --- Cleanup workspace (but NOT the zoo shard) ---
 rm -rf "$WORK_DIR"
 echo "[$(ts)] Done. Zoo shard preserved at: $JOB_ZOO_DIR"

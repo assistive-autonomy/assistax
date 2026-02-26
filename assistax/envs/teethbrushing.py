@@ -43,7 +43,6 @@ class TeethBrushing(PipelineEnv):
         brushing_reward_weight: float = 1.0,
         target_toothbrush_speed: float = 0.1,
         target_toothbrush_force: float = 1.0,
-        brush_dist_threshold: float = 0.05,
         reset_noise_scale=5e-3,
         backend="mjx",
         **kwargs
@@ -120,7 +119,6 @@ class TeethBrushing(PipelineEnv):
         self._brushing_reward_weight = brushing_reward_weight
         self._target_toothbrush_speed = target_toothbrush_speed
         self._target_toothbrush_force = target_toothbrush_force
-        self._brush_dist_threshold = brush_dist_threshold
         self._reset_noise_scale = reset_noise_scale
 
     def reset(self, rng: jax.Array) -> State:
@@ -214,7 +212,6 @@ class TeethBrushing(PipelineEnv):
         
         r_dist = jp.exp(-self._dist_scale * distance) # Spikier than the bolzmann esque reward from scratching
         
-        world_up_vec = jp.array([0.0, 0.0, 1.0])
         # 2.1 Roll orientation Reward
         local_vec_toothbrush_bristle = jp.array([-1.0, 0.0, 0.0])
 
@@ -231,13 +228,15 @@ class TeethBrushing(PipelineEnv):
         # 2.4 Compare with World Up
         r_align_surface = jp.dot(target_toothbrush_to_mouth, toothbrush_bristle_world)
 
-        local_vec_handle = jp.array([0.0, 0.0, -1.0]) # Vector to level the toothbrush handle
-        toothbrush_handle_world = bmath.rotate(local_vec_handle, toothbrush_quat)     
-        handle_verticality = jp.abs(jp.dot(toothbrush_handle_world, world_up_vec))
-        r_horizontal = 1.0 - handle_verticality
-        
+        #local_vec_handle = jp.array([0.0, -1.0, 0.0]) # Vector to level the toothbrush handle
+        #toothbrush_handle_world = bmath.rotate(local_vec_handle, toothbrush_quat)     
+        #handle_verticality = jp.abs(jp.dot(toothbrush_handle_world, world_up_vec))
+        #r_horizontal = 1.0 - handle_verticality
+        local_vec_tilt_toothbrush = jp.array([0.0, -1.0, 0.0])
+        toothbrush_tilt_world = bmath.rotate(local_vec_tilt_toothbrush, toothbrush_quat)     
+        r_tilt = jp.dot(target_toothbrush_to_mouth, toothbrush_tilt_world)
 
-        r_align = (r_align_surface + r_horizontal) / 2.0 
+        r_align = (r_align_surface + r_tilt) / 2.0 
         r_align_weighted = r_align * r_dist 
         
         # 3. Velocity Reward
@@ -341,33 +340,57 @@ class TeethBrushing(PipelineEnv):
         force = contact_force(self.sys, pipeline_state, contact_id, False)
         return force 
 
-    def get_brush_reward(self, pipeline_state, pipeline_state0, contact_force_mouth: jax.Array,
-                         toothbrush_pos, mouth_pos, distance, toothbrush_velocity) -> jax.Array:
-        """
-        Simplified brushing reward inspired by scratching task.
+    def get_brush_reward(self, pipeline_state, pipeline_state0, contact_force_mouth: jax.Array, toothbrush_pos, mouth_pos, distance, toothbrush_velocity) -> jax.Array:
+        # --- 1. Contact Gate ---
+        # We only care about brushing if we are in the 'sweet spot' of force.
+        # Your current r_force (x * exp(-x)) is perfect for this.
+        force_is_active = jp.where(contact_force_mouth > 0.1, 1.0, 0.0)
         
-        Activates when:
-        1. Close enough to mouth (distance gate)
-        2. Moving tangentially at target speed (brushing motion)
-        3. Applying target force (contact quality)
-        """
-        
-        # --- Tangential (brushing) speed calculation ---
+        # --- 2. Brushing Motion (Tangential Velocity) ---
+        # Calculate velocity of the tool
+        tool_vel = toothbrush_velocity 
+        # Define the surface normal (vector from mouth to toothbrush)
         normal_vec = (toothbrush_pos - mouth_pos) / (distance + 1e-6)
-        v_normal = jp.dot(toothbrush_velocity, normal_vec) * normal_vec
-        v_tangential = toothbrush_velocity - v_normal
+
+        # Project velocity onto the plane of the teeth (tangential velocity)
+        # v_tan = v - (v · n) * n
+        v_dot_n = jp.dot(tool_vel, normal_vec)
+        v_tangential = tool_vel - v_dot_n * normal_vec
         brushing_speed = jp.linalg.norm(v_tangential)
-        
-        # --- Reward components ---
-        r_brush = (
-            (distance < self._brush_dist_threshold)  # Gate: must be close
-            * brushing_speed / self._target_toothbrush_speed 
-            * jp.exp(-brushing_speed / self._target_toothbrush_speed)  # Speed: peaks at target
-            * contact_force_mouth / self._target_toothbrush_force 
-            * jp.exp(-contact_force_mouth / self._target_toothbrush_force)  # Force: peaks at target
-        )
-        
-        return r_brush
+
+        # Reward a 'moderate' speed (not too fast, not static)
+        # Peaking at approx 0.05 m/s (5cm/s)
+        target_brushing_speed = 0.05
+        r_brush = brushing_speed / target_brushing_speed * jp.exp(-brushing_speed / target_brushing_speed)
+
+        return force_is_active * r_brush
+#    def get_brush_reward(self, pipeline_state, pipeline_state0, contact_force_mouth: jax.Array,
+#                         toothbrush_pos, mouth_pos, distance, toothbrush_velocity) -> jax.Array:
+#        """
+#        Simplified brushing reward inspired by scratching task.
+#        
+#        Activates when:
+#        1. Close enough to mouth (distance gate)
+#        2. Moving tangentially at target speed (brushing motion)
+#        3. Applying target force (contact quality)
+#        """
+#        
+#        # --- Tangential (brushing) speed calculation ---
+#        normal_vec = (toothbrush_pos - mouth_pos) / (distance + 1e-6)
+#        v_normal = jp.dot(toothbrush_velocity, normal_vec) * normal_vec
+#        v_tangential = toothbrush_velocity - v_normal
+#        brushing_speed = jp.linalg.norm(v_tangential)
+#        
+#        # --- Reward components ---
+#        r_brush = (
+#            (distance < self._brush_dist_threshold)  # Gate: must be close
+#            * brushing_speed / self._target_toothbrush_speed 
+#            * jp.exp(-brushing_speed / self._target_toothbrush_speed)  # Speed: peaks at target
+#            * contact_force_mouth / self._target_toothbrush_force 
+#            * jp.exp(-contact_force_mouth / self._target_toothbrush_force)  # Force: peaks at target
+#        )
+#        
+#        return r_brush
     
     #def get_brush_reward(self, pipeline_state, pipeline_state0, contact_force_mouth: jax.Array, toothbrush_pos, mouth_pos, distance, toothbrush_velocity) -> jax.Array:
     #    # --- 1. Contact Gate ---

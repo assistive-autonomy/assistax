@@ -286,7 +286,7 @@ class Feeding(PipelineEnv):
         
         # We square the difference to make a smooth Bell Curve peak at the target speed
         speed_error = current_speed - current_target_speed
-        r_velocity = jp.exp(-jp.square(speed_error) / (vel_sigma**2)) # this is max 1 I believe i.e. Gaussian style reward
+        r_velocity = jp.exp(-jp.square(speed_error) / (vel_sigma**2)) 
         
         # 4. Contact with mouth reward
         right_side_spoon_force = self._get_force_on_tool(pipeline_state, self.SPOON_RSIDE_CONTACT_ID)

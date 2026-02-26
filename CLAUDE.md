@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Assistax is a hardware-accelerated reinforcement learning benchmark for assistive robotics using JAX and Brax. It provides multi-agent environments where robots assist humans with tasks like scratching, bed bathing, and arm manipulation.
 
+## Imporant Rules
+
+Do not make changes to environments unless given explicit permission by the user. This is espeically relevant to the reward function of the environments, these are completely off limits unless explicit premission by the user is given to make changes. 
+
 ## Common Commands
 
 ### Training and Execution

@@ -47,8 +47,10 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++CLIP_EPS=0.25259838 \
     ++ENT_COEF=0.0016915416 \
     ++NUM_STEPS=128 \
+    ++ENV_KWARGS.preference_rewards.reward_budget=2.09 \
     ++ENV_KWARGS.disability.joint_restriction_factor=0 \
-    ++ENV_KWARGS.disability.joint_strength=0.5
+    ++ENV_KWARGS.disability.joint_strength=0.5  
+
 
 
 uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
@@ -63,6 +65,7 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++CLIP_EPS=0.25259838 \
     ++ENT_COEF=0.0016915416 \
     ++NUM_STEPS=128 \
+    ++ENV_KWARGS.preference_rewards.reward_budget=2.09 \
     ++ENV_KWARGS.disability.joint_restriction_factor=0.5 \
     ++ENV_KWARGS.disability.joint_strength=1
 
@@ -78,6 +81,7 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++CLIP_EPS=0.25259838 \
     ++ENT_COEF=0.0016915416 \
     ++NUM_STEPS=128 \
+    ++ENV_KWARGS.preference_rewards.reward_budget=2.09 \
     ++ENV_KWARGS.disability.joint_restriction_factor=1 \
     ++ENV_KWARGS.disability.joint_strength=0.5
 
