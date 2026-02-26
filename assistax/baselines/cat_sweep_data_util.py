@@ -91,6 +91,37 @@ all_metrics = {key: np.concatenate(val) for key, val in all_metrics.items()}
 all_returns = jnp.concat(all_returns)
 
 output_dir = args.output_dir
+existing_hparam_dir = osp.join(output_dir, "hparam")
+existing_metric_dir = osp.join(output_dir, "metric")
+
+# Merge with existing data if output directory already has results
+if osp.isdir(existing_hparam_dir) or osp.isdir(existing_metric_dir):
+    print(f"Existing data found in {output_dir}, merging into {output_dir}_merge")
+    # Merge hparams
+    if osp.isdir(existing_hparam_dir):
+        for f in os.listdir(existing_hparam_dir):
+            if f.endswith(".npy"):
+                key = f.removesuffix(".npy")
+                existing = np.load(osp.join(existing_hparam_dir, f), allow_pickle=True)
+                if key in all_hparams:
+                    all_hparams[key] = np.concatenate([existing, all_hparams[key]])
+                else:
+                    all_hparams[key] = existing
+    # Merge metrics
+    if osp.isdir(existing_metric_dir):
+        for f in os.listdir(existing_metric_dir):
+            if f.endswith(".npy"):
+                key = f.removesuffix(".npy")
+                existing = np.load(osp.join(existing_metric_dir, f), allow_pickle=True)
+                if key == "eval_returns":
+                    all_returns = np.concatenate([existing, all_returns])
+                elif key in all_metrics:
+                    all_metrics[key] = np.concatenate([existing, all_metrics[key]])
+                else:
+                    all_metrics[key] = existing
+    # Write to a separate merge directory
+    output_dir = output_dir + "_merge"
+
 os.makedirs(osp.join(output_dir, "hparam"), exist_ok=True)
 os.makedirs(osp.join(output_dir, "metric"), exist_ok=True)
 

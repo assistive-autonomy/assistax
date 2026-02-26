@@ -83,8 +83,8 @@ sweep:
 
 # Visualization settings
 SAVE_MUJOCO_TRAJECTORIES: True  # Always save trajectories (minimal overhead)
-SAVE_HTML_RENDER: True 
-RENDER_VIDEOS: False  # Set to True for important runs
+SAVE_HTML_RENDER: False 
+RENDER_VIDEOS: True  # Set to True for important runs
 VIDEO_FPS: 30  # Frames per second for videos
 VIDEO_WIDTH: 1920 # Video width in pixels
 VIDEO_HEIGHT: 1080  # Video height in pixels

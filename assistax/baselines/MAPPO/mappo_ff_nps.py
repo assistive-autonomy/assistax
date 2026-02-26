@@ -325,7 +325,6 @@ def make_train(config, save_train_state=False, load_zoo=False, dynamic_preferenc
                     pref_reward, new_cf, _ = compute_preference_reward(
                         speed=brax_info[var_names["speed"]],
                         force=brax_info[var_names["force"]],
-                        action_magnitude=brax_info[var_names["action_magnitude"]],
                         prev_contact_force=runner_state.prev_contact_force,
                         **pref_weights,
                     )
