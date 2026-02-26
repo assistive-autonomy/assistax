@@ -16,7 +16,7 @@ parser.add_argument(
     "--save-metrics",
     help="A list of metrics to save.",
     nargs="+",
-    default=["returned_episode_returns"],
+    default=None,
 )
 parser.add_argument(
     "-o",
@@ -70,19 +70,21 @@ for dirpath in args.load_dirs:
         ).item()
         
         # Check seed dimension if filter is specified
-        num_seeds_in_run = metrics["returned_episode_returns"].shape[1]
+        first_metric = next(iter(metrics.values()))
+        num_seeds_in_run = first_metric.shape[1]
         if args.num_seeds is not None and num_seeds_in_run != args.num_seeds:
             print(f"Skipping {full_path} - has {num_seeds_in_run} seeds, expected {args.num_seeds}")
             continue
-        
-        n_configs = metrics["returned_episode_returns"].shape[0]
+
+        n_configs = first_metric.shape[0]
         for hparam_key in hparams:
             all_hparams[hparam_key].append(
                 hparams[hparam_key]
                 if isinstance(hparams[hparam_key], jnp.ndarray)
                 else jnp.full(n_configs, hparams[hparam_key])
             )
-        for metric_key in args.save_metrics:
+        save_keys = args.save_metrics if args.save_metrics is not None else list(metrics.keys())
+        for metric_key in save_keys:
             all_metrics[metric_key].append(metrics[metric_key])
         all_returns.append(returns)
 

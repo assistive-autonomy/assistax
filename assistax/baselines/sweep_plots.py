@@ -252,6 +252,11 @@ ALGORITHM_CONFIGS = {
         'display_names': ['Policy LR', 'Q LR', 'Alpha LR', 'Tau'],
         'log_scale': [True, True, True, False],
     },
+    'masac': {
+        'params': ['p_lr', 'q_lr', 'alpha_lr', 'tau'],
+        'display_names': ['Policy LR', 'Q LR', 'Alpha LR', 'Tau'],
+        'log_scale': [True, True, True, False],
+    },
     'td3': {
         'params': ['actor_lr', 'critic_lr', 'tau'],
         'display_names': ['Actor LR', 'Critic LR', 'Tau'],
