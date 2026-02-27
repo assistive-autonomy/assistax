@@ -813,15 +813,17 @@ class LoadAgentWrapper(JaxMARLWrapper):
         avail_actions = self._env.get_avail_actions(state)
         hstate = self.reset_internal_hstates(key_hstate)
 
+        ag_idx = self.reset_agent_index(key_ag_idx)
+        # jax.debug.print("Agent Indexes on Reset: {ag_idx}", ag_idx=ag_idx)
+
+        # Append preference obs before take_internal_action so zoo networks get correct input dim
+        if self.pref_configs is not None:
+            obs = self._append_pref_to_obs(obs, ag_idx)
+
         load_agent_actions, hstate = self.take_internal_action(
             key_action, obs, dones, avail_actions, hstate
         )
-
-        ag_idx = self.reset_agent_index(key_ag_idx)
-        # jax.debug.print("Agent Indexes on Reset: {ag_idx}", ag_idx=ag_idx)
         load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, load_agent_actions)
-
-        #jax.debug.print("Agent Indexes on Reset: {ag_idx}", ag_idx=ag_idx)
 
         init_prev_cf = jnp.array(0.0) if self.pref_configs is not None else None
 
@@ -835,10 +837,6 @@ class LoadAgentWrapper(JaxMARLWrapper):
                 "pref_raw_speed": jnp.zeros(()),
                 "pref_raw_force": jnp.zeros(()),
             })
-
-        # Append preference obs to each agent's observation
-        if self.pref_configs is not None:
-            obs = self._append_pref_to_obs(obs, ag_idx)
 
         state = LoadAgentState(
             _state=state,
@@ -1238,9 +1236,6 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         dones = {agent: False for agent in self.loaded_agents}
         avail_actions = self._env.get_avail_actions(state)
         hstate = self.reset_internal_hstates(key_hstate)
-        load_agent_actions, hstate = self.take_internal_action(
-            key_action, obs, dones, avail_actions, hstate
-        )
 
         # Initialize indices deterministically (starting at 0).
         current_idx = self.reset_agent_index(current_idx)
@@ -1249,10 +1244,16 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         # Ensure each index is a scalar
         current_idx = jax.tree.map(self._ensure_scalar_idx, current_idx)
 
+        # Append preference obs before take_internal_action so zoo networks get correct input dim
+        if self.pref_configs is not None:
+            obs = self._append_pref_to_obs(obs, current_idx)
+
+        load_agent_actions, hstate = self.take_internal_action(
+            key_action, obs, dones, avail_actions, hstate
+        )
+
         # Use indices to select actions
         load_agent_actions = jax.tree.map(lambda i, a: a[i], current_idx, load_agent_actions)
-
-        # Remove breakpoint for JIT compatibility
 
         init_prev_cf = jnp.array(0.0) if self.pref_configs is not None else None
 
@@ -1266,10 +1267,6 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
                 "pref_raw_speed": jnp.zeros(()),
                 "pref_raw_force": jnp.zeros(()),
             })
-
-        # Append preference obs to each agent's observation
-        if self.pref_configs is not None:
-            obs = self._append_pref_to_obs(obs, current_idx)
 
         state = LoadAgentState(
             _state=state,

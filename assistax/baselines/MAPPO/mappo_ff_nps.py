@@ -193,8 +193,12 @@ def make_train(config, save_train_state=False, load_zoo=False, dynamic_preferenc
     )
     
     config["OBS_DIM"] = int(get_space_dim(env.observation_space(env.agents[0])))
+    if dynamic_preferences:
+        config["OBS_DIM"] += 7
     config["ACT_DIM"] = int(get_space_dim(env.action_space(env.agents[0])))
     config["GOBS_DIM"] = int(get_space_dim(env.observation_space("global")))
+    if dynamic_preferences:
+        config["GOBS_DIM"] += 7
     env = LogWrapper(env, replace_info=True)
 
     def linear_schedule(initial_lr):
@@ -274,6 +278,29 @@ def make_train(config, save_train_state=False, load_zoo=False, dynamic_preferenc
         obsv, env_state = jax.vmap(env.reset)(reset_rng)
         init_dones = jnp.zeros((env.num_agents, config["NUM_ENVS"]), dtype=bool)
 
+        # Build helper to augment observations with preference values
+        if dynamic_preferences and pref_weights is not None:
+            pref_obs_vector = jnp.array([
+                pref_weights["w_speed"],
+                pref_weights["w_force"],
+                pref_weights["w_touch"],
+                pref_weights["speed_range_min"],
+                pref_weights["speed_range_max"],
+                pref_weights["force_range_min"],
+                pref_weights["force_range_max"],
+            ])
+
+            def _append_pref_obs(obs_dict):
+                return {
+                    k: jnp.concatenate(
+                        [v, jnp.broadcast_to(pref_obs_vector, v.shape[:-1] + (7,))],
+                        axis=-1,
+                    )
+                    for k, v in obs_dict.items()
+                }
+
+            obsv = _append_pref_obs(obsv)
+
         # TRAIN LOOP
         def _update_step(runner_state, unused):
             # COLLECT TRAJECTORIES
@@ -314,6 +341,10 @@ def make_train(config, save_train_state=False, load_zoo=False, dynamic_preferenc
                 obsv, env_state, reward, done, info = jax.vmap(env.step)(
                     rng_step, runner_state.env_state, env_act,
                 )
+
+                # Augment obs with preference values for dynamic preferences
+                if dynamic_preferences and pref_weights is not None:
+                    obsv = _append_pref_obs(obsv)
 
                 # Dynamic preference rewards
                 new_prev_cf = runner_state.prev_contact_force
