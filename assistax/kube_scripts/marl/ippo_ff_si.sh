@@ -6,8 +6,6 @@ export NETRC=/pvc/.netrc
 # --- Parse arguments ---
 CONFIG=${1:-ippo}
 ENV_NAME=${2:-scratchitch}
-GPU_ENV_CAPACITY=${3:-24576} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
-WANDB_TAG=${4:-["IPPO","FF_NPS","MARL_TEST"]}
 
 # --- Logging setup ---
 ts(){ date +'%Y-%m-%dT%H:%M:%S%z'; }
@@ -49,7 +47,7 @@ uv run python assistax/baselines/IPPO/ippo_run.py \
     -cn $CONFIG -m \
     network=ff_nps \
     ++NUM_SEEDS=20 \
-    ++ENV_NAME="$ENV_NAME" \
+    ++ENV_NAME=$ENV_NAME \
     ++TOTAL_TIMESTEPS=4e7 \
     ++GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
     ++EXP_TAGS=$WANDB_TAG \
@@ -59,7 +57,8 @@ uv run python assistax/baselines/IPPO/ippo_run.py \
     ++NUM_MINIBATCHES=16 \
     ++CLIP_EPS=0.16875672 \
     ++ENT_COEF=0.0016069901 \
-    ++NUM_STEPS=64 \ 
+    ++NUM_STEPS=64 \
+    ++EXP_TAGS=[IPPO,FF_NPS,MARL_TEST]
 
 # --- Cleanup ---
 rm -rf "$WORK_DIR"

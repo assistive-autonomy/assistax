@@ -19,23 +19,23 @@ ENV_KWARGS:
 #    mode: periodic
 #    period: 100 
 #    accumulate: True
-  preference_rewards:
-    preference_weights:
-      speed_preference: 0.25
-      force_preference: 0.35
-      touch_penalty: -0.03
-    preference_ranges:
-      speed_range: [0.06, 0.14]
-      force_range: [1.5, 3.5]
-    touch_threshold: 0.1
-    reward_budget: 1 
-    overall_weight: 1
-    normalization_mode: "budget"
-    variable_names:
-      speed: "ee_speed"
-      force: "ee_force"
-      action_magnitude: "action_magnitude"
-      contact_forces: "contact_forces"  
+  #preference_rewards:
+  #  preference_weights:
+  #    speed_preference: 0.25
+  #    force_preference: 0.35
+  #    touch_penalty: -0.03
+  #  preference_ranges:
+  #    speed_range: [0.06, 0.14]
+  #    force_range: [1.5, 3.5]
+  #  touch_threshold: 0.1
+  #  reward_budget: 1 
+  #  overall_weight: 1
+  #  normalization_mode: "budget"
+  #  variable_names:
+  #    speed: "ee_speed"
+  #    force: "ee_force"
+  #    action_magnitude: "action_magnitude"
+  #    contact_forces: "contact_forces"  
 
 
 TOTAL_TIMESTEPS: 4e7 
