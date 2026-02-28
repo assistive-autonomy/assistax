@@ -35,7 +35,7 @@ mkdir -p "$JOB_ZOO_DIR"
 echo "[$(ts)] Zoo shard: $JOB_ZOO_DIR"
 
 # --- Run zoo generation ---
-uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
+uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
     -cn $CONFIG -m\
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
@@ -52,7 +52,7 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++ENV_KWARGS.disability.joint_strength=0.5 \
     ++ENV_KWARGS.preference_rewards.reward_budget=3.11 
 
-uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
+uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
     -cn $CONFIG -m\
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
@@ -69,7 +69,7 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++ENV_KWARGS.disability.joint_strength=1 \
     ++ENV_KWARGS.preference_rewards.reward_budget=3.11
 
-uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
+uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
     -cn $CONFIG -m\
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
