@@ -48,10 +48,9 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++NUM_SAC_UPDATES=32 \
     ++ROLLOUT_LENGTH=8 \
     ++BATCH_SIZE=128 \
-    ++ENV_KWARGS.preference_rewards.reward_budget=2.09 \
     ++ENV_KWARGS.disability.joint_restriction_factor=0.5 \
     ++ENV_KWARGS.disability.joint_strength=0.5 \
-    ++ENV_KWARGS.preference_rewards.reward_budget=1 
+    ++ENV_KWARGS.preference_rewards.reward_budget=2.09 
 
 
 
@@ -68,10 +67,9 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++NUM_SAC_UPDATES=32 \
     ++ROLLOUT_LENGTH=8 \
     ++BATCH_SIZE=128 \
-    ++ENV_KWARGS.preference_rewards.reward_budget=2.09 \
     ++ENV_KWARGS.disability.joint_restriction_factor=0 \
     ++ENV_KWARGS.disability.joint_strength=1 \
-    ++ENV_KWARGS.preference_rewards.reward_budget=1
+    ++ENV_KWARGS.preference_rewards.reward_budget=2.09
 
 uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     -cn $CONFIG -m\
@@ -86,10 +84,9 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++NUM_SAC_UPDATES=32 \
     ++ROLLOUT_LENGTH=8 \
     ++BATCH_SIZE=128 \
-    ++ENV_KWARGS.preference_rewards.reward_budget=2.09 \
     ++ENV_KWARGS.disability.joint_restriction_factor=0 \
     ++ENV_KWARGS.disability.joint_strength=0.5 \
-    ++ENV_KWARGS.preference_rewards.reward_budget=1
+    ++ENV_KWARGS.preference_rewards.reward_budget=2.09
 
 # --- Cleanup workspace (but NOT the zoo shard) ---
 rm -rf "$WORK_DIR"
