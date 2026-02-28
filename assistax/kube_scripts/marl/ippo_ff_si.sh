@@ -6,6 +6,7 @@ export NETRC=/pvc/.netrc
 # --- Parse arguments ---
 CONFIG=${1:-ippo}
 ENV_NAME=${2:-scratchitch}
+GPU_ENV_CAPACITY=${3:-49152}
 
 # --- Logging setup ---
 ts(){ date +'%Y-%m-%dT%H:%M:%S%z'; }
