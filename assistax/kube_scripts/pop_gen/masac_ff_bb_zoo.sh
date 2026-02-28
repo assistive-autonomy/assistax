@@ -39,7 +39,8 @@ uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
     -cn $CONFIG -m\
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
-    ++PREFERENCE_SWEEP.num_configs=70 \
+    ++PREFERENCE_SWEEP.num_configs=50 \
+    ++TOTAL_TIMESTEPS=10e6 \
     ++SEED=0 \
     ++POLICY_LR=0.0000562 \
     ++Q_LR=0.00178 \
@@ -56,7 +57,8 @@ uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
     -cn $CONFIG -m\
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
-    ++PREFERENCE_SWEEP.num_configs=70 \
+    ++PREFERENCE_SWEEP.num_configs=50 \
+    ++TOTAL_TIMESTEPS=10e6 \
     ++SEED=1 \
     ++POLICY_LR=0.0000562 \
     ++Q_LR=0.00178 \
@@ -73,7 +75,8 @@ uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
     -cn $CONFIG -m\
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
-    ++PREFERENCE_SWEEP.num_configs=70 \
+    ++PREFERENCE_SWEEP.num_configs=50 \
+    ++TOTAL_TIMESTEPS=10e6 \
     ++SEED=2 \
     ++POLICY_LR=0.0000562 \
     ++Q_LR=0.00178 \
