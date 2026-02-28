@@ -7,7 +7,7 @@ export NETRC=/pvc/.netrc
 CONFIG=${1:-ippo}
 ENV_NAME=${2:-scratchitch}
 GPU_ENV_CAPACITY=${3:-24576} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
-WANDB_TAG=${4:-[PPO,FF_NPS,MARL_TEST]}
+WANDB_TAG=${4:-["IPPO","FF_NPS","MARL_TEST"]}
 
 # --- Logging setup ---
 ts(){ date +'%Y-%m-%dT%H:%M:%S%z'; }
