@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 CONFIG=${1:-masac_zoo_gen}
-ENV_NAME=${2:-scratchitch}
+ENV_NAME=${2:-teethbrushing}
 GPU_ENV_CAPACITY=${3:-49152}
 
 ts(){ date +'%Y-%m-%dT%H:%M:%S%z'; }
@@ -51,8 +51,6 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++ENV_KWARGS.disability.joint_restriction_factor=0.5 \
     ++ENV_KWARGS.disability.joint_strength=0.5 \
     ++ENV_KWARGS.preference_rewards.reward_budget=2.09 
-
-
 
 uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     -cn $CONFIG -m\

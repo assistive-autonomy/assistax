@@ -52,8 +52,6 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++ENV_KWARGS.disability.joint_strength=0.5 \
     ++ENV_KWARGS.preference_rewards.reward_budget=3.11 
 
-
-
 uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     -cn $CONFIG -m\
     ++ENV_NAME=$ENV_NAME \
