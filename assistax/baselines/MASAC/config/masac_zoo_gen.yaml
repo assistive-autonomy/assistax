@@ -33,7 +33,7 @@ TOTAL_TIMESTEPS: 10e6
 
 # NUM_STEPS: 256
 NUM_ENVS: 256
-NUM_SEEDS: 3
+NUM_SEEDS: 1  
 SEED: 0
 NUM_EVAL_EPISODES: 2 # lower for rendering
 NUM_CHECKPOINTS: 256 # how often to save the training parameters for evaluating later
