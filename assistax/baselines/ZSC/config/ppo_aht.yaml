@@ -45,6 +45,7 @@ DISABLE_JIT: False
 DEVICE: 0
 PRINT_MEMORY_STATS: True
 SAVE_METRICS: True
+COLLECT_PARTNER_DATA: False
 
 # ZOO SETTINGS
 ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo

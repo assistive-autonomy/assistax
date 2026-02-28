@@ -50,6 +50,107 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 
+# ========================= PARTNER DATA COLLECTION ===========================
+
+def make_collect_partner_data(config, load_zoo_dict, batchify, unbatchify, RunnerState):
+    """Create a JIT-able function that collects all partner actions and observations.
+
+    Runs evaluation episodes with the trained robot policy and captures the full
+    ``(total_pop_size, action_dim)`` partner action tensor at every step.
+
+    Args:
+        config: Hydra config dict.
+        load_zoo_dict: Zoo loading dict for partner selection.
+        batchify: Agent-dict → stacked-array helper from the IPPO variant.
+        unbatchify: Stacked-array → agent-dict helper from the IPPO variant.
+        RunnerState: NamedTuple class from the IPPO variant.
+
+    Returns:
+        A function ``collect(rng, train_state) -> (all_actions, all_obs)``
+        where ``all_actions`` has shape ``(max_steps, num_eps, pop_size, true_act_dim)``
+        and ``all_obs`` has shape ``(max_steps, num_eps, obs_dim)``.
+    """
+    zoo = ZooManager(config["ZOO_PATH"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo_dict)
+    env = LogWrapper(env, replace_info=True)
+
+    num_eps = config["NUM_EVAL_EPISODES"]
+    max_steps = env.episode_length
+    loaded_agent = env._env.loaded_agents[0]  # e.g. "human"
+    true_act_dim = env._env._env.agent_action_mapping[loaded_agent].size
+
+    def collect(rng, train_state):
+        rng_reset, rng_run = jax.random.split(rng)
+        rngs_reset = jax.random.split(rng_reset, num_eps)
+        init_dones = jnp.zeros((env.num_agents, num_eps), dtype=bool)
+
+        obsv, env_state = jax.vmap(env.reset)(rngs_reset)
+        runner_state = RunnerState(
+            train_state=train_state,
+            env_state=env_state,
+            last_obs=obsv,
+            last_done=init_dones,
+            update_step=0,
+            rng=rng_run,
+        )
+
+        def _collect_step(runner_state, unused):
+            rng = runner_state.rng
+
+            # Robot policy forward pass
+            obs_batch = batchify(runner_state.last_obs, env.agents)
+            avail_actions = jax.vmap(env.get_avail_actions)(
+                runner_state.env_state.env_state
+            )
+            avail_actions = jax.lax.stop_gradient(
+                batchify(avail_actions, env.agents)
+            )
+            ac_in = (obs_batch, runner_state.last_done, avail_actions)
+
+            (actor_mean, actor_std), _ = runner_state.train_state.apply_fn(
+                runner_state.train_state.params, ac_in,
+            )
+            actor_std = jnp.expand_dims(actor_std, axis=1)
+            pi = distrax.MultivariateNormalDiag(actor_mean, actor_std)
+            rng, act_rng = jax.random.split(rng)
+            action, _ = pi.sample_and_log_prob(seed=act_rng)
+            env_act = unbatchify(action, env.agents)
+
+            # Capture partner obs *before* step (matches the obs partners acted on)
+            partner_obs = runner_state.last_obs[loaded_agent]  # (num_eps, obs_dim)
+
+            # Step the environment
+            rng, step_rng = jax.random.split(rng)
+            rng_step = jax.random.split(step_rng, num_eps)
+            obsv, env_state, reward, done, info = jax.vmap(env.step)(
+                rng_step, runner_state.env_state, env_act,
+            )
+            done_batch = batchify(done, env.agents)
+
+            # Extract all partner actions stored by LoadAgentWrapper.step()
+            all_partner_acts = env_state.env_state.all_partner_actions[loaded_agent][..., :true_act_dim]
+
+            runner_state = RunnerState(
+                train_state=runner_state.train_state,
+                env_state=env_state,
+                last_obs=obsv,
+                last_done=done_batch,
+                update_step=runner_state.update_step,
+                rng=rng,
+            )
+            return runner_state, (all_partner_acts, partner_obs)
+
+        _, (all_actions, all_obs) = jax.lax.scan(
+            _collect_step, runner_state, None, max_steps
+        )
+        # all_actions: (max_steps, num_eps, pop_size, act_dim)
+        # all_obs:     (max_steps, num_eps, obs_dim)
+        return all_actions, all_obs
+
+    return collect
+
+
 # ================================ MAIN AHT TRAINING FUNCTION ================================
 
 @hydra.main(version_base=None, config_path="config", config_name="ppo_aht")
@@ -77,16 +178,16 @@ def main(config):
     # Import the appropriate IPPO variant based on network architecture configuration
     match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
         case (False, False):
-            from IPPO.ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig, batchify, unbatchify, RunnerState
             print("Using: Feedforward Networks with No Parameter Sharing")
         case (False, True):
-            from IPPO.ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig, batchify, unbatchify, RunnerState
             print("Using: Feedforward Networks with Parameter Sharing")
         case (True, False):
-            from IPPO.ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig, batchify, unbatchify, RunnerState
             print("Using: Recurrent Networks with No Parameter Sharing")
         case (True, True):
-            from IPPO.ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig, batchify, unbatchify, RunnerState
             print("Using: Recurrent Networks with Parameter Sharing")
 
     # ===== WANDB INIT =====
@@ -201,6 +302,21 @@ def main(config):
         final_train_state = out["runner_state"].train_state
 
         upload_model_parameters_to_wandb(all_train_states, final_train_state, config, env, run)
+
+        # ===== PARTNER DATA COLLECTION (optional) =====
+        if config.get("COLLECT_PARTNER_DATA", False):
+            print("Collecting partner action diversity data...")
+            collect_fn = make_collect_partner_data(
+                config, load_zoo_dict_test, batchify, unbatchify, RunnerState
+            )
+            collect_rng = jax.random.key(config["SEED"] + 999)
+            # Use seed-0 trained policy for collection
+            final_train_state_seed0 = _tree_take(final_train_state, 0, axis=0)
+            collect_jit = jax.jit(collect_fn)
+            partner_actions, partner_obs = collect_jit(collect_rng, final_train_state_seed0)
+            jnp.save("partner_actions.npy", partner_actions, allow_pickle=False)
+            jnp.save("partner_obs.npy", partner_obs, allow_pickle=False)
+            print(f"Saved partner_actions.npy {partner_actions.shape} and partner_obs.npy {partner_obs.shape}")
 
         # ===== GENERALIZATION EVALUATION SETUP =====
         print("Setting up generalization evaluation...")

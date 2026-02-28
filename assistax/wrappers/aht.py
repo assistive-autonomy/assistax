@@ -414,6 +414,7 @@ class LoadAgentState:
     load_agent_actions: Dict[str, chex.Array]
     hstate: Optional[Dict[str, chex.Array]] = None
     prev_contact_force: Optional[jnp.ndarray] = None
+    all_partner_actions: Optional[Dict[str, chex.Array]] = None
 
     def __getattr__(self, name: str):
         return getattr(self._state, name)
@@ -820,10 +821,10 @@ class LoadAgentWrapper(JaxMARLWrapper):
         if self.pref_configs is not None:
             obs = self._append_pref_to_obs(obs, ag_idx)
 
-        load_agent_actions, hstate = self.take_internal_action(
+        all_partner_actions, hstate = self.take_internal_action(
             key_action, obs, dones, avail_actions, hstate
         )
-        load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, load_agent_actions)
+        load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, all_partner_actions)
 
         init_prev_cf = jnp.array(0.0) if self.pref_configs is not None else None
 
@@ -844,6 +845,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
             hstate=hstate,
             ag_idx=ag_idx,
             prev_contact_force=init_prev_cf,
+            all_partner_actions=all_partner_actions,
         )
         return obs, state
 
@@ -909,11 +911,11 @@ class LoadAgentWrapper(JaxMARLWrapper):
         # Take the next action with the loaded agents
         avail_actions = self._env.get_avail_actions(state)
 
-        load_agent_actions, load_agent_hstate = self.take_internal_action(
+        all_partner_actions, load_agent_hstate = self.take_internal_action(
             key_action, obs, dones, avail_actions, state.hstate,
         )
         # jax.debug.print("Agent Indexes on Step: {ag_idx}", ag_idx=ag_idx)
-        load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, load_agent_actions)
+        load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, all_partner_actions)
         # jax.debug.print("actions taken: {actions}", actions=load_agent_actions)
         states = LoadAgentState(
             _state=states,
@@ -921,6 +923,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
             hstate=load_agent_hstate,
             ag_idx=ag_idx,
             prev_contact_force=new_prev_cf,
+            all_partner_actions=all_partner_actions,
         )
 
         return obs, states, rewards, dones, infos
