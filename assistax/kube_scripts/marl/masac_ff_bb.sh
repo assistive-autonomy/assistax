@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 apt-get update && apt-get install -y --no-install-recommends \
-    libegl1-mesa libegl-dev libgles2-mesa-dev \
+    libegl1-mesa libegl-dev libgles2-mesa-dev ffmpeg\
   && rm -rf /var/lib/apt/lists/*
 
 export NETRC=/pvc/.netrc
@@ -47,7 +47,7 @@ ln -s /pvc/assistax/outputs outputs
 echo "[$(ts)] Workspace: $WORK_DIR"
 echo "[$(ts)] Outputs symlinked to: /pvc/assistax/outputs"
 
-# --- Run training ---
+# --- Run 1: No preference rewards ---
 uv run python assistax/baselines/MASAC/masac_run.py \
     -cn $CONFIG -m \
     network=ff_nps \
@@ -63,6 +63,26 @@ uv run python assistax/baselines/MASAC/masac_run.py \
     ++ROLLOUT_LENGTH=8 \
     ++BATCH_SIZE=512 \
     ++EXP_TAGS=[MASAC,FF_NPS,MARL_FINAL]
+
+echo "[$(ts)] Run 1 (no pref) complete. Starting Run 2 (with pref)..."
+
+# --- Run 2: With preference rewards ---
+uv run python assistax/baselines/MASAC/masac_run.py \
+    -cn $CONFIG -m \
+    network=ff_nps \
+    ++NUM_SEEDS=16 \
+    ++ENV_NAME=$ENV_NAME \
+    ++TOTAL_TIMESTEPS=4e7 \
+    ++GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
+    ++POLICY_LR=0.0000562 \
+    ++Q_LR=0.00178 \
+    ++ALPHA_LR=0.000252 \
+    ++TAU=0.0002728487 \
+    ++NUM_SAC_UPDATES=64 \
+    ++ROLLOUT_LENGTH=8 \
+    ++BATCH_SIZE=512 \
+    '++ENV_KWARGS.preference_rewards={preference_weights:{speed_preference:0.25,force_preference:0.35,touch_penalty:-0.03},preference_ranges:{speed_range:[0.06,0.14],force_range:[1.5,3.5]},touch_threshold:0.1,reward_budget:1,overall_weight:1,normalization_mode:budget,variable_names:{speed:ee_speed,force:ee_force,action_magnitude:action_magnitude,contact_forces:contact_forces}}' \
+    ++EXP_TAGS=[MASAC,FF_NPS,MARL_FINAL,PREF]
 
 # --- Cleanup ---
 rm -rf "$WORK_DIR"
