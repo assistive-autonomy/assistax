@@ -37,7 +37,7 @@ from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
     _tree_shape, _stack_tree, _concat_tree, _tree_split, upload_eval_data_to_wandb, 
     log_all_metrics, upload_html_visualizations_to_wandb, upload_model_parameters_to_wandb,
-    upload_mujoco_trajectories_to_wandb, upload_mujoco_videos_to_wandb
+    upload_mujoco_trajectories_to_wandb, upload_mujoco_videos_to_wandb, print_memory_stats
     )
 
 os.environ['XLA_FLAGS'] = (
@@ -70,9 +70,11 @@ def main(config: DictConfig):
         case (False, False):
             from ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Feedforward Networks with No Parameter Sharing")
+            network_type = "FF_NPS"
         case (False, True):
             from ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Feedforward Networks with Parameter Sharing")
+            network_type = "FF_NPS"
         case (True, False):
             from ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with No Parameter Sharing")
@@ -125,6 +127,7 @@ def main(config: DictConfig):
     print(f"Environment: {config['ENV_NAME']}")
     
     # ===== TRAINING EXECUTION =====
+    start = time.time()
     with jax.disable_jit(config["DISABLE_JIT"]):
         train_jit = jax.jit(
             make_train(config, save_train_state=True),
@@ -335,6 +338,11 @@ def main(config: DictConfig):
         # print("  - final_best.html: Best performing episode")
         
         print("\nTraining and evaluation completed successfully!")
+        end = time.time()
+        print(f"MARL Run took {end - start:.2f} seconds") 
+        if config["PRINT_MEMORY_STATS"]:
+            print_memory_stats(f"IPPO Sweep: Final Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
+
 
 
 if __name__ == "__main__":
