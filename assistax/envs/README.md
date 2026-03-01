@@ -449,6 +449,74 @@ TeethBrushing:    2.0 / 3.14 = 0.64x   (prefs are meaningful)
 
 ---
 
+## 7. AHT Extreme-Based Partner Selection
+
+### 7a. Overview
+
+During Ad Hoc Teamwork (AHT) training the zoo of partner policies is split into a **train** set (policies the learner trains against) and a **test** set (held-out policies for evaluation). By default the split is random using `SPLIT_RATIO`. The **extreme-based partner selection** feature (`EXTREME_SPLIT`) replaces this random split with a structured selection that targets partners at the extremes of preference dimensions, giving control over which kinds of partners are held out or trained against.
+
+When `EXTREME_SPLIT` is present in the YAML config it overrides `SPLIT_RATIO`. When it is absent or commented out the existing random split is used unchanged.
+
+### 7b. Config Reference
+
+The `EXTREME_SPLIT` block lives in the AHT config files (`config/ppo_aht.yaml`, `config/sac_aht.yaml`) and is commented out by default:
+
+```yaml
+EXTREME_SPLIT:
+  num_extreme: 10          # Number of extreme agents to select
+  role: "test"             # Where extreme agents go: "test" or "train"
+  mode: "single"           # Selection mode: "single", "multi", or "composite"
+
+  # --- mode: "single" ---
+  column: "w_force"        # Preference column to rank by
+  end: "both"              # "min", "max", or "both"
+
+  # --- mode: "multi" ---
+  columns:
+    - column: "w_force"
+      end: "both"
+    - column: "w_speed"
+      end: "max"
+
+  # --- mode: "composite" ---
+  dimensions: ["w_speed", "w_force", "w_touch"]  # optional, defaults to all 3
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `num_extreme` | int | Total number of extreme agents to select |
+| `role` | str | `"test"` or `"train"` — which set receives the extreme agents; the remainder goes to the other set |
+| `mode` | str | Selection algorithm: `"single"`, `"multi"`, or `"composite"` |
+
+### 7c. Selection Modes
+
+| Mode | Behaviour | Extra Config Keys |
+|------|-----------|-------------------|
+| **single** | Rank partners along **one** preference column and pick from one or both tails | `column`, `end` |
+| **multi** | Rank independently along **multiple** columns, union the selections (deduplicated) | `columns` (list of `{column, end}`) |
+| **composite** | Min-max normalise multiple dimensions, compute Euclidean distance from the centroid, pick the most distant partners | `dimensions` (optional list of column names) |
+
+### 7d. Selection Logic Details
+
+**Single mode** — sorts the partner DataFrame by `column` in ascending order, then picks `num_extreme` agents from the specified `end`:
+- `"min"`: bottom `num_extreme` agents
+- `"max"`: top `num_extreme` agents
+- `"both"` (default): `num_extreme // 2` from bottom, remainder from top
+
+**Multi mode** — applies the single-mode logic to each entry in `columns` independently, then takes the **union** of all selected indices. Because of deduplication the final count may be less than `num_extreme * len(columns)`.
+
+**Composite mode** — operates across all `dimensions` simultaneously:
+1. Min-max normalise each dimension to [0, 1]
+2. Compute the centroid of the normalised values
+3. Compute Euclidean distance from each partner to the centroid
+4. Select the `num_extreme` most distant partners
+
+### 7e. Integration
+
+The selection logic lives in `split_partners_extreme()` in `aht_utils.py`. Both `ppo_aht.py` and `sac_aht.py` call it when `EXTREME_SPLIT` is present in the config, otherwise falling back to the random `SPLIT_RATIO` split.
+
+---
+
 ## Source Files
 
 | File | Contents |
@@ -466,3 +534,6 @@ TeethBrushing:    2.0 / 3.14 = 0.64x   (prefs are meaningful)
 | `assistax/baselines/utils.py` | `generate_preference_configs()` |
 | `assistax/baselines/IPPO/config/ippo.yaml` | IPPO training defaults |
 | `assistax/baselines/IPPO/config/ippo_zoo_gen.yaml` | Zoo gen defaults + PREFERENCE_SWEEP |
+| `assistax/baselines/ZSC/aht_utils.py` | `split_partners_extreme()` and selection helpers |
+| `assistax/baselines/ZSC/config/ppo_aht.yaml` | PPO AHT config with `EXTREME_SPLIT` block |
+| `assistax/baselines/ZSC/config/sac_aht.yaml` | SAC AHT config with `EXTREME_SPLIT` block |

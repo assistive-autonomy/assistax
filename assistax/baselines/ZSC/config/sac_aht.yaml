@@ -53,6 +53,32 @@ INIT_ALPHA: 0.1  # initial entropy value when not using autotune
 
 SPLIT_RATIO: 0.2 # The train/test split ratio e.g. 0.2 means 20% train, 80% test
 
+# When present and not null, replaces SPLIT_RATIO with extreme-based selection.
+# When absent/commented out, the existing random SPLIT_RATIO split is used.
+# EXTREME_SPLIT:
+#   num_extreme: 10          # Number of extreme agents to select (total)
+#   role: "test"             # Where extreme agents go: "test" or "train"
+#   mode: "single"           # Selection mode: "single", "multi", or "composite"
+#
+#   # --- mode: "single" ---
+#   # Select top/bottom agents along ONE preference dimension
+#   column: "w_force"        # Which preference column to rank by
+#   end: "both"              # "min", "max", or "both" (default). "both" selects num_extreme/2 from each end
+#
+#   # --- mode: "multi" ---
+#   # Select top/bottom agents along MULTIPLE dimensions independently.
+#   # Total extreme agents = num_extreme * len(columns) (deduplicated).
+#   # columns:
+#   #   - column: "w_force"
+#   #     end: "both"
+#   #   - column: "w_speed"
+#   #     end: "max"
+#
+#   # --- mode: "composite" ---
+#   # Rank agents by Euclidean distance from centroid across preference dimensions.
+#   # Selects the num_extreme most "extreme" agents overall.
+#   # dimensions: ["w_speed", "w_force", "w_touch"]  # optional, defaults to all 3
+
 # COMPUTE OPTIONS
 GPU_ENV_CAPACITY: 8192
 DISABLE_JIT: False

@@ -243,10 +243,24 @@ def main(config):
         print("Creating train/test splits for generalization evaluation...")
         all_partners = pd.concat(partner_dict.values(), ignore_index=True)
         print(f"Total partners across all algorithms: {len(all_partners)}")
-   
-        # Do a single 50/50 split across all partners
-        train_partners = all_partners.sample(frac=config["SPLIT_RATIO"], random_state=42)  # Set random_state for reproducibility
-        test_partners = all_partners.drop(train_partners.index)
+
+        if "EXTREME_SPLIT" in config and config["EXTREME_SPLIT"] is not None:
+            # Extreme-based split
+            from assistax.baselines.ZSC.aht_utils import split_partners_extreme
+            extreme_cfg = config["EXTREME_SPLIT"]
+            extreme_set, remainder_set = split_partners_extreme(all_partners, extreme_cfg)
+
+            role = extreme_cfg.get("role", "test")
+            if role == "test":
+                test_partners, train_partners = extreme_set, remainder_set
+            else:
+                train_partners, test_partners = extreme_set, remainder_set
+
+            print(f"Extreme split: {len(extreme_set)} extreme agents -> {role} set")
+        else:
+            # Original random split
+            train_partners = all_partners.sample(frac=config["SPLIT_RATIO"], random_state=42)
+            test_partners = all_partners.drop(train_partners.index)
 
         # Split back into algorithm-specific dictionaries
         train_set = {}
