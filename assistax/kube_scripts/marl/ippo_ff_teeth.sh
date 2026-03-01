@@ -9,7 +9,7 @@ apt-get update && apt-get install -y --no-install-recommends \
 export NETRC=/pvc/.netrc
 # --- Parse arguments ---
 CONFIG=${1:-ippo}
-ENV_NAME=${2:-scratchitch}
+ENV_NAME=${2:-teethbrushing}
 GPU_ENV_CAPACITY=${3:-49152}
 
 # --- Logging setup ---
@@ -56,7 +56,7 @@ uv run python assistax/baselines/IPPO/ippo_run.py \
     ++TOTAL_TIMESTEPS=4e7 \
     ++GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
     ++LR=0.000334 \
-    ++UPDATE_EPOCHS=8 \
+    ++UPDATE_EPOCHS=4 \
     ++NUM_MINIBATCHES=16 \
     ++CLIP_EPS=0.16875672 \
     ++ENT_COEF=0.0016069901 \

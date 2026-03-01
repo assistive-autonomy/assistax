@@ -57,7 +57,7 @@ uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
     -cn $CONFIG -m\
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
-    ++PREFERENCE_SWEEP.num_configs=50 \
+    ++PREFERENCE_SWEEP.num_configs=40 \
     ++TOTAL_TIMESTEPS=10e6 \
     ++SEED=1 \
     ++POLICY_LR=0.000234 \
@@ -71,23 +71,23 @@ uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
     ++ENV_KWARGS.disability.joint_strength=1 \
     ++ENV_KWARGS.preference_rewards.reward_budget=7.52
 
-uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
-    -cn $CONFIG -m\
-    ++ENV_NAME=$ENV_NAME \
-    ++ZOO_PATH=$JOB_ZOO_DIR \
-    ++TOTAL_TIMESTEPS=10e6 \
-    ++PREFERENCE_SWEEP.num_configs=50 \
-    ++SEED=2 \
-    ++POLICY_LR=0.000234 \
-    ++Q_LR=0.0000137 \
-    ++ALPHA_LEARNING_RATE=0.000198\
-    ++TAU=0.010793378 \
-    ++NUM_SAC_UPDATES=64 \
-    ++ROLLOUT_LENGTH=8 \
-    ++BATCH_SIZE=512 \
-    ++ENV_KWARGS.disability.joint_restriction_factor=0 \
-    ++ENV_KWARGS.disability.joint_strength=0.5 \
-    ++ENV_KWARGS.preference_rewards.reward_budget=7.52
+#uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
+#    -cn $CONFIG -m\
+#    ++ENV_NAME=$ENV_NAME \
+#    ++ZOO_PATH=$JOB_ZOO_DIR \
+#    ++TOTAL_TIMESTEPS=10e6 \
+#    ++PREFERENCE_SWEEP.num_configs=50 \
+#    ++SEED=2 \
+#    ++POLICY_LR=0.000234 \
+#    ++Q_LR=0.0000137 \
+#    ++ALPHA_LEARNING_RATE=0.000198\
+#    ++TAU=0.010793378 \
+#    ++NUM_SAC_UPDATES=64 \
+#    ++ROLLOUT_LENGTH=8 \
+#    ++BATCH_SIZE=512 \
+#    ++ENV_KWARGS.disability.joint_restriction_factor=0 \
+#    ++ENV_KWARGS.disability.joint_strength=0.5 \
+#    ++ENV_KWARGS.preference_rewards.reward_budget=7.52
 
 # --- Cleanup workspace (but NOT the zoo shard) ---
 rm -rf "$WORK_DIR"

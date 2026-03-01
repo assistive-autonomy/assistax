@@ -41,3 +41,6 @@ uv run python assistax/baselines/MAPPO/mappo_sweep.py \
     "++SEED=range(0,4)" \
     SWEEP.num_configs=4 \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
+
+# --- Cleanup ---
+rm -rf "$WORK_DIR"  

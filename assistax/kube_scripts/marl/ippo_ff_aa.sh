@@ -9,7 +9,7 @@ apt-get update && apt-get install -y --no-install-recommends \
 export NETRC=/pvc/.netrc
 # --- Parse arguments ---
 CONFIG=${1:-ippo}
-ENV_NAME=${2:-scratchitch}
+ENV_NAME=${2:-armmanipulation}
 GPU_ENV_CAPACITY=${3:-49152}
 
 # --- Logging setup ---
@@ -55,11 +55,11 @@ uv run python assistax/baselines/IPPO/ippo_run.py \
     ++ENV_NAME=$ENV_NAME \
     ++TOTAL_TIMESTEPS=4e7 \
     ++GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
-    ++LR=0.000334 \
-    ++UPDATE_EPOCHS=8 \
-    ++NUM_MINIBATCHES=16 \
-    ++CLIP_EPS=0.16875672 \
-    ++ENT_COEF=0.0016069901 \
+    ++LR=0.000245 \
+    ++UPDATE_EPOCHS=16 \
+    ++NUM_MINIBATCHES=8 \
+    ++CLIP_EPS=0.02069652 \
+    ++ENT_COEF=0.00010842521 \
     ++NUM_STEPS=64 \
     ++EXP_TAGS=[IPPO,FF_NPS,MARL_FINAL]
 

@@ -10,11 +10,11 @@ ENV_KWARGS:
   backend: mjx
   het_reward: False # needs to be true for pushcoop
   episode_length: 1000
-  disability:
-    joint_idx: 13
-    joint_restriction_factor: 1.0
-    joint_strength: 1.0
-    tremor_magnitude: 0.0
+  #disability:
+  #  joint_idx: 13
+  #  joint_restriction_factor: 1.0
+  #  joint_strength: 1.0
+  #  tremor_magnitude: 0.0
 TOTAL_TIMESTEPS: 30e6
 NUM_STEPS: 256
 NUM_ENVS: 512

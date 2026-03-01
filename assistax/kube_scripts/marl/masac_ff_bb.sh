@@ -1,5 +1,5 @@
 #!/bin/bash
-# /pvc/scripts/run_ippo.sh
+# /pvc/scripts/run_masac.sh
 set -Eeuo pipefail
 
 apt-get update && apt-get install -y --no-install-recommends \
@@ -8,8 +8,8 @@ apt-get update && apt-get install -y --no-install-recommends \
 
 export NETRC=/pvc/.netrc
 # --- Parse arguments ---
-CONFIG=${1:-ippo}
-ENV_NAME=${2:-scratchitch}
+CONFIG=${1:-masac}
+ENV_NAME=${2:-bedbathing}
 GPU_ENV_CAPACITY=${3:-49152}
 
 # --- Logging setup ---
@@ -48,20 +48,21 @@ echo "[$(ts)] Workspace: $WORK_DIR"
 echo "[$(ts)] Outputs symlinked to: /pvc/assistax/outputs"
 
 # --- Run training ---
-uv run python assistax/baselines/IPPO/ippo_run.py \
+uv run python assistax/baselines/MASAC/masac_run.py \
     -cn $CONFIG -m \
     network=ff_nps \
     ++NUM_SEEDS=16 \
     ++ENV_NAME=$ENV_NAME \
     ++TOTAL_TIMESTEPS=4e7 \
     ++GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
-    ++LR=0.000334 \
-    ++UPDATE_EPOCHS=8 \
-    ++NUM_MINIBATCHES=16 \
-    ++CLIP_EPS=0.16875672 \
-    ++ENT_COEF=0.0016069901 \
-    ++NUM_STEPS=64 \
-    ++EXP_TAGS=[IPPO,FF_NPS,MARL_FINAL]
+    ++POLICY_LR=0.0000562 \
+    ++Q_LR=0.00178 \
+    ++ALPHA_LR=0.000252 \
+    ++TAU=0.0002728487 \
+    ++NUM_SAC_UPDATES=64 \
+    ++ROLLOUT_LENGTH=8 \
+    ++BATCH_SIZE=512 \
+    ++EXP_TAGS=[MASAC,FF_NPS,MARL_FINAL]
 
 # --- Cleanup ---
 rm -rf "$WORK_DIR"
