@@ -199,3 +199,41 @@ These archetypes create genuine behavioral diversity: a robot trained with a "sl
 4. **Sanity checking**: Before running a full zoo generation with new ranges, run a few individual training runs with extreme corner-case configs (e.g., slowest + gentlest, fastest + firmest) to verify stable training.
 
 5. **Number of configs**: With wider ranges, `num_configs: 4` may not adequately cover the space. Consider increasing to 6-8 configs if compute budget allows, to ensure the train/test split captures meaningfully different behavioral regions.
+
+---
+
+## 8. Original Settings (Pre-Widening Reference)
+
+The following meta-ranges were in use prior to the widening applied on 2026-03-01. Recorded here for reproducibility of earlier zoo generations.
+
+```yaml
+# Original PREFERENCE_SWEEP meta-ranges (all algorithms)
+PREFERENCE_SWEEP:
+  num_configs: 4
+  w_speed:     {min: 0.1,  max: 0.5}
+  w_force:     {min: 0.1,  max: 0.6}
+  w_touch:     {min: -0.1, max: -0.01}
+  speed_range_min: {min: 0.03, max: 0.08}
+  speed_range_max: {min: 0.10, max: 0.20}
+  force_range_min: {min: 1.0,  max: 2.0}
+  force_range_max: {min: 3.0,  max: 5.0}
+
+# Dead entries removed (MAPPO & MASAC only):
+  w_action:              {min: 0.05, max: 0.3}
+  max_action_magnitude:  {min: 0.5,  max: 1.0}
+# Dead ENV_KWARGS entries removed (MAPPO & MASAC only):
+#   preference_weights.action_efficiency: 0.15
+#   preference_ranges.max_action_magnitude: 0.8
+#   variable_names.action_magnitude: "action_magnitude"  (also removed from IPPO)
+```
+
+### Original pop_gen seed assignment
+All algorithms shared the same seeds, causing identical random streams:
+
+| Algorithm | Seeds |
+|-----------|-------|
+| IPPO | 0, 1, 2 |
+| MAPPO | 0, 1, 2 |
+| MASAC | 0, 1 (2 commented out) |
+
+New assignment: IPPO 0-2, MAPPO 3-5, MASAC 6-8.

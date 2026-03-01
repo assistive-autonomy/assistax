@@ -25,7 +25,6 @@ ENV_KWARGS:
     variable_names:
       speed: "ee_speed"
       force: "ee_force"
-      action_magnitude: "action_magnitude"
     overall_weight: 1
     reward_budget: 2 
 
@@ -66,27 +65,27 @@ PREFERENCE_SWEEP:
   num_configs: 4  # number of unique preference combinations to sample
   # Meta-ranges for preference weights (uniform sampling)
   w_speed:
-    min: 0.1
-    max: 0.5
+    min: 0.05
+    max: 0.8
   w_force:
-    min: 0.1
-    max: 0.6
+    min: 0.05
+    max: 0.8
   w_touch:  # negative range for penalty
-    min: -0.1
+    min: -0.3
     max: -0.01
   # Meta-ranges for preference ranges
   speed_range_min:
-    min: 0.03
-    max: 0.08
+    min: 0.01
+    max: 0.15
   speed_range_max:
-    min: 0.10
-    max: 0.20
+    min: 0.05
+    max: 0.40
   force_range_min:
-    min: 1.0
-    max: 2.0
+    min: 0.5
+    max: 4.0
   force_range_max:
-    min: 3.0
-    max: 5.0
+    min: 2.0
+    max: 10.0
 
 hydra:
   job:

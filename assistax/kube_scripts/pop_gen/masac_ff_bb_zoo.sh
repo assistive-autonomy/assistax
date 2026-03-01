@@ -41,7 +41,7 @@ uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
     ++ZOO_PATH=$JOB_ZOO_DIR \
     ++PREFERENCE_SWEEP.num_configs=40 \
     ++TOTAL_TIMESTEPS=10e6 \
-    ++SEED=0 \
+    ++SEED=6 \
     ++POLICY_LR=0.0000562 \
     ++Q_LR=0.00178 \
     ++ALPHA_LEARNING_RATE=0.000252\
@@ -59,7 +59,7 @@ uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
     ++ZOO_PATH=$JOB_ZOO_DIR \
     ++PREFERENCE_SWEEP.num_configs=50 \
     ++TOTAL_TIMESTEPS=10e6 \
-    ++SEED=1 \
+    ++SEED=7 \
     ++POLICY_LR=0.0000562 \
     ++Q_LR=0.00178 \
     ++ALPHA_LEARNING_RATE=0.000252\
@@ -77,7 +77,7 @@ uv run python assistax/baselines/MASAC/masac_zoo_gen.py \
 #    ++ZOO_PATH=$JOB_ZOO_DIR \
 #    ++PREFERENCE_SWEEP.num_configs=50 \
 #    ++TOTAL_TIMESTEPS=10e6 \
-#    ++SEED=2 \
+#    ++SEED=8 \
 #    ++POLICY_LR=0.0000562 \
 #    ++Q_LR=0.00178 \
 #    ++ALPHA_LEARNING_RATE=0.000252\

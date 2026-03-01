@@ -40,7 +40,7 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
     ++PREFERENCE_SWEEP.num_configs=70 \
-    ++SEED=0 \
+    ++SEED=3 \
     ++LR=0.000461 \
     ++UPDATE_EPOCHS=8 \
     ++NUM_MINIBATCHES=16 \
@@ -59,7 +59,7 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
     ++PREFERENCE_SWEEP.num_configs=70 \
-    ++SEED=1 \
+    ++SEED=4 \
     ++LR=0.000461 \
     ++UPDATE_EPOCHS=8 \
     ++NUM_MINIBATCHES=16 \
@@ -76,7 +76,7 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
     ++PREFERENCE_SWEEP.num_configs=70 \
-    ++SEED=2 \
+    ++SEED=5 \
     ++LR=0.000461 \
     ++UPDATE_EPOCHS=8 \
     ++NUM_MINIBATCHES=16 \
