@@ -51,7 +51,6 @@ uv run python assistax/baselines/IPPO/ippo_run.py \
     ++ENV_NAME=$ENV_NAME \
     ++TOTAL_TIMESTEPS=4e7 \
     ++GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
-    ++EXP_TAGS=$WANDB_TAG \
     ++LR=0.000334 \
     ++NUM_SEEDS=16 \
     ++UPDATE_EPOCHS=8 \
