@@ -78,6 +78,7 @@ def main(config: DictConfig):
         case (True, False):
             from ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with No Parameter Sharing")
+            network_type = "RNN_NPS"
         case (True, True):
             from ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with Parameter Sharing")
