@@ -48,21 +48,21 @@ echo "[$(ts)] Workspace: $WORK_DIR"
 echo "[$(ts)] Outputs symlinked to: /pvc/assistax/outputs"
 
 # --- Run 1: No preference rewards ---
-uv run python assistax/baselines/IPPO/ippo_run.py \
-    -cn $CONFIG -m \
-    network=rnn_nps \
-    ++NUM_SEEDS=8 \
-    ++SEED=0,1 \
-    ++ENV_NAME=$ENV_NAME \
-    ++TOTAL_TIMESTEPS=4e7 \
-    ++GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
-    ++LR=0.000439 \
-    ++UPDATE_EPOCHS=8 \
-    ++NUM_MINIBATCHES=4 \
-    ++CLIP_EPS=0.04558986 \
-    ++ENT_COEF=0.000545135 \
-    ++NUM_STEPS=64 \
-    ++EXP_TAGS=[IPPO,RNN_NPS,MARL_FINAL]
+#uv run python assistax/baselines/IPPO/ippo_run.py \
+#    -cn $CONFIG -m \
+#    network=rnn_nps \
+#    ++NUM_SEEDS=8 \
+#    ++SEED=0,1 \
+#    ++ENV_NAME=$ENV_NAME \
+#    ++TOTAL_TIMESTEPS=4e7 \
+#    ++GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
+#    ++LR=0.000439 \
+#    ++UPDATE_EPOCHS=8 \
+#    ++NUM_MINIBATCHES=4 \
+#    ++CLIP_EPS=0.04558986 \
+#    ++ENT_COEF=0.000545135 \
+#    ++NUM_STEPS=64 \
+#    ++EXP_TAGS=[IPPO,RNN_NPS,MARL_FINAL]
 
 echo "[$(ts)] Run 1 (no pref) complete. Starting Run 2 (with pref)..."
 
