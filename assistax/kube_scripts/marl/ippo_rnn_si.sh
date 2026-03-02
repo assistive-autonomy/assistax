@@ -51,7 +51,8 @@ echo "[$(ts)] Outputs symlinked to: /pvc/assistax/outputs"
 uv run python assistax/baselines/IPPO/ippo_run.py \
     -cn $CONFIG -m \
     network=rnn_nps \
-    ++NUM_SEEDS=16 \
+    ++NUM_SEEDS=8 \
+    ++SEED=0,1 \
     ++ENV_NAME=$ENV_NAME \
     ++TOTAL_TIMESTEPS=4e7 \
     ++GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
@@ -69,7 +70,8 @@ echo "[$(ts)] Run 1 (no pref) complete. Starting Run 2 (with pref)..."
 uv run python assistax/baselines/IPPO/ippo_run.py \
     -cn $CONFIG -m \
     network=rnn_nps \
-    ++NUM_SEEDS=16 \
+    ++NUM_SEEDS=8 \
+    ++SEED=0,1 \
     ++ENV_NAME=$ENV_NAME \
     ++TOTAL_TIMESTEPS=4e7 \
     ++GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
