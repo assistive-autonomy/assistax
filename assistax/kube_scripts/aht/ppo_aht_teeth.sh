@@ -68,7 +68,6 @@ uv run python assistax/baselines/ZSC/ppo_aht.py \
     ++ENT_COEF=0.0016069901 \
     ++NUM_STEPS=64 \
     ++EXP_TAGS=[IPPO,FF_NPS,AHT_FINAL]
- 
 
 # --- Cleanup ---
 rm -rf "$WORK_DIR"
