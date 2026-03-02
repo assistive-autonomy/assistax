@@ -9,8 +9,8 @@ apt-get update && apt-get install -y --no-install-recommends \
 export NETRC=/pvc/.netrc
 
 # --- Parse arguments ---
-CONFIG=${1:-ppo_aht}
-ENV_NAME=${2:-teethbrushing}
+CONFIG=${1:-sac_aht}
+ENV_NAME=${2:-scratchitch}
 GPU_ENV_CAPACITY=${3:-49152} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
 
 # --- Logging setup ---
@@ -42,7 +42,7 @@ export XLA_PYTHON_CLIENT_MEM_FRACTION=.95 # Set to .90 for A100 and 4090
 
 # --- Symlink Hydra output dirs to persistent storage ---
 mkdir -p /pvc/assistax/outputs
-rm -rf outputs 
+rm -rf outputs
 ln -s /pvc/assistax/outputs outputs
 
 echo "[$(ts)] Workspace: $WORK_DIR"
@@ -54,21 +54,22 @@ echo "[$(ts)] Outputs symlinked to: /pvc/assistax/outputs"
 #    ++NUM_SEEDS=10 \
 #    ++NUM_EVAL_EPISODES=32 \
 #    ++ENV_NAME=$ENV_NAME \
-#    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY 
+#    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
 
-uv run python assistax/baselines/ZSC/ppo_aht.py \
+uv run python assistax/baselines/ZSC/sac_aht.py \
     -cn $CONFIG -m \
     network=ff_nps \
     ++ENV_NAME=$ENV_NAME \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
-    ++LR=0.000334 \
-    ++UPDATE_EPOCHS=4 \
-    ++NUM_MINIBATCHES=16 \
-    ++CLIP_EPS=0.16875672 \
-    ++ENT_COEF=0.0016069901 \
-    ++NUM_STEPS=64 \
+    ++POLICY_LR=0.0000562 \
+    ++Q_LR=0.00178 \
+    ++ALPHA_LR=0.000252 \
+    ++TAU=0.0002728487 \
+    ++NUM_SAC_UPDATES=32 \
+    ++ROLLOUT_LENGTH=8 \
+    ++BATCH_SIZE=512 \
     ++NUM_SEEDS=16 \
-    ++EXP_TAGS=[IPPO,FF_NPS,AHT_FINAL]
+    ++EXP_TAGS=[MASAC,FF_NPS,AHT_FINAL]
 
 # --- Cleanup ---
 rm -rf "$WORK_DIR"

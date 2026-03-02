@@ -10,7 +10,7 @@ export NETRC=/pvc/.netrc
 
 # --- Parse arguments ---
 CONFIG=${1:-ppo_aht}
-ENV_NAME=${2:-teethbrushing}
+ENV_NAME=${2:-feeding}
 GPU_ENV_CAPACITY=${3:-49152} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
 
 # --- Logging setup ---
@@ -62,7 +62,7 @@ uv run python assistax/baselines/ZSC/ppo_aht.py \
     ++ENV_NAME=$ENV_NAME \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
     ++LR=0.000334 \
-    ++UPDATE_EPOCHS=4 \
+    ++UPDATE_EPOCHS=16 \
     ++NUM_MINIBATCHES=16 \
     ++CLIP_EPS=0.16875672 \
     ++ENT_COEF=0.0016069901 \
