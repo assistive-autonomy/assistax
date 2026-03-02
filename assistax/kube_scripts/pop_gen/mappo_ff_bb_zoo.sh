@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 CONFIG=${1:-mappo_zoo_gen}
-ENV_NAME=${2:-armmanipulation}
+ENV_NAME=${2:-bedbathing}
 GPU_ENV_CAPACITY=${3:-49152}
 
 ts(){ date +'%Y-%m-%dT%H:%M:%S%z'; }
@@ -41,11 +41,11 @@ uv run python assistax/baselines/MAPPO/mappo_zoo_gen.py \
     ++ZOO_PATH=$JOB_ZOO_DIR \
     ++PREFERENCE_SWEEP.num_configs=70 \
     ++SEED=3 \
-    ++LR=0.00154 \
+    ++LR=0.00112 \
     ++UPDATE_EPOCHS=16 \
-    ++NUM_MINIBATCHES=4 \
-    ++CLIP_EPS=0.2705661 \
-    ++ENT_COEF=0.000794748 \
+    ++NUM_MINIBATCHES=8 \
+    ++CLIP_EPS=0.14979327 \
+    ++ENT_COEF=0.0029010084 \
     ++NUM_STEPS=128 \
     ++ENV_KWARGS.disability.joint_restriction_factor=0 \
     ++ENV_KWARGS.disability.joint_strength=0.5 \
