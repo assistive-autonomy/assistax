@@ -9,7 +9,7 @@ apt-get update && apt-get install -y --no-install-recommends \
 export NETRC=/pvc/.netrc
 
 # --- Parse arguments ---
-CONFIG=${1:-crossplay_zoo}
+CONFIG=${1:-ippo_aht}
 ENV_NAME=${2:-teethbrushing}
 GPU_ENV_CAPACITY=${3:-49152} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
 
