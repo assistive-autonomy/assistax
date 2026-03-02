@@ -14,9 +14,11 @@ from hydra.utils import to_absolute_path
 from typing import Dict, List, Any, Callable, Tuple
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split, 
+    _tree_shape, _stack_tree, _concat_tree, _tree_split, print_memory_stats 
     )
+import numpy as np
 import sys
+import time
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -117,10 +119,6 @@ def load_and_merge_algo_config(alg_config: dict):
 @hydra.main(version_base=None, config_path="config", config_name="crossplay_zoo")
 def main(config):
     config = OmegaConf.to_container(config, resolve=True)
-    
-    # NEW: Add these parameters for splitting computation
-    robot_start_idx = config.get("ROBOT_START_IDX", None)
-    robot_end_idx = config.get("ROBOT_END_IDX", None)
     
     parallel_batch_size = config.get("PARALLEL_BATCH_SIZE", 1)
     # IMPORT FUNCTIONS BASED ON ARCHITECTURE
@@ -263,7 +261,8 @@ def main(config):
     
     rng = jax.random.PRNGKey(config["SEED"])
     rng, eval_rng = jax.random.split(rng)
-
+    
+    start = time.time()
     with jax.disable_jit(config["DISABLE_JIT"]):
         zoo = ZooManager(config["ZOO_PATH"])
         scenario = config["ENV_NAME"]
@@ -284,15 +283,35 @@ def main(config):
                                          ).query(f'scenario == "{scenario}"'
                                          ).query('scenario_agent_id == "robot"')
             
-            # NEW: Apply index slicing if specified
-            if robot_start_idx is not None or robot_end_idx is not None:
-                start = robot_start_idx if robot_start_idx is not None else 0
-                end = robot_end_idx if robot_end_idx is not None else len(robo_filtered[alg])
-                
-                robo_filtered[alg] = robo_filtered[alg].iloc[start:end]
-                print(f"Processing robots {start} to {end} for algorithm {alg} "
-                      f"({len(robo_filtered[alg])} agents)")           
         # robo_filtered = {alg: df.head(5) for alg, df in robo_filtered.items()}
+
+        # Team-based subsampling
+        max_pairs = config.get("MAX_CROSSPLAY_PAIRS", None)
+        if max_pairs is not None:
+            human_teams = set()
+            for df in partner_dict.values():
+                human_teams.update(df.team_uuid.unique())
+            robot_teams = set()
+            for df in robo_filtered.values():
+                robot_teams.update(df.team_uuid.unique())
+            common_teams = sorted(human_teams & robot_teams)
+
+            if len(common_teams) > max_pairs:
+                rng_np = np.random.default_rng(config["SEED"])
+                sampled = set(rng_np.choice(common_teams, max_pairs, replace=False))
+            else:
+                sampled = set(common_teams)
+
+            for algo in partner_dict:
+                partner_dict[algo] = partner_dict[algo][partner_dict[algo].team_uuid.isin(sampled)]
+            for alg in robo_filtered:
+                robo_filtered[alg] = robo_filtered[alg][robo_filtered[alg].team_uuid.isin(sampled)]
+
+            num_humans = sum(len(x) for x in partner_dict.values())
+            load_zoo_dict = {a: {"human": list(partner_dict[a].agent_uuid)} for a in partner_dict}
+            print(f"Subsampled to {max_pairs} teams: {num_humans} humans, "
+                  f"{sum(len(df) for df in robo_filtered.values())} robots")
+
         returns_dict = {}
         opponent_info_dict = {}
         # This function actually seems largely obsolute except maybe for batch_uuids
@@ -330,7 +349,18 @@ def main(config):
             
             # Get all agent UUIDs for this algorithm
             agent_uuids = list(robo_agents.agent_uuid)
-            
+
+            # Extract UUID metadata for results
+            robot_uuids_list = list(robo_agents.agent_uuid)
+            robot_team_uuids_list = list(robo_agents.team_uuid)
+
+            human_uuids_list = []
+            human_team_uuids_list = []
+            for partner_algo in config["PARTNER_ALGORITHMS"]:
+                if partner_algo in partner_dict:
+                    human_uuids_list.extend(list(partner_dict[partner_algo].agent_uuid))
+                    human_team_uuids_list.extend(list(partner_dict[partner_algo].team_uuid))
+
             # Create batches of agent UUIDs
             batches = [agent_uuids[i:i + parallel_batch_size] for i in range(0, len(agent_uuids), parallel_batch_size)]
             
@@ -369,30 +399,17 @@ def main(config):
                 #     *[state.params for state in batch_network_states]
                 # )
                 stacked_params = jax.tree.map(
-                    lambda *p: jnp.expand_dims(jnp.stack(p), axis=0),
+                    lambda *p: jnp.stack(p),
                     *[state.params for state in batch_network_states]
                 )
-
                 # Run vmapped evaluation
-                # We need to be careful about the structure of the network states
-                # For vmapping, we need the first dimension to be the batch dimension
-                batch_rngs = jax.random.split(eval_rng, len(batch))
+                # stacked_params shape: (num_robots, 1, param_dims...)
+                # dim 0 = robot batch, dim 1 = agent axis (internal to network)
                 episode_rngs = jax.random.split(eval_rng, num_humans)
-                
-                batch_dims = jax.tree.leaves(_tree_shape(stacked_params["params"]))[:2]
 
                 def eval_mem_efficient():
                     eval_network_state = EvalNetworkState(apply_fn=network.apply, params=stacked_params)
-                    split_trainstate = _flatten_and_split_trainstate(eval_network_state)
-
-                    evals = _concat_tree([
-                        eval_vmap(episode_rngs, ts, eval_log_config)
-                        for ts in tqdm(split_trainstate, desc="Evaluation batches")
-                    ])
-                    evals = jax.tree.map(
-                        lambda x: x.reshape((*batch_dims, *x.shape[1:])),
-                        evals
-                    )
+                    evals = eval_vmap(episode_rngs, eval_network_state, eval_log_config)
                     return evals
                 # batch_eval_states = EvalNetworkState(
                 #     apply_fn=network.apply,
@@ -422,21 +439,26 @@ def main(config):
                     inner_returns_dict[agent_uuid] = mean_returns
                     inner_opponent_info[agent_uuid] = opponent_uuids
                             
-            returns_dict[alg] = inner_returns_dict
+            returns_dict[alg] = {
+                "returns": inner_returns_dict,
+                "robot_uuids": robot_uuids_list,
+                "human_uuids": human_uuids_list,
+                "robot_team_uuids": robot_team_uuids_list,
+                "human_team_uuids": human_team_uuids_list,
+            }
             opponent_info_dict[alg] = inner_opponent_info
     
-    if robot_start_idx is not None or robot_end_idx is not None:
-            start = robot_start_idx if robot_start_idx is not None else 0
-            end = robot_end_idx if robot_end_idx is not None else "end"
-            output_filename = f"crossplay_results_{start}_{end}.npy"
-    else:
-        output_filename = "crossplay_test_results.npy"
+    output_filename = "crossplay_results.npy"
         
     jnp.save(output_filename, returns_dict, allow_pickle=True)
 
     print(f"Evaluation complete! Results saved to {output_filename}")
-    return returns_dict
+    end = time.time()
+    print(f"Total evaluation time: {end - start:.2f} seconds")
+    print_memory_stats(f"After evaluation of batch size {parallel_batch_size}")
 
+    return returns_dict
+   
 if __name__ == "__main__":
     main()
 
