@@ -477,6 +477,7 @@ class EvalInfo(NamedTuple):
     obs: jnp.ndarray                  # Observations
     info: jnp.ndarray                 # Additional info
     avail_actions: jnp.ndarray        # Available actions
+    env_metrics: Optional[Dict[str, jnp.ndarray]]  # Environment metrics
     ag_idx: Optional[jnp.ndarray]     # Agent indices (for crossplay)
 
 
@@ -496,6 +497,7 @@ class EvalInfoLogConfig:
     obs: bool = True
     info: bool = True
     avail_actions: bool = True
+    env_metrics: bool = True
 
 
 # ================================ TRAINING FUNCTION ================================
@@ -1429,6 +1431,7 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
                     obs=(obs_batch if log_eval_info.obs else None),
                     info=(info if log_eval_info.info else None),
                     avail_actions=(avail_actions if log_eval_info.avail_actions else None),
+                    env_metrics=(env_state.env_state.metrics if log_eval_info.env_metrics else None),
                     ag_idx=(runner_state.ag_idx if crossplay else None),
                 )
                 

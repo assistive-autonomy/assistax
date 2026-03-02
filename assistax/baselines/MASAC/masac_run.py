@@ -17,6 +17,7 @@ generates interactive HTML visualizations of agent behaviors.
 import os
 import sys
 import time
+from datetime import datetime
 from tqdm import tqdm
 import jax
 import jax.numpy as jnp
@@ -27,6 +28,7 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 import safetensors.flax
 import optax
 import distrax
+import wandb
 import assistax
 from assistax.wrappers.baselines import get_space_dim, LogEnvState
 from assistax.wrappers.baselines import LogWrapper
@@ -36,7 +38,9 @@ from typing import Sequence, NamedTuple, Any, Dict, Callable
 from flax import struct
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    _tree_shape, _stack_tree, _concat_tree, _tree_split,
+    upload_eval_data_to_wandb, log_all_metrics, upload_model_parameters_to_wandb,
+    print_memory_stats
     )
 os.environ['XLA_FLAGS'] = (
     '--xla_gpu_triton_gemm_any=True ' # As recommended by MJX for better performance on NVIDIA GPUs
@@ -70,7 +74,35 @@ def main(config):
     """
     print("Starting MASAC training and evaluation...")
     config = OmegaConf.to_container(config, resolve=True)
-    
+
+    # ===== WANDB LOGGING =====
+    now = datetime.now()
+    param_sharing = config["network"]["agent_param_sharing"]
+    ps_tag = "ps" if param_sharing else "nps"
+    rec_config = config["network"]["recurrent"]
+    rec_tag = "rnn" if rec_config else "ff"
+
+    env_name = (
+        config.get("ENV_NAME")
+        if config.get("MAP_NAME") is None
+        else config.get("MAP_NAME")
+    )
+    env_name = env_name.lower()
+    alg_name = config.get("ALG").lower()
+    name = f"{alg_name}_{ps_tag}_{rec_tag}_{env_name}_{config['EXP_ID']}_seed{config['SEED']}"
+    tags = [config["EXP_ID"]] + config.get("EXP_TAGS") + [env_name] + [alg_name]
+    config["EXP_TAGS"] = tags
+    run = wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=tags,
+        config=config,
+        mode=config["WANDB_MODE"],
+        reinit=True,
+        name=name,
+        save_code=True,
+    )
+
     # ===== ALGORITHM IMPORTS =====
     # MASAC uses Multi SAC Actor with separate Q-networks
     from masac_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
@@ -240,6 +272,7 @@ def main(config):
             obs=False,             # Don't need observations
             info=False,            # Don't need environment info
             avail_actions=False,   # Don't need available actions
+            env_metrics=True,      # Need environment metrics for wandb logging
         )
         
         # JIT compile evaluation functions for efficiency
@@ -271,7 +304,16 @@ def main(config):
         # ===== SAVE EVALUATION RESULTS =====
         print("Saving evaluation results...")
         jnp.save("returns.npy", mean_episode_returns)
-        
+
+        # ===== WANDB LOGGING =====
+        print("Logging metrics to wandb...")
+        log_all_metrics(config, out, evals, env)
+        upload_eval_data_to_wandb(evals, config, run)
+        upload_model_parameters_to_wandb(all_train_states_actor, final_train_state_actor, config, env, run)
+
+        if config.get("PRINT_MEMORY_STATS", False):
+            print_memory_stats(f"MASAC: Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']}")
+
         print(f"MASAC Performance Summary:")
         print(f"  Mean episode return: {mean_episode_returns.mean():.2f} ± {mean_episode_returns.std():.2f}")
         print("MASAC training and evaluation completed successfully!")

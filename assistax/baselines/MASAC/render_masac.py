@@ -210,7 +210,7 @@ def _load_agent_parameters(config):
 
 # ================================ MAIN RENDERING ORCHESTRATION ================================
 
-@hydra.main(version_base=None, config_path="config", config_name="masac_mabrax")
+@hydra.main(version_base=None, config_path="config", config_name="masac")
 def main(config):
     """
     Main orchestration function for MASAC episode rendering.
