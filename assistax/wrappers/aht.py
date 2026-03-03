@@ -95,6 +95,22 @@ def _stack_pref_configs(pref_config_list: List[Dict[str, float]]) -> Dict[str, j
     }
 
 
+def _zoo_agents_expect_pref_obs(
+    env: MultiAgentEnv,
+    zoo: "ZooManager",
+    load_agents_uuids: Dict,
+) -> bool:
+    """Check whether loaded zoo agents were trained with +7 pref observations."""
+    base_obs_dim = env.observation_spaces[env.agents[0]].shape[0]
+    for algo_dict in load_agents_uuids.values():
+        for agent, uuids in algo_dict.items():
+            first_uuid = uuids[0] if isinstance(uuids, list) else uuids
+            cfg = zoo._load_config(first_uuid)
+            if cfg.get("OBS_DIM", base_obs_dim) > base_obs_dim:
+                return True
+    return False
+
+
 @struct.dataclass
 class ActorCriticOutput:
     pi: Optional[chex.Array | Tuple[chex.Array,chex.Array]] = None
@@ -564,6 +580,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
         env: MultiAgentEnv,
         load_agents: Dict[str, LoadNetworkState],
         pref_configs: Optional[Dict[str, Dict[str, jnp.ndarray]]] = None,
+        agents_expect_pref_obs: bool = True,
     ):
         super().__init__(env)
 
@@ -579,7 +596,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
         self.num_loaded_agents = len(self.loaded_agents)
 
         # Expand observation spaces if preference configs are present
-        self._num_pref_obs = 7 if self.pref_configs is not None else 0
+        self._num_pref_obs = 7 if (self.pref_configs is not None and agents_expect_pref_obs) else 0
         if self._num_pref_obs > 0:
             self._env.observation_spaces = {
                 agent: spaces.Box(
@@ -656,8 +673,9 @@ class LoadAgentWrapper(JaxMARLWrapper):
             for agent, configs in pref_config_lists.items()
             if configs
         }
-        return cls(env, load_agents, pref_configs=stacked_pref_configs or None)
-    
+        expect_pref_obs = _zoo_agents_expect_pref_obs(env, zoo, load_agents_uuids) if stacked_pref_configs else False
+        return cls(env, load_agents, pref_configs=stacked_pref_configs or None, agents_expect_pref_obs=expect_pref_obs)
+
     def take_internal_action(
         self,
         key: chex.PRNGKey,
@@ -668,12 +686,12 @@ class LoadAgentWrapper(JaxMARLWrapper):
     ) -> Tuple[Dict[str, chex.Array], Dict[str, chex.Array]]:
         """
         Compute the action taken by each of the loaded agents and the new RNN hidden state.
-        
+
         Here, the loaded parameters are nested by algorithm and then by agent (e.g. { "IPPO": { "human": ... },
         "MAPPO": { "human": ... }, ... } ).  This function computes actions for each (algorithm, agent)
         pair sequentially. Finally, for each agent (e.g. "human"), the actions from all algorithms are concatenated
         along the first (population) dimension. The resulting dictionary will have the shape:
-        
+
             { 'human': (total_n_agents, action_size) }
         """
         # Temporary containers to accumulate the actions and new hidden states per agent.
@@ -818,7 +836,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
         # jax.debug.print("Agent Indexes on Reset: {ag_idx}", ag_idx=ag_idx)
 
         # Append preference obs before take_internal_action so zoo networks get correct input dim
-        if self.pref_configs is not None:
+        if self._num_pref_obs > 0:
             obs = self._append_pref_to_obs(obs, ag_idx)
 
         all_partner_actions, hstate = self.take_internal_action(
@@ -905,7 +923,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
         )
 
         # Append preference obs to each agent's observation
-        if self.pref_configs is not None:
+        if self._num_pref_obs > 0:
             obs = self._append_pref_to_obs(obs, ag_idx)
 
         # Take the next action with the loaded agents
@@ -972,6 +990,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         env: MultiAgentEnv,
         load_agents: Dict[str, LoadNetworkState],
         pref_configs: Optional[Dict[str, Dict[str, jnp.ndarray]]] = None,
+        agents_expect_pref_obs: bool = True,
     ):
         super().__init__(env)
         self.loaded_agents = ['human'] # also currently hard coded this works for assistax but not other JaxMARL envs
@@ -990,7 +1009,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         # self.idx_mask = {agent_type: jax.nn.one_hot(0, self.total_pop_size, dtype=int) for agent_type in self.loaded_agents}
 
         # Expand observation spaces if preference configs are present
-        self._num_pref_obs = 7 if self.pref_configs is not None else 0
+        self._num_pref_obs = 7 if (self.pref_configs is not None and agents_expect_pref_obs) else 0
         if self._num_pref_obs > 0:
             self._env.observation_spaces = {
                 agent: spaces.Box(
@@ -1109,9 +1128,9 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
             for agent, configs in pref_config_lists.items()
             if configs
         }
-        return cls(env, load_agents, pref_configs=stacked_pref_configs or None)
+        expect_pref_obs = _zoo_agents_expect_pref_obs(env, zoo, load_agents_uuids) if stacked_pref_configs else False
+        return cls(env, load_agents, pref_configs=stacked_pref_configs or None, agents_expect_pref_obs=expect_pref_obs)
 
-            
     def take_internal_action(
         self,
         key: chex.PRNGKey,
@@ -1248,7 +1267,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         current_idx = jax.tree.map(self._ensure_scalar_idx, current_idx)
 
         # Append preference obs before take_internal_action so zoo networks get correct input dim
-        if self.pref_configs is not None:
+        if self._num_pref_obs > 0:
             obs = self._append_pref_to_obs(obs, current_idx)
 
         load_agent_actions, hstate = self.take_internal_action(
@@ -1331,7 +1350,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         )
 
         # Append preference obs to each agent's observation
-        if self.pref_configs is not None:
+        if self._num_pref_obs > 0:
             obs = self._append_pref_to_obs(obs, ag_idx)
 
         avail_actions = self._env.get_avail_actions(state)
