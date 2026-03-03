@@ -35,12 +35,12 @@ export UV_CACHE_DIR=/pvc/.uv-cache
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.95 # Set to .90 for A100 and 4090
 
 # --- Symlink Hydra output dirs to persistent storage ---
-mkdir -p /pvc/assistax/outputs
-rm -rf outputs 
-ln -s /pvc/assistax/outputs outputs
+mkdir -p /pvc/assistax/multirun
+rm -rf multirun
+ln -s /pvc/assistax/multirun multirun
 
 echo "[$(ts)] Workspace: $WORK_DIR"
-echo "[$(ts)] Outputs symlinked to: /pvc/assistax/outputs"
+echo "[$(ts)] Outputs symlinked to: /pvc/assistax/multirun"
 
 #echo "DEBUG: uv run python assistax/baselines/ZSC/crossplay_zoo.py \
 #    -cn $CONFIG -m \

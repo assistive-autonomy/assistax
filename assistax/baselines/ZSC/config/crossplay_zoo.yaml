@@ -52,4 +52,6 @@ hydra:
     chdir: true
   run:
     dir: outputs/crossplay/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/crossplay/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
 

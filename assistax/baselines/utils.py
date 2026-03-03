@@ -341,7 +341,7 @@ def upload_eval_data_to_wandb(eval_info, config, run, suffix=""):
                     print(f"Skipping {field_name} (unsupported type: {type(field_data)})")
         
         # Create and upload artifact
-        artifact = wandb.Artifact(f"evaluation_data_{run.name}", type="dataset")
+        artifact = wandb.Artifact(f"evaluation_data_{run.name}{suffix}", type="dataset")
         artifact.add_dir(temp_dir)
         run.log_artifact(artifact)
     

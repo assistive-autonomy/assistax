@@ -197,7 +197,7 @@ def main(config):
         print("Saving training results...")
         
         # Save training metrics (excluding large training states)
-        EXCLUDED_METRICS = ["train_state"]
+        EXCLUDED_METRICS = ["actor_train_state", "q1_train_state", "q2_train_state"]
         jnp.save("metrics.npy", {
             key: val
             for key, val in out["metrics"].items()
@@ -207,8 +207,8 @@ def main(config):
         )
 
         # Save model parameters
-        all_train_states = out["metrics"]["train_state"]
-        final_train_state = out["runner_state"].train_state
+        all_train_states = out["metrics"]["actor_train_state"]
+        final_train_state = out["runner_state"].train_states.actor
 
         upload_model_parameters_to_wandb(all_train_states, final_train_state, config, env, run)
 

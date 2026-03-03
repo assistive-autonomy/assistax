@@ -2,6 +2,13 @@
 zoo/
 */zoo/
 
+*/figs/
+figs/
+*/figs/*
+*/baselines/figs/
+assistax/baselines/MAPPO/config/mappo_zoo_gen.yaml
+assistax/baselines/figs/*.pdf
+assistax/baselines/paper_plots_notebook.ipynb
 MUJOCO_LOG.TXT
 MUJOCO_LOG.txt
 
