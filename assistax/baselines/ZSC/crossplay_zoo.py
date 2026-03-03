@@ -257,7 +257,11 @@ def main(config):
     robo_configs = {}
     
     for alg, paths in config["crossplay"]["algo_configs"].items():
-        robo_configs[alg] = load_and_merge_algo_config(paths)
+        robo_configs[alg] = OmegaConf.to_container(load_and_merge_algo_config(paths), resolve=True)
+        robo_configs[alg]["ENV_NAME"] = config["ENV_NAME"]
+        robo_configs[alg]["ENV_KWARGS"] = config["ENV_KWARGS"]
+        robo_configs[alg]["ZOO_PATH"] = config["ZOO_PATH"]
+        robo_configs[alg]["NUM_EVAL_EPISODES"] = config["NUM_EVAL_EPISODES"]
     
     rng = jax.random.PRNGKey(config["SEED"])
     rng, eval_rng = jax.random.split(rng)
