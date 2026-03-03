@@ -241,7 +241,7 @@ def main(config):
                 raise Exception("Invalid network configuration for MAPPO")
 
     if "MASAC" in config["crossplay"]["robot_algos"]:
-        from ..MASAC.masac_ff_nps import (
+        from MASAC.masac_ff_nps import (
             make_train as masac_make_train,
             make_evaluation as masac_make_evaluation,
             EvalInfoLogConfig as masac_EvalInfoLogConfig,
