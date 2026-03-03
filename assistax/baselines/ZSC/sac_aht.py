@@ -164,8 +164,8 @@ def main(config):
             print(f" {algo}: {len(train_set[algo])} train, {len(test_set[algo])} test partners")
 
         # Create zoo loading dictionaries for training and testing
-        load_zoo_dict_train = {algo: {"human": list(train_set[algo].agent_uuid)} for algo in partner_dict.keys()}
-        load_zoo_dict_test = {algo: {"human": list(test_set[algo].agent_uuid)} for algo in partner_dict.keys()}
+        load_zoo_dict_train = {algo: {"human": list(train_set[algo].agent_uuid)} for algo in partner_dict.keys() if len(train_set[algo]) > 0}
+        load_zoo_dict_test = {algo: {"human": list(test_set[algo].agent_uuid)} for algo in partner_dict.keys() if len(test_set[algo]) > 0}
 
         print(f"Training against {sum(len(train_set[algo]) for algo in train_set)} diverse partners")
         print(f"Testing against {sum(len(test_set[algo]) for algo in test_set)} unseen partners")
