@@ -286,6 +286,7 @@ class EvalInfo(NamedTuple):
     obs: Optional[jnp.ndarray]
     info: Optional[jnp.ndarray]
     avail_actions: Optional[jnp.ndarray]
+    env_metrics: Optional[Dict[str, jnp.ndarray]]
 
 
 @struct.dataclass
@@ -300,6 +301,7 @@ class EvalInfoLogConfig:
     obs: bool = True
     info: bool = True
     avail_actions: bool = True
+    env_metrics: bool = True
 
 
 # ============================================================================
@@ -1030,8 +1032,9 @@ def make_evaluation(config):
                 obs=(obs_batch if log_eval_info.obs else None),
                 info=(info if log_eval_info.info else None),
                 avail_actions=(avail_actions if log_eval_info.avail_actions else None),
+                env_metrics=(env_state.env_state.metrics if log_eval_info.env_metrics else None),
             )
-            
+
             # Update runner state
             runner_state = RunnerState(
                 train_state=runner_state.train_state,
@@ -1040,7 +1043,7 @@ def make_evaluation(config):
                 last_done=done_batch,
                 last_all_done=all_done,
                 hstate=ActorCriticHiddenState(
-                    actor=actor_hstate, 
+                    actor=actor_hstate,
                     critic=critic_hstate
                 ),
                 update_step=runner_state.update_step,
