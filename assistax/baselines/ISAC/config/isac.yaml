@@ -54,8 +54,17 @@ TARGET_ENTROPY_SCALE: 5.0  # scale factor for target entropy (when auto-tuning)
 INIT_ALPHA: 0.1  # initial entropy value when not using autotune
 
 # WANDB
-WANDB_GROUP: scratchitch
-WANDB_RUN: test
+ENTITY: "lh-from-kb"
+PROJECT: "assistax-dev"
+WANDB_MODE: "online"
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}
+EXP_TAGS: ["ISAC","FF","NoPS","NoPref"]
+
+# VISUALIZATION
+SAVE_HTML_RENDER: False
+RENDER_MUJOCO_TRAJECTORIES: False
+RENDER_VIDEOS: False
+PRINT_MEMORY_STATS: True
 
 # COMPUTE OPTIONS
 GPU_ENV_CAPACITY: 8192

@@ -74,7 +74,7 @@ SAVE_METRICS: True
 COLLECT_PARTNER_DATA: False
 
 # ZOO SETTINGS
-ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo
+ZOO_PATH: /pvc/assistax/zoo
 
 # Visualization settings
 SAVE_MUJOCO_TRAJECTORIES: True

@@ -1225,7 +1225,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
             if current_idx is None:
                 ag_index[agent_type] = -1
             else:
-                ag_index[agent_type] = (current_idx[agent_type]) + 1 % self.total_pop_size
+                ag_index[agent_type] = (current_idx[agent_type] + 1) % self.total_pop_size
 
         return ag_index
 
@@ -1359,8 +1359,8 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         if hasattr(index, 'item'):
             index = index.item()  # Convert JAX array to Python int
         
-        if agent_type in self.uuid_mapping:
-            agent_mapping = self.uuid_mapping[agent_type]
+        if agent_type in self.idx_mapping:
+            agent_mapping = self.idx_mapping[agent_type]
             if index in agent_mapping:
                 return agent_mapping[index]
         

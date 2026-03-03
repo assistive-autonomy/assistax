@@ -504,9 +504,20 @@ def log_all_metrics(config, out, evals, env):
     
     # Extract data
     train_metrics = out["metrics"]
-    env_steps = train_metrics["env_step"]  # Shape: (num_seeds, num_updates)
-    x_axis = env_steps[0]  # Use first seed
-    num_checkpoints = len(x_axis)
+    if "env_step" in train_metrics:
+        # PPO: env_step is tracked directly in metrics
+        env_steps = train_metrics["env_step"]  # Shape: (num_seeds, num_updates)
+        x_axis = env_steps[0]  # Use first seed
+        num_checkpoints = len(x_axis)
+    else:
+        # SAC: compute env steps per checkpoint from config
+        num_checkpoints = config["NUM_CHECKPOINTS"]
+        steps_per_checkpoint = config["SCAN_STEPS"] * config["ROLLOUT_LENGTH"] * config["NUM_ENVS"]
+        explore_steps = config.get("EXPLORE_STEPS", 0)
+        x_axis = jnp.array([
+            explore_steps + (i + 1) * steps_per_checkpoint
+            for i in range(num_checkpoints)
+        ])
     
     # ===== PRE-COMPUTE ALL TRAINING STATISTICS =====
     print("\nPre-computing training statistics...")
@@ -523,9 +534,16 @@ def log_all_metrics(config, out, evals, env):
                     'std': jnp.std(agent_returns, axis=0),
                 }
                 
-    # Losses and other metrics
-    loss_metrics = ["total_loss", "actor_loss", "critic_loss", "entropy", "approx_kl", 
-                   "clip_frac_min", "clip_frac_max"]
+    # Losses and other metrics (dynamically detect available keys)
+    all_known_metrics = [
+        # PPO
+        "total_loss", "actor_loss", "critic_loss", "entropy", "approx_kl",
+        "clip_frac_min", "clip_frac_max",
+        # SAC
+        "q1_loss", "q2_loss", "alpha_loss",
+        "alpha", "log_probs", "next_log_probs",
+    ]
+    loss_metrics = [m for m in all_known_metrics if m in train_metrics]
     
     for metric_key in loss_metrics:
         if metric_key not in train_metrics:
@@ -533,16 +551,18 @@ def log_all_metrics(config, out, evals, env):
             
         metric_values = train_metrics[metric_key]
         
+        loss_keys = {"total_loss", "actor_loss", "critic_loss", "entropy", "approx_kl",
+                     "q1_loss", "q2_loss", "alpha_loss"}
         if len(metric_values.shape) == 3:  # Has agent dimension
             for agent_idx, agent_name in enumerate(agent_names):
                 agent_metric = metric_values[:, :, agent_idx]
-                prefix = "train/loss" if metric_key in ["total_loss", "actor_loss", "critic_loss", "entropy", "approx_kl"] else "train/diagnostics"
+                prefix = "train/loss" if metric_key in loss_keys else "train/diagnostics"
                 train_stats[f"{prefix}/{agent_name}_{metric_key}"] = {
                     'mean': jnp.mean(agent_metric, axis=0),
                     'std': jnp.std(agent_metric, axis=0),
                 }
         else:  # No agent dimension
-            prefix = "train/loss" if metric_key in ["total_loss", "actor_loss", "critic_loss", "entropy", "approx_kl"] else "train/diagnostics"
+            prefix = "train/loss" if metric_key in loss_keys else "train/diagnostics"
             train_stats[f"{prefix}/{metric_key}"] = {
                 'mean': jnp.mean(metric_values, axis=0),
                 'std': jnp.std(metric_values, axis=0),

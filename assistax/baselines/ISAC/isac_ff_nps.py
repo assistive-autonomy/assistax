@@ -10,7 +10,7 @@ each agent learns independently with its own networks and experience.
 import os
 import functools
 from functools import partial
-from typing import Sequence, NamedTuple, TypeAlias, Any, Dict
+from typing import Sequence, NamedTuple, TypeAlias, Any, Dict, Optional
 
 import jax
 import jax.numpy as jnp
@@ -327,6 +327,7 @@ class RunnerState(NamedTuple):
     total_env_steps: int       # Total environment steps taken
     total_grad_updates: int    # Total gradient updates performed
     update_t: int              # Update counter for policy delay
+    prev_contact_force: Optional[jnp.ndarray] = None  # (num_envs,) when dynamic_preferences
 
 
 class EvalState(NamedTuple):
@@ -349,6 +350,7 @@ class EvalInfo(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
     avail_actions: jnp.ndarray
+    env_metrics: Optional[Dict[str, jnp.ndarray]]
 
 
 @struct.dataclass
@@ -362,31 +364,38 @@ class EvalInfoLogConfig:
     obs: bool = True
     info: bool = True
     avail_actions: bool = True
+    env_metrics: bool = True
 
 
 # ============================================================================
 # MAIN TRAINING FUNCTION
 # ============================================================================
 
-def make_train(config, save_train_state=True):
+def make_train(config, save_train_state=True, dynamic_preferences=False):
     """
     Create the main ISAC training function.
-    
+
     This function sets up the complete ISAC training pipeline including:
     - Network initialization
     - Experience replay buffer
     - Exploration phase
     - Main training loop with policy updates
-    
+
     Args:
         config: Training configuration dictionary
         save_train_state: Whether to save training states in metrics
-        
+        dynamic_preferences: When True, preference rewards are computed
+            inside the training loop from explicit weight arrays (vmappable).
+
     Returns:
         Compiled training function
     """
     # Initialize environment and configuration
-    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    if dynamic_preferences:
+        env_kwargs = {k: v for k, v in config["ENV_KWARGS"].items() if k != "preference_rewards"}
+    else:
+        env_kwargs = config["ENV_KWARGS"]
+    env = assistax.make(config["ENV_NAME"], **env_kwargs)
     
     # Calculate training parameters
     config["NUM_UPDATES"] = (
@@ -403,22 +412,26 @@ def make_train(config, save_train_state=True):
     
     # Set observation and action dimensions
     config["OBS_DIM"] = get_space_dim(env.observation_space(env.agents[0]))
+    if dynamic_preferences:
+        config["OBS_DIM"] += 7
     config["ACT_DIM"] = get_space_dim(env.action_space(env.agents[0]))
-    
+
     # Wrap environment for logging
     env = LogWrapper(env, replace_info=True)
-    
-    def train(rng, p_lr, q_lr, alpha_lr, tau):
+
+    def train(rng, p_lr, q_lr, alpha_lr, tau, pref_weights=None):
         """
         Main ISAC training function.
-        
+
         Args:
             rng: Random number generator key
             p_lr: Policy (actor) learning rate
             q_lr: Q-function learning rate
             alpha_lr: Entropy temperature learning rate
             tau: Soft update coefficient for target networks
-            
+            pref_weights: Optional dict of scalar JAX arrays for dynamic
+                preference rewards (used when ``dynamic_preferences=True``).
+
         Returns:
             Dictionary containing final runner state and training metrics
         """
@@ -454,6 +467,29 @@ def make_train(config, save_train_state=True):
         obsv, env_state = jax.vmap(env.reset)(reset_rng)
         init_dones = jnp.zeros((env.num_agents, config["NUM_ENVS"]), dtype=bool)
 
+        # Build helper to augment observations with preference values
+        if dynamic_preferences and pref_weights is not None:
+            pref_obs_vector = jnp.array([
+                pref_weights["w_speed"],
+                pref_weights["w_force"],
+                pref_weights["w_touch"],
+                pref_weights["speed_range_min"],
+                pref_weights["speed_range_max"],
+                pref_weights["force_range_min"],
+                pref_weights["force_range_max"],
+            ])
+
+            def _append_pref_obs(obs_dict):
+                return {
+                    k: jnp.concatenate(
+                        [v, jnp.broadcast_to(pref_obs_vector, v.shape[:-1] + (7,))],
+                        axis=-1,
+                    )
+                    for k, v in obs_dict.items()
+                }
+
+            obsv = _append_pref_obs(obsv)
+
         # ====================================================================
         # INITIALIZE EXPERIENCE REPLAY BUFFER
         # ====================================================================
@@ -461,11 +497,11 @@ def make_train(config, save_train_state=True):
         # Create template transition for buffer initialization
         action_space = env.action_space(env.agents[0])
         init_transition = Transition(
-            obs=jnp.zeros((env.num_agents, get_space_dim(env.observation_space(env.agents[0]))), dtype=float),
+            obs=jnp.zeros((env.num_agents, config["OBS_DIM"]), dtype=float),
             action=jnp.zeros((env.num_agents, get_space_dim(action_space)), dtype=float),
             reward=jnp.zeros((env.num_agents,), dtype=float),
             done=jnp.zeros((env.num_agents,), dtype=bool),
-            next_obs=jnp.zeros((env.num_agents, get_space_dim(env.observation_space(env.agents[0]))), dtype=float)
+            next_obs=jnp.zeros((env.num_agents, config["OBS_DIM"]), dtype=float)
         )
 
         # Initialize experience replay buffer
@@ -538,6 +574,7 @@ def make_train(config, save_train_state=True):
             alpha_opt_state=alpha_opt_state,
         )
 
+        init_prev_cf = jnp.zeros((config["NUM_ENVS"],)) if dynamic_preferences else None
         runner_state = RunnerState(
             train_states=train_states,
             env_state=env_state,
@@ -549,6 +586,7 @@ def make_train(config, save_train_state=True):
             total_env_steps=0,
             total_grad_updates=0,
             update_t=0,
+            prev_contact_force=init_prev_cf,
         )
 
         # ====================================================================
@@ -577,7 +615,27 @@ def make_train(config, save_train_state=True):
             obsv, env_state, reward, done, info = jax.vmap(env.step)(
                 rng_step, runner_state.env_state, env_act,
             )
-            
+
+            # Augment obs with preference values for dynamic preferences
+            if dynamic_preferences and pref_weights is not None:
+                obsv = _append_pref_obs(obsv)
+
+            # Dynamic preference rewards (exploration phase)
+            new_prev_cf = runner_state.prev_contact_force
+            if dynamic_preferences and pref_weights is not None:
+                from assistax.wrappers.training import compute_preference_reward
+                brax_info = env_state.env_state.info
+                var_names = config["ENV_KWARGS"]["preference_rewards"]["variable_names"]
+
+                pref_reward, new_cf, _ = compute_preference_reward(
+                    speed=brax_info[var_names["speed"]],
+                    force=brax_info[var_names["force"]],
+                    prev_contact_force=runner_state.prev_contact_force,
+                    **pref_weights,
+                )
+                new_prev_cf = jnp.where(done["__all__"], jnp.zeros_like(new_cf), new_cf)
+                reward = {agent: reward[agent] + pref_reward for agent in reward}
+
             # Prepare transition for buffer
             last_obs_batch = batchify(runner_state.last_obs, env.agents)
             done_batch = batchify(done, env.agents)
@@ -605,6 +663,7 @@ def make_train(config, save_train_state=True):
                 total_env_steps=new_total_steps,
                 total_grad_updates=runner_state.total_grad_updates,
                 update_t=runner_state.update_t,
+                prev_contact_force=new_prev_cf,
             )
 
             return runner_state, transition
@@ -661,6 +720,27 @@ def make_train(config, save_train_state=True):
                     obsv, env_state, reward, done, info = jax.vmap(env.step)(
                         rng_step, runner_state.env_state, env_act,
                     )
+
+                    # Augment obs with preference values for dynamic preferences
+                    if dynamic_preferences and pref_weights is not None:
+                        obsv = _append_pref_obs(obsv)
+
+                    # Dynamic preference rewards (training phase)
+                    new_prev_cf = runner_state.prev_contact_force
+                    if dynamic_preferences and pref_weights is not None:
+                        from assistax.wrappers.training import compute_preference_reward
+                        brax_info = env_state.env_state.info
+                        var_names = config["ENV_KWARGS"]["preference_rewards"]["variable_names"]
+
+                        pref_reward, new_cf, _ = compute_preference_reward(
+                            speed=brax_info[var_names["speed"]],
+                            force=brax_info[var_names["force"]],
+                            prev_contact_force=runner_state.prev_contact_force,
+                            **pref_weights,
+                        )
+                        new_prev_cf = jnp.where(done["__all__"], jnp.zeros_like(new_cf), new_cf)
+                        reward = {agent: reward[agent] + pref_reward for agent in reward}
+
                     done_batch = batchify(done, env.agents)
                     info = jax.tree_util.tree_map(lambda x: x.swapaxes(0, 1), info)
 
@@ -688,6 +768,7 @@ def make_train(config, save_train_state=True):
                         total_env_steps=new_total_steps,
                         total_grad_updates=runner_state.total_grad_updates,
                         update_t=runner_state.update_t,
+                        prev_contact_force=new_prev_cf,
                     )
 
                     return runner_state, transition
@@ -1001,7 +1082,8 @@ def make_train(config, save_train_state=True):
                         rng=runner_state.rng,
                         total_env_steps=runner_state.total_env_steps,
                         total_grad_updates=new_train_state.actor.step,
-                        update_t=new_update_t
+                        update_t=new_update_t,
+                        prev_contact_force=runner_state.prev_contact_force,
                     )
 
                     return runner_state, metrics
@@ -1058,7 +1140,8 @@ def make_train(config, save_train_state=True):
             rng=explore_runner_state.rng,
             total_env_steps=explore_runner_state.total_env_steps,
             total_grad_updates=explore_runner_state.total_grad_updates,
-            update_t=explore_runner_state.update_t
+            update_t=explore_runner_state.update_t,
+            prev_contact_force=explore_runner_state.prev_contact_force,
         )
 
         # Main training phase
@@ -1174,6 +1257,7 @@ def make_evaluation(config):
                 obs=(obs_batch if log_eval_info.obs else None),
                 info=(info if log_eval_info.info else None),
                 avail_actions=(avail_actions if log_eval_info.avail_actions else None),
+                env_metrics=(env_state.env_state.metrics if log_eval_info.env_metrics else None),
             )
             
             # Update evaluation state

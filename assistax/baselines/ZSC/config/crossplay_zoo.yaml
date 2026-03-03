@@ -28,20 +28,20 @@ MAX_CROSSPLAY_PAIRS: 3  # null = all teams; set to int (e.g. 32) to subsample
 crossplay:
   robot_algos: ["IPPO", "MAPPO", "MASAC"]  # which algos to include as partners in crossplay evaluation
   algo_configs:
-    IPPO: 
-      main: "assistax/baselines/ZSC/config/ppo_aht.yaml"
-      network: "assistax/baselines/ZSC/config/network/ff_nps.yaml"
-    #MAPPO: 
-    #  main: "assistax/baselines/ZSC/config/_aht.yaml"
-    #  network: "MAPPO/config/network/ff_nps.yaml"
-    #MASAC: 
-    #  main: "MASAC/config/masac_aht.yaml"
-    #  network: "MASAC/config/network/ff_nps.yaml"
+    IPPO:
+      main: "assistax/baselines/IPPO/config/ippo.yaml"
+      network: "assistax/baselines/IPPO/config/network/ff_nps.yaml"
+    MAPPO:
+      main: "assistax/baselines/MAPPO/config/mappo.yaml"
+      network: "assistax/baselines/MAPPO/config/network/ff_nps.yaml"
+    MASAC:
+      main: "assistax/baselines/MASAC/config/masac.yaml"
+      network: "assistax/baselines/MASAC/config/network/ff_nps.yaml"
 
 
-PARTNER_ALGORITHMS: ["IPPO"]
+PARTNER_ALGORITHMS: ["IPPO", "MAPPO", "MASAC"]
 
-ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo 
+ZOO_PATH: /pvc/assistax/zoo 
 GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False
