@@ -87,7 +87,7 @@ DEVICE: 0
 DETERMINISTIC_EVAL: False
 
 # ZOO SETTINGS
-ZOO_PATH: /home/lhin/assistax/zoo 
+ZOO_PATH: /pvc/assistax/zoo 
 
 
 # Visualization settings
