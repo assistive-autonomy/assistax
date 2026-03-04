@@ -26,7 +26,7 @@ PARALLEL_BATCH_SIZE: 1
 MAX_CROSSPLAY_PAIRS: 3  # null = all teams; set to int (e.g. 32) to subsample
 
 crossplay:
-  robot_algos: ["IPPO", "MAPPO", "MASAC"]  # which algos to include as partners in crossplay evaluation
+  robot_algos: ["IPPO"]  # which algos to include as partners in crossplay evaluation
   algo_configs:
     IPPO:
       main: "assistax/baselines/IPPO/config/ippo.yaml"
