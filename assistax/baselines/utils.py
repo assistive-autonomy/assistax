@@ -734,9 +734,20 @@ def log_all_metrics_zsc(config: dict, out: dict, evals_train, evals_test, env) -
 
     # ===== EXTRACT TRAINING DATA =====
     train_metrics = out["metrics"]
-    env_steps = train_metrics["env_step"]  # (num_seeds, num_updates)
-    x_axis = env_steps[0]
-    num_checkpoints = len(x_axis)
+    if "env_step" in train_metrics:
+        # PPO: env_step is tracked directly in metrics
+        env_steps = train_metrics["env_step"]  # (num_seeds, num_updates)
+        x_axis = env_steps[0]
+        num_checkpoints = len(x_axis)
+    else:
+        # SAC: compute env steps per checkpoint from config
+        num_checkpoints = config["NUM_CHECKPOINTS"]
+        steps_per_checkpoint = config["SCAN_STEPS"] * config["ROLLOUT_LENGTH"] * config["NUM_ENVS"]
+        explore_steps = config.get("EXPLORE_STEPS", 0)
+        x_axis = jnp.array([
+            explore_steps + (i + 1) * steps_per_checkpoint
+            for i in range(num_checkpoints)
+        ])
 
     # ===== PRE-COMPUTE TRAINING STATISTICS =====
     print("\nPre-computing training statistics...")
