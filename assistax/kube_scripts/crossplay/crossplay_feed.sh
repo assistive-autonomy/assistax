@@ -5,7 +5,7 @@ set -Eeuo pipefail
 # --- Parse arguments ---
 CONFIG=${1:-crossplay_zoo}
 ENV_NAME=${2:-feeding}
-GPU_ENV_CAPACITY=${3:-49152} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
+GPU_ENV_CAPACITY=${3:-12288} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
 
 # --- Logging setup ---
 ts(){ date +'%Y-%m-%dT%H:%M:%S%z'; }
