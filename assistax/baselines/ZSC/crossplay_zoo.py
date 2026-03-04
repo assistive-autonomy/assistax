@@ -220,6 +220,14 @@ def main(config):
         num_humans = sum(len(x) for x in partner_dict.values())
 
         load_zoo_dict = {algo: {"human": list(partner_dict[algo].agent_uuid)} for algo in partner_dict.keys()}
+
+        # Ordered human UUIDs and team UUIDs matching scan order in LoadEvalAgentWrapper
+        human_uuids = []
+        human_team_uuids = []
+        for algo in partner_dict.keys():
+            human_uuids.extend(list(partner_dict[algo].agent_uuid))
+            human_team_uuids.extend(list(partner_dict[algo].team_uuid))
+
         robo_filtered = {}
 
         for alg in config["crossplay"]["robot_algos"]:
@@ -236,12 +244,14 @@ def main(config):
                 print(f"Processing robots {start} to {end} for algorithm {alg} "
                       f"({len(robo_filtered[alg])} agents)")
 
-        returns_dict = {}
+        results = {}
 
         for alg, robo_agents in robo_filtered.items():
             inner_returns_dict = {}
+            inner_returns_full_dict = {}
 
             agent_uuids = list(robo_agents.agent_uuid)
+            robot_team_uuids = list(robo_agents.team_uuid)
 
             network = alg_funcs[alg]["NetworkArch"](config=robo_configs[alg])
 
@@ -289,9 +299,21 @@ def main(config):
 
                 # Compute returns: (N_SEEDS, num_humans, NUM_EVAL_EPISODES)
                 episode_returns = _compute_episode_returns(agent_evals)
-                inner_returns_dict[robot_uuid] = episode_returns["__all__"]
+                full_returns = episode_returns["__all__"]
+                inner_returns_full_dict[robot_uuid] = full_returns
+                # Mean over seeds and episodes: (num_humans,)
+                inner_returns_dict[robot_uuid] = full_returns.mean(axis=(0, 2))
 
-            returns_dict[alg] = inner_returns_dict
+            results[alg] = {
+                "returns": inner_returns_dict,
+                "returns_full": inner_returns_full_dict,
+                "robot_uuids": agent_uuids,
+                "human_uuids": human_uuids,
+                "robot_team_uuids": robot_team_uuids,
+                "human_team_uuids": human_team_uuids,
+                "num_seeds": config["NUM_SEEDS"],
+                "num_eval_episodes": config["NUM_EVAL_EPISODES"],
+            }
 
     if robot_start_idx is not None or robot_end_idx is not None:
             start = robot_start_idx if robot_start_idx is not None else 0
@@ -300,15 +322,10 @@ def main(config):
     else:
         output_filename = "crossplay_test_results.npy"
 
-    results = {
-        "returns": returns_dict,
-        "num_seeds": config["NUM_SEEDS"],
-        "num_eval_episodes": config["NUM_EVAL_EPISODES"],
-    }
     jnp.save(output_filename, results, allow_pickle=True)
 
     print(f"Evaluation complete! Results saved to {output_filename}")
-    return returns_dict
+    return results
 
 if __name__ == "__main__":
     main()
