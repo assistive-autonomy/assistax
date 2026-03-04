@@ -40,6 +40,8 @@ export PYTHONPATH="$WORK_DIR/assistax:${PYTHONPATH:-}"
 export UV_CACHE_DIR=/pvc/.uv-cache
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.95 # Set to .90 for A100 and 4090
 
+JOB_ZOO_DIR="$WORK_DIR/assistax/zoo"
+
 # --- Symlink Hydra output dirs to persistent storage ---
 mkdir -p /pvc/assistax/outputs
 rm -rf outputs
@@ -60,6 +62,7 @@ uv run python assistax/baselines/ZSC/ppo_aht.py \
     -cn $CONFIG -m \
     network=ff_nps \
     ++ENV_NAME=$ENV_NAME \
+    ++ZOO_PATH=$JOB_ZOO_DIR \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY \
     ++LR=0.000893 \
     ++UPDATE_EPOCHS=16 \
