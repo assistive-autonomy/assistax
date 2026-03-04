@@ -47,13 +47,27 @@ def load_and_merge_algo_config(alg_config: dict):
     merged_cfg = OmegaConf.merge(main_cfg, OmegaConf.create({"network": network_cfg}))
     return merged_cfg
 
+def sample_teams(
+    robot_df: pd.DataFrame,
+    human_df: pd.DataFrame,
+    n_teams: int | None,
+    rng_key: jax.Array,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Subsample co-trained robot-human pairs by team_uuid."""
+    common_teams = list(set(robot_df.team_uuid) & set(human_df.team_uuid))
+    if n_teams is None or n_teams >= len(common_teams):
+        return robot_df, human_df
+    indices = jax.random.choice(rng_key, len(common_teams), shape=(n_teams,), replace=False)
+    selected = [common_teams[int(i)] for i in indices]
+    return (
+        robot_df[robot_df.team_uuid.isin(selected)],
+        human_df[human_df.team_uuid.isin(selected)],
+    )
+
+
 @hydra.main(version_base=None, config_path="config", config_name="crossplay_zoo")
 def main(config):
     config = OmegaConf.to_container(config, resolve=True)
-
-    # Add these parameters for splitting computation
-    robot_start_idx = config.get("ROBOT_START_IDX", None)
-    robot_end_idx = config.get("ROBOT_END_IDX", None)
 
     # IMPORT FUNCTIONS BASED ON ARCHITECTURE
 
@@ -206,6 +220,7 @@ def main(config):
         robo_configs[alg]["DISABLE_JIT"] = config["DISABLE_JIT"]
 
     rng = jax.random.PRNGKey(config["SEED"])
+    max_pairs = config.get("MAX_CROSSPLAY_PAIRS", None)
 
     with jax.disable_jit(config["DISABLE_JIT"]):
         zoo = ZooManager(config["ZOO_PATH"])
@@ -217,17 +232,6 @@ def main(config):
                                                         ).query(f'scenario == "{scenario}"'
                                                         ).query('scenario_agent_id == "human"')
 
-        num_humans = sum(len(x) for x in partner_dict.values())
-
-        load_zoo_dict = {algo: {"human": list(partner_dict[algo].agent_uuid)} for algo in partner_dict.keys()}
-
-        # Ordered human UUIDs and team UUIDs matching scan order in LoadEvalAgentWrapper
-        human_uuids = []
-        human_team_uuids = []
-        for algo in partner_dict.keys():
-            human_uuids.extend(list(partner_dict[algo].agent_uuid))
-            human_team_uuids.extend(list(partner_dict[algo].team_uuid))
-
         robo_filtered = {}
 
         for alg in config["crossplay"]["robot_algos"]:
@@ -235,14 +239,27 @@ def main(config):
                                          ).query(f'scenario == "{scenario}"'
                                          ).query('scenario_agent_id == "robot"')
 
-            # Apply index slicing if specified
-            if robot_start_idx is not None or robot_end_idx is not None:
-                start = robot_start_idx if robot_start_idx is not None else 0
-                end = robot_end_idx if robot_end_idx is not None else len(robo_filtered[alg])
+        # Team-based sampling: subsample co-trained robot-human pairs
+        for alg in config["crossplay"]["robot_algos"]:
+            if alg in partner_dict:
+                rng, sample_key = jax.random.split(rng)
+                robo_filtered[alg], partner_dict[alg] = sample_teams(
+                    robo_filtered[alg], partner_dict[alg], max_pairs, sample_key
+                )
+                if max_pairs is not None:
+                    print(f"Sampled {len(robo_filtered[alg])} robots and "
+                          f"{len(partner_dict[alg])} humans for {alg}")
 
-                robo_filtered[alg] = robo_filtered[alg].iloc[start:end]
-                print(f"Processing robots {start} to {end} for algorithm {alg} "
-                      f"({len(robo_filtered[alg])} agents)")
+        # Rebuild after sampling
+        load_zoo_dict = {algo: {"human": list(partner_dict[algo].agent_uuid)} for algo in partner_dict.keys()}
+
+        human_uuids = []
+        human_team_uuids = []
+        for algo in partner_dict.keys():
+            human_uuids.extend(list(partner_dict[algo].agent_uuid))
+            human_team_uuids.extend(list(partner_dict[algo].team_uuid))
+
+        num_humans = len(human_uuids)
 
         results = {}
 
@@ -315,10 +332,8 @@ def main(config):
                 "num_eval_episodes": config["NUM_EVAL_EPISODES"],
             }
 
-    if robot_start_idx is not None or robot_end_idx is not None:
-            start = robot_start_idx if robot_start_idx is not None else 0
-            end = robot_end_idx if robot_end_idx is not None else "end"
-            output_filename = f"crossplay_results_{start}_{end}.npy"
+    if max_pairs is not None:
+        output_filename = f"crossplay_results_{max_pairs}pairs.npy"
     else:
         output_filename = "crossplay_test_results.npy"
 
