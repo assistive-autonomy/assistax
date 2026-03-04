@@ -5,7 +5,7 @@ publication-quality square heatmap visualizations.
 """
 
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -187,3 +187,184 @@ def plot_all_crossplay(
         plt.show()
 
     return figures
+
+
+def build_combined_crossplay_matrix(
+    results: Dict[str, dict],
+) -> Tuple[np.ndarray, np.ndarray, List[str], List[int], List[int]]:
+    """Build a combined return matrix across all algorithms.
+
+    Rows are grouped by algorithm (each algo's robots form a row-block).
+    Columns contain ALL humans, grouped by their source algorithm so that
+    trained partner cells lie on the block diagonal.
+
+    Args:
+        results: Dictionary keyed by algorithm name, each containing
+            'returns', 'robot_uuids', 'human_uuids', 'robot_team_uuids',
+            'human_team_uuids'.
+
+    Returns:
+        Tuple of (combined_matrix, block_diagonal_mask, algo_names_ordered,
+        row_boundaries, col_boundaries) where boundaries are cumulative
+        counts marking where each algorithm block starts.
+    """
+    algo_names = list(results.keys())
+
+    # All algorithms share the same human_uuids list; grab it from first entry
+    first_data = next(iter(results.values()))
+    all_human_uuids = list(first_data["human_uuids"])
+    all_human_team_uuids = list(first_data["human_team_uuids"])
+    n_humans = len(all_human_uuids)
+
+    # Map each human team_uuid to its source algorithm
+    # A human's source algo is the algo whose robot_team_uuids contain that team
+    human_team_to_source_algo: Dict[str, str] = {}
+    for algo_name, alg_data in results.items():
+        robot_teams = set(alg_data["robot_team_uuids"])
+        for h_team in all_human_team_uuids:
+            if h_team in robot_teams and h_team not in human_team_to_source_algo:
+                human_team_to_source_algo[h_team] = algo_name
+
+    # Build column ordering: group humans by source algo, within each group
+    # order so trained partners align on the block diagonal
+    col_order: List[int] = []
+    col_boundaries = [0]
+    human_idx_by_uuid = {uuid: i for i, uuid in enumerate(all_human_uuids)}
+
+    for algo_name in algo_names:
+        alg_data = results[algo_name]
+        robot_team_uuids = alg_data["robot_team_uuids"]
+
+        # Humans belonging to this algo's group, ordered to match robot order
+        algo_human_indices = []
+        seen_teams = set()
+        for r_team in robot_team_uuids:
+            if r_team in seen_teams:
+                continue
+            seen_teams.add(r_team)
+            # Find the human with this team_uuid
+            for h_idx, h_team in enumerate(all_human_team_uuids):
+                if h_team == r_team and h_idx not in algo_human_indices:
+                    algo_human_indices.append(h_idx)
+                    break
+
+        # Add any remaining humans from this algo group not yet included
+        for h_idx, h_team in enumerate(all_human_team_uuids):
+            if (human_team_to_source_algo.get(h_team) == algo_name
+                    and h_idx not in algo_human_indices):
+                algo_human_indices.append(h_idx)
+
+        col_order.extend(algo_human_indices)
+        col_boundaries.append(len(col_order))
+
+    # Build row blocks and stack
+    row_blocks: List[np.ndarray] = []
+    row_boundaries = [0]
+
+    for algo_name in algo_names:
+        alg_data = results[algo_name]
+        robot_uuids = alg_data["robot_uuids"]
+        returns = alg_data["returns"]
+        n_robots = len(robot_uuids)
+
+        # Raw sub-matrix: rows = this algo's robots, cols = all humans
+        raw_block = np.zeros((n_robots, n_humans))
+        for i, r_uuid in enumerate(robot_uuids):
+            raw_block[i, :] = returns[r_uuid]
+
+        # Reorder columns to combined ordering
+        row_blocks.append(raw_block[:, col_order])
+        row_boundaries.append(row_boundaries[-1] + n_robots)
+
+    combined_matrix = np.vstack(row_blocks)
+
+    # Reordered human team uuids in combined column order
+    reordered_human_teams = [all_human_team_uuids[j] for j in col_order]
+
+    # Build block-diagonal mask (2D boolean)
+    total_rows = combined_matrix.shape[0]
+    total_cols = combined_matrix.shape[1]
+    block_mask = np.zeros((total_rows, total_cols), dtype=bool)
+
+    for a_idx, algo_name in enumerate(algo_names):
+        alg_data = results[algo_name]
+        robot_team_uuids = alg_data["robot_team_uuids"]
+        r_start = row_boundaries[a_idx]
+        r_end = row_boundaries[a_idx + 1]
+
+        for ri, r_team in enumerate(robot_team_uuids):
+            for cj in range(total_cols):
+                if reordered_human_teams[cj] == r_team:
+                    block_mask[r_start + ri, cj] = True
+
+    return (combined_matrix, block_mask, algo_names,
+            row_boundaries, col_boundaries)
+
+
+def plot_combined_crossplay(
+    results_path: str,
+    save_path: Optional[str] = None,
+    env_name: Optional[str] = None,
+    usetex_fallback: bool = False,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """Plot a single combined crossplay heatmap across all algorithms.
+
+    Args:
+        results_path: Path to the crossplay .npy results file.
+        save_path: If set, save figure to this path.
+        env_name: Environment name (unused, kept for API consistency).
+        usetex_fallback: Use sans-serif fonts if LaTeX unavailable.
+
+    Returns:
+        Tuple of (Figure, Axes).
+    """
+    set_paper_style(usetex_fallback)
+
+    results = load_crossplay_results(results_path)
+    matrix, block_mask, algo_names, row_bounds, col_bounds = (
+        build_combined_crossplay_matrix(results)
+    )
+
+    n_rows, n_cols = matrix.shape
+    side = max(PAPER_COLUMN_WIDTH, min(PAPER_FULL_WIDTH, 0.4 * max(n_rows, n_cols) + 1.5))
+    fig, ax = plt.subplots(figsize=(side, side))
+
+    im = ax.imshow(
+        matrix, cmap="viridis", aspect="equal",
+        interpolation="nearest", origin="lower",
+    )
+
+    # Colorbar
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label("Return")
+
+    # Block-diagonal highlight: black rectangle outlines on trained-partner cells
+    for r in range(n_rows):
+        for c in range(n_cols):
+            if block_mask[r, c]:
+                rect = patches.Rectangle(
+                    (c - 0.5, r - 0.5), 1, 1,
+                    linewidth=1.5, edgecolor="black", facecolor="none",
+                )
+                ax.add_patch(rect)
+
+    # No title, no gridlines
+    ax.grid(False)
+
+    # Simple integer tick labels
+    ax.set_xticks(range(n_cols))
+    ax.set_yticks(range(n_rows))
+    ax.set_xticklabels(range(n_cols))
+    ax.set_yticklabels(range(n_rows))
+    ax.set_xlabel("Human policy index")
+    ax.set_ylabel("Robot policy index")
+
+    fig.tight_layout()
+
+    if save_path:
+        save_p = Path(save_path)
+        save_p.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_p)
+        print(f"Saved: {save_p}")
+
+    return fig, ax
