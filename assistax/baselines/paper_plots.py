@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 import wandb
 
@@ -483,12 +484,12 @@ def set_paper_style(usetex_fallback: bool = False) -> None:
         "savefig.dpi": 300,
         "savefig.bbox": "tight",
         "savefig.pad_inches": 0.02,
-        "font.size": 8,
-        "axes.titlesize": 9,
-        "axes.labelsize": 8,
-        "xtick.labelsize": 7,
-        "ytick.labelsize": 7,
-        "legend.fontsize": 7,
+        "font.size": 10,
+        "axes.titlesize": 12,
+        "axes.labelsize": 10,
+        "xtick.labelsize": 8,
+        "ytick.labelsize": 8,
+        "legend.fontsize": 8,
         "axes.grid": True,
         "grid.alpha": 0.3,
         "grid.linewidth": 0.5,
@@ -500,13 +501,16 @@ def set_paper_style(usetex_fallback: bool = False) -> None:
     }
 
     if usetex_fallback:
-        base["font.family"] = "sans-serif"
+        base["font.family"] = "serif"
+        base["font.serif"] = ["Times New Roman"]
     else:
         base["text.usetex"] = True
         base["font.family"] = "serif"
-        base["font.serif"] = ["Computer Modern Roman"]
+        base["font.serif"] = ["Times New Roman"]
 
     plt.rcParams.update(base)
+    plt.rcParams["xtick.major.size"] = 3
+    plt.rcParams["ytick.major.size"] = 3
 
 
 def _get_color(algo_name: str) -> str:
@@ -579,6 +583,8 @@ def plot_learning_curves(
 
         ax.set_xlabel("Environment Steps")
         ax.set_ylabel("Mean Test Return")
+        ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+        ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
         fig.tight_layout()
 
         save_path = (
@@ -644,6 +650,8 @@ def plot_normalized_learning_curves(
         else "Normalized Return (z-score)"
     )
     ax.set_ylabel(ylabel)
+    ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
     fig.tight_layout()
     _save_or_show(fig, save_path)
 
@@ -689,6 +697,7 @@ def plot_final_returns(
         ax.set_yticks(y_positions)
         ax.set_yticklabels(algo_names_present)
         ax.set_xlabel("Mean Test Return")
+        ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
         ax.invert_yaxis()
         fig.tight_layout()
 
@@ -752,6 +761,7 @@ def plot_aggregate_normalized_returns(
         else "Normalized Return (z-score)"
     )
     ax.set_ylabel(ylabel)
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
     fig.tight_layout()
     _save_or_show(fig, save_path)
 

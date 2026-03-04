@@ -67,7 +67,8 @@ uv run python assistax/baselines/ZSC/ppo_aht.py \
     ++CLIP_EPS=0.02069652 \
     ++ENT_COEF=0.00010842521 \
     ++NUM_STEPS=64 \
-    ++NUM_SEEDS=16 \
+    ++NUM_SEEDS=8 \
+    ++SEED=0,1 \
     ++EXP_TAGS=[IPPO,FF_NPS,AHT_FINAL]
 
 # --- Cleanup ---

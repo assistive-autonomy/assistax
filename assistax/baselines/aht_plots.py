@@ -35,6 +35,13 @@ from assistax.baselines.paper_plots import (
 from assistax.baselines.sweep_plots import bootstrap_ci_mean
 from assistax.baselines.utils import load_compact_npz
 
+# Distinct colours for train vs test curves in AHT plots.
+# Each entry maps algorithm name -> (test_color, train_color).
+AHT_TRAIN_TEST_COLORS: Dict[str, Tuple[str, str]] = {
+    "PPO AHT (FF)": ("#ff7f0e", "#1f77b4"),   # orange (test), blue (train)
+    "SAC AHT (FF)": ("#d62728", "#9467bd"),    # red (test), purple (train)
+}
+
 
 # =============================================================================
 # Data Structures
@@ -420,24 +427,41 @@ def plot_aht_learning_curves(
 
         for algo_name in sorted(env_data.keys()):
             cd = env_data[algo_name]
-            color = _get_color(algo_name)
+            fallback = _get_color(algo_name)
+            test_color, train_color = AHT_TRAIN_TEST_COLORS.get(
+                algo_name, (fallback, fallback)
+            )
             marker = _get_marker(algo_name)
 
             # --- Test curve (solid — zero-shot coordination) ---
             test_sub, test_idx = subsample_curve(cd.test_returns, n_subsample)
             x_vals = _aht_steps_axis(cd, test_idx)
             mean_t, lo_t, hi_t = bootstrap_ci_mean(test_sub)
-            ax.plot(x_vals, mean_t, color=color, marker=marker,
+            ax.plot(x_vals, mean_t, color=test_color, marker=marker,
                     linestyle="-", label=f"{algo_name} (test)")
-            ax.fill_between(x_vals, lo_t, hi_t, color=color, alpha=0.15)
+            ax.fill_between(x_vals, lo_t, hi_t, color=test_color, alpha=0.15)
 
             # --- Train curve (dashed — seen partners) ---
             train_sub, train_idx = subsample_curve(cd.train_returns, n_subsample)
             x_train = _aht_steps_axis(cd, train_idx)
             mean_tr, lo_tr, hi_tr = bootstrap_ci_mean(train_sub)
-            ax.plot(x_train, mean_tr, color=color, marker=marker,
-                    linestyle="--", label=f"{algo_name} (train)")
-            ax.fill_between(x_train, lo_tr, hi_tr, color=color, alpha=0.08)
+            ax.plot(x_train, mean_tr, color=train_color, marker=marker,
+                    linestyle="-", label=f"{algo_name} (train)")
+            ax.fill_between(x_train, lo_tr, hi_tr, color=train_color, alpha=0.08)
+
+            # --- Generalization gap arrow at last datapoint ---
+            target_x = cd.total_timesteps
+            gap_idx_test = int(np.argmin(np.abs(x_vals - target_x)))
+            gap_idx_train = int(np.argmin(np.abs(x_train - target_x)))
+            gap_x = x_vals[gap_idx_test]
+            train_y_at_gap = mean_tr[gap_idx_train]
+            test_y_at_gap = mean_t[gap_idx_test]
+            ax.annotate(
+                "",
+                xy=(gap_x, train_y_at_gap),
+                xytext=(gap_x, test_y_at_gap),
+                arrowprops=dict(arrowstyle="<->", color="red", lw=2.5),
+            )
 
         ax.set_xlabel("Environment Steps")
         ax.set_ylabel("Mean Return")
@@ -456,7 +480,7 @@ def plot_aht_shared_legend(
     save_path: Optional[str] = None,
     usetex_fallback: bool = False,
 ) -> None:
-    """Export a standalone legend showing solid (test) / dashed (train) convention.
+    """Export a standalone legend showing train / test colour convention.
 
     Args:
         algo_names: Algorithm names to include.
@@ -470,20 +494,23 @@ def plot_aht_shared_legend(
     handles = []
     labels = []
     for name in algo_names:
-        color = _get_color(name)
+        fallback = _get_color(name)
+        test_color, train_color = AHT_TRAIN_TEST_COLORS.get(
+            name, (fallback, fallback)
+        )
         marker = _get_marker(name)
-        # Test (solid)
+        # Train (solid)
         handles.append(Line2D(
-            [0], [0], color=color, marker=marker, linestyle="-",
-            linewidth=1.2, markersize=4,
-        ))
-        labels.append(f"{name} (test)")
-        # Train (dashed)
-        handles.append(Line2D(
-            [0], [0], color=color, marker=marker, linestyle="--",
+            [0], [0], color=train_color, marker=marker, linestyle="-",
             linewidth=1.2, markersize=4,
         ))
         labels.append(f"{name} (train)")
+        # Test (solid)
+        handles.append(Line2D(
+            [0], [0], color=test_color, marker=marker, linestyle="-",
+            linewidth=1.2, markersize=4,
+        ))
+        labels.append(f"{name} (test)")
 
     fig = plt.figure(figsize=(PAPER_FULL_WIDTH, 0.6))
     fig.legend(

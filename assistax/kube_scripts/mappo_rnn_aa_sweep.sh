@@ -40,5 +40,5 @@ uv run python assistax/baselines/MAPPO/mappo_sweep.py \
     ++NUM_MINIBATCHES=4,8,16 \
     ++UPDATE_EPOCHS=4,8,16 \
     "++SEED=range(0,8)" \
-    SWEEP.num_configs=2 \
+    SWEEP.num_configs=4 \
     GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY 
