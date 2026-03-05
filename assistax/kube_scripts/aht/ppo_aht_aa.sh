@@ -2,8 +2,8 @@
 # /pvc/scripts/ippo_ff_teeth_sweep.sh
 set -Eeuo pipefail
 apt-get update && apt-get install -y --no-install-recommends \
-    libegl1-mesa libegl-dev libgles2-mesa-dev ffmpeg\
-  && rm -rf /var/lib/apt/lists/*
+    libegl1-mesa libegl-dev libgles2-mesa-dev ffmpeg rsync\
+    && rm -rf /var/lib/apt/lists/*
 export NETRC=/pvc/.netrc
 # --- Parse arguments ---
 CONFIG=${1:-ppo_aht}
