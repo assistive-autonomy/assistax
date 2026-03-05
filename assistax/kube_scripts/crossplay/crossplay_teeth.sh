@@ -2,6 +2,10 @@
 # /pvc/scripts/ippo_ff_teeth_sweep.sh
 set -Eeuo pipefail
 
+apt-get update && apt-get install -y --no-install-recommends \
+    rsync\
+    && rm -rf /var/lib/apt/lists/*
+
 # --- Parse arguments ---
 CONFIG=${1:-crossplay_zoo}
 ENV_NAME=${2:-teethbrushing}
