@@ -39,10 +39,10 @@ crossplay:
       network: "assistax/baselines/MASAC/config/network/ff_nps.yaml"
 
 
-PARTNER_ALGORITHMS: ["IPPO", "MAPPO", "MASAC"]
+PARTNER_ALGORITHMS: ["IPPO"]
 
 ZOO_PATH: /pvc/assistax/zoo 
-GPU_ENV_CAPACITY: 8192
+GPU_ENV_CAPACITY: 1206 
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False
 DEVICE: 0
