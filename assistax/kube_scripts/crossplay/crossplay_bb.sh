@@ -27,7 +27,8 @@ trap on_err ERR
 # --- Workspace isolation ---
 WORK_DIR="/pvc/tmp/${POD_NAME}"
 mkdir -p "$WORK_DIR"
-cp -r /pvc/assistax "$WORK_DIR/"
+#cp -r /pvc/assistax "$WORK_DIR/"
+rsync -a --exclude='zoo' /pvc/assistax/ "$WORK_DIR/assistax/"
 cd "$WORK_DIR/assistax"
 
 export PYTHONPATH="$WORK_DIR/assistax:${PYTHONPATH:-}"
