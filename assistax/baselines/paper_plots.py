@@ -645,10 +645,11 @@ def plot_normalized_learning_curves(
         ax.fill_between(x_vals, lower, upper, color=color, alpha=0.15)
 
     ax.set_xlabel("Environment Steps")
-    ylabel = (
-        "Normalized Return (min-max)" if normalization == "minmax"
-        else "Normalized Return (z-score)"
-    )
+    ylabel = "Mean Test Return" 
+   # (
+   #     "" if normalization == "minmax"
+   #     else "Normalized Return (z-score)"
+   # )
     ax.set_ylabel(ylabel)
     ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
     ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))

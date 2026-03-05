@@ -206,6 +206,9 @@ def main(config):
 
     for alg, paths in config["crossplay"]["algo_configs"].items():
         robo_configs[alg] = load_and_merge_algo_config(paths)
+        # Inject ENV_NAME and ENV_KWARGS from crossplay config
+        robo_configs[alg]["ENV_NAME"] = config["ENV_NAME"]
+        robo_configs[alg]["ENV_KWARGS"] = dict(config["ENV_KWARGS"])
         # Strip preference_rewards — human prefs come from LoadEvalAgentWrapper
         if "preference_rewards" in robo_configs[alg].get("ENV_KWARGS", {}):
             robo_configs[alg]["ENV_KWARGS"] = {

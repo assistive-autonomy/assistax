@@ -58,11 +58,11 @@ node_modules/
 # Agent Zoo
 zoo/
 
-# Configs 
-config/
-*/config/
-**/config/
-**/config/**
+## Configs 
+#config/
+#*/config/
+#**/config/
+#**/config/**
 
 slurm/
 */slurm/

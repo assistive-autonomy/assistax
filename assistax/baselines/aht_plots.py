@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 import wandb
 
@@ -422,10 +423,10 @@ def plot_aht_learning_curves(
     set_paper_style(usetex_fallback)
 
     for env_name in collection.env_names:
-        fig, ax = plt.subplots(figsize=(PAPER_COLUMN_WIDTH, 2.2))
         env_data = collection.data[env_name]
 
         for algo_name in sorted(env_data.keys()):
+            fig, ax = plt.subplots(figsize=(PAPER_COLUMN_WIDTH, 2.2))
             cd = env_data[algo_name]
             fallback = _get_color(algo_name)
             test_color, train_color = AHT_TRAIN_TEST_COLORS.get(
@@ -463,16 +464,18 @@ def plot_aht_learning_curves(
                 arrowprops=dict(arrowstyle="<->", color="red", lw=2.5),
             )
 
-        ax.set_xlabel("Environment Steps")
-        ax.set_ylabel("Mean Return")
-        ax.set_title(_env_display(env_name))
-        fig.tight_layout()
+            ax.set_xlabel("Environment Steps")
+            ax.set_ylabel("Mean Test Return")
+            ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+            ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+            fig.tight_layout()
 
-        save_path = (
-            os.path.join(save_dir, f"{env_name}_aht_learning_curves.pdf")
-            if save_dir else None
-        )
-        _save_or_show(fig, save_path)
+            safe_algo = algo_name.replace(" ", "_").replace("(", "").replace(")", "")
+            save_path = (
+                os.path.join(save_dir, f"{env_name}_{safe_algo}_aht_learning_curves.pdf")
+                if save_dir else None
+            )
+            _save_or_show(fig, save_path)
 
 
 def plot_aht_shared_legend(

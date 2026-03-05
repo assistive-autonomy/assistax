@@ -10,7 +10,7 @@ export NETRC=/pvc/.netrc
 # --- Parse arguments ---
 CONFIG=${1:-ippo}
 ENV_NAME=${2:-bedbathing}
-GPU_ENV_CAPACITY=${3:-49152}
+GPU_ENV_CAPACITY=${3:-24576}
 
 # --- Logging setup ---
 ts(){ date +'%Y-%m-%dT%H:%M:%S%z'; }
