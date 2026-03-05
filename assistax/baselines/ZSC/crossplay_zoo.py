@@ -299,6 +299,7 @@ def main(config):
                     ),
                     sep='/'
                 )
+                robot_params = jax.tree.map(lambda x: jnp.expand_dims(x, 0), robot_params)
                 robot_eval_state = EvalNetworkState(
                     apply_fn=network.apply, params=robot_params
                 )
