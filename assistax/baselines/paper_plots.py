@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
+import pandas as pd
 import wandb
 
 from assistax.baselines.sweep_plots import bootstrap_ci_mean
@@ -712,13 +713,13 @@ def plot_final_returns(
 def plot_aggregate_normalized_returns(
     collection: ExperimentCollection,
     final_n: int = 10,
-    normalization: str = "zscore",
+    normalization: str = "minmax",
     save_path: Optional[str] = None,
     usetex_fallback: bool = False,
 ) -> None:
     """Plot normalized final returns aggregated across environments.
 
-    One bar per algorithm.
+    One horizontal CI interval per algorithm.
 
     Args:
         collection: Experiment data.
@@ -728,41 +729,56 @@ def plot_aggregate_normalized_returns(
         usetex_fallback: Use sans-serif fonts if LaTeX is unavailable.
     """
     set_paper_style(usetex_fallback)
-
-    if normalization == "minmax":
-        norm = minmax_normalize_across_envs(collection, final_n)
-    else:
-        norm = zscore_normalize_across_envs(collection, final_n)
     algos = collection.algo_names
 
-    # Aggregate across envs per algo
-    algo_scores: Dict[str, List[float]] = {}
+    # Collect per-seed normalized finals for each algo across envs
+    algo_seeds: Dict[str, List[np.ndarray]] = {}
     for env_name in collection.env_names:
-        for algo_name in algos:
-            if algo_name in norm.get(env_name, {}):
-                algo_scores.setdefault(algo_name, []).append(
-                    norm[env_name][algo_name]
-                )
+        env_data = collection.data[env_name]
+        # Compute env-level normalization stats from all algos
+        all_finals = []
+        algo_finals: Dict[str, np.ndarray] = {}
+        for algo_name, ad in env_data.items():
+            finals = ad.returns[:, -final_n:].mean(axis=1)  # (num_seeds,)
+            algo_finals[algo_name] = finals
+            all_finals.append(finals)
 
-    fig, ax = plt.subplots(figsize=(PAPER_COLUMN_WIDTH, 2.2))
+        pooled = np.concatenate(all_finals)
+        if normalization == "minmax":
+            env_min, env_max = pooled.min(), pooled.max()
+            denom = env_max - env_min if env_max != env_min else 1.0
+            for algo_name, finals in algo_finals.items():
+                normed = (finals - env_min) / denom
+                algo_seeds.setdefault(algo_name, []).append(normed)
+        else:
+            env_mean, env_std = pooled.mean(), pooled.std()
+            env_std = env_std if env_std > 0 else 1.0
+            for algo_name, finals in algo_finals.items():
+                normed = (finals - env_mean) / env_std
+                algo_seeds.setdefault(algo_name, []).append(normed)
 
-    names, means = [], []
-    for algo_name in algos:
-        if algo_name in algo_scores:
-            names.append(algo_name)
-            means.append(np.mean(algo_scores[algo_name]))
+    # Build plot
+    names = [a for a in algos if a in algo_seeds]
+    n_algos = len(names)
+    fig, ax = plt.subplots(figsize=(PAPER_COLUMN_WIDTH, 0.32 * n_algos + 0.5))
 
-    colors = [_get_color(n) for n in names]
-    x = np.arange(len(names))
-    ax.bar(x, means, color=colors, edgecolor="white", linewidth=0.3)
-    ax.set_xticks(x)
-    ax.set_xticklabels(names, rotation=30, ha="right")
-    ylabel = (
-        "Normalized Return (min-max)" if normalization == "minmax"
-        else "Normalized Return (z-score)"
-    )
-    ax.set_ylabel(ylabel)
-    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+    bar_height = 0.6
+    for i, algo_name in enumerate(names):
+        seeds = np.concatenate(algo_seeds[algo_name])  # (total_seeds,)
+        data_2d = seeds.reshape(-1, 1)  # (total_seeds, 1)
+        m, lo, hi = bootstrap_ci_mean(data_2d)
+        color = _get_color(algo_name)
+
+        ax.barh(i, hi[0] - lo[0], left=lo[0], height=bar_height,
+                color=color, alpha=0.4, edgecolor=color, linewidth=0.5)
+        ax.vlines(m[0], i - bar_height / 2, i + bar_height / 2,
+                  color=color, linewidth=1.5)
+
+    ax.set_yticks(np.arange(n_algos))
+    ax.set_yticklabels([])
+    ax.invert_yaxis()
+    ax.set_xlabel("Mean Test Return")
+    ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
     fig.tight_layout()
     _save_or_show(fig, save_path)
 
@@ -807,5 +823,70 @@ def plot_shared_legend(
         frameon=False,
         fontsize=7,
     )
+    fig.tight_layout()
+    _save_or_show(fig, save_path)
+
+
+def plot_sps_scaling(
+    csv_path: str,
+    save_path: Optional[str] = None,
+    usetex_fallback: bool = False,
+    show_error_bars: bool = False,
+) -> None:
+    """Plot steps-per-second scaling with number of parallel environments.
+
+    One curve per environment with optional 95% CI error bars.
+
+    Args:
+        csv_path: Path to benchmark_sps.csv with columns
+            env_name, num_envs, mean_sps, std_sps.
+        save_path: If set, save figure to this path.
+        usetex_fallback: Use sans-serif fonts if LaTeX is unavailable.
+        show_error_bars: If True, show 95% CI error bars at data points.
+    """
+    set_paper_style(usetex_fallback)
+    df = pd.read_csv(csv_path)
+    cmap = plt.cm.tab10
+
+    n_trials = 12
+    z = 1.96  # 95% CI
+
+    fig, ax = plt.subplots(figsize=(PAPER_COLUMN_WIDTH * 1.5, PAPER_COLUMN_WIDTH))
+
+    env_real_names = {
+        'scratchitch': 'Scratching',
+        'bedbathing': 'Bed Bathing',
+        'armmnipulation': 'Arm Assist',
+        'teethbrushing': 'Tooth Brushing',
+        'feeding': 'Feeding'
+    }
+    
+    for i, env_name in enumerate(df["env_name"].unique()):
+        env_df = df[df["env_name"] == env_name].sort_values("num_envs")
+        x = env_df["num_envs"].values
+        mean = env_df["mean_sps"].values
+        std = env_df["std_sps"].values
+        color = cmap(i)
+        # label = _env_display(env_name)
+        label = env_real_names[env_name]
+
+        if show_error_bars:
+            ci = z * std / np.sqrt(n_trials)
+            ax.errorbar(x, mean, yerr=ci, color=color, marker="o",
+                        capsize=3, label=label)
+        else:
+            ax.plot(x, mean, color=color, marker="o", label=label)
+
+    num_envs_vals = sorted(df["num_envs"].unique())
+    ax.set_xticks(num_envs_vals)
+    ax.set_xticklabels([str(v) for v in num_envs_vals], rotation=90)
+
+    ax.yaxis.set_major_formatter(ticker.ScalarFormatter())
+    ax.yaxis.get_major_formatter().set_powerlimits((0, 0))
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+
+    ax.set_xlabel("Number of Parallel Environments")
+    ax.set_ylabel("Steps per Second")
+    ax.legend(fontsize=8)
     fig.tight_layout()
     _save_or_show(fig, save_path)

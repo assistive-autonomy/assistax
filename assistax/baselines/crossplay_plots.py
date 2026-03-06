@@ -132,8 +132,8 @@ def plot_crossplay_heatmap(
     ax.set_yticks(range(n))
     ax.set_xticklabels(range(n))
     ax.set_yticklabels(range(n))
-    ax.set_xlabel("Human policy index")
-    ax.set_ylabel("Robot policy index")
+    ax.set_xlabel("Human policy index", fontsize=16)
+    ax.set_ylabel("Robot policy index", fontsize=16)
 
     # Title
     env_display = ENV_DISPLAY_NAMES.get(env_name, env_name.replace("_", " ").title())
@@ -336,7 +336,7 @@ def plot_combined_crossplay(
 
     # Colorbar
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label("Return")
+    cbar.set_label("Return", fontsize=16)
 
     # Block-diagonal highlight: black rectangle outlines on trained-partner cells
     for r in range(n_rows):
@@ -351,13 +351,10 @@ def plot_combined_crossplay(
     # No title, no gridlines
     ax.grid(False)
 
-    # Simple integer tick labels
-    ax.set_xticks(range(n_cols))
-    ax.set_yticks(range(n_rows))
-    ax.set_xticklabels(range(n_cols))
-    ax.set_yticklabels(range(n_rows))
-    ax.set_xlabel("Human policy index")
-    ax.set_ylabel("Robot policy index")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel("Human policy index", fontsize=16)
+    ax.set_ylabel("Robot policy index", fontsize=16)
 
     fig.tight_layout()
 

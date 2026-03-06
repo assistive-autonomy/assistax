@@ -34,7 +34,7 @@ from assistax.baselines.paper_plots import (
     subsample_curve,
 )
 from assistax.baselines.sweep_plots import bootstrap_ci_mean
-from assistax.baselines.utils import load_compact_npz
+from assistax.baselines.utils import _compute_episode_metrics, load_compact_npz
 
 # Distinct colours for train vs test curves in AHT plots.
 # Each entry maps algorithm name -> (test_color, train_color).
@@ -268,6 +268,19 @@ def fetch_aht_runs(
     return runs
 
 
+def _load_done_array(
+    run,
+    cache_dir: str,
+    cache_suffix: str,
+) -> Optional[np.ndarray]:
+    """Load done___all__.npz from a cached artifact directory."""
+    run_cache = os.path.join(cache_dir, f"{run.id}{cache_suffix}")
+    done_path = os.path.join(run_cache, "done___all__.npz")
+    if os.path.exists(done_path):
+        return load_compact_npz(done_path)
+    return None
+
+
 def extract_aht_experiment_data(
     tags: List[str],
     metric_name: str = DEFAULT_METRIC,
@@ -303,6 +316,26 @@ def extract_aht_experiment_data(
         result = download_aht_artifact_data(run, metric_name, cache_dir)
         if result is not None:
             train_arr, test_arr = result
+            # Reduce raw per-step metrics to (seeds, updates) using
+            # episode boundary handling, then averaging over eval episodes.
+            if train_arr.ndim > 2:
+                done_arr = _load_done_array(run, cache_dir, cache_suffix="_train")
+                if done_arr is None:
+                    done_arr = _load_done_array(run, cache_dir, cache_suffix="_v0")
+                if done_arr is not None:
+                    train_arr = _compute_episode_metrics(train_arr, done_arr, time_axis=2)
+                    train_arr = np.asarray(train_arr).mean(axis=2)
+                else:
+                    train_arr = train_arr.sum(axis=2).mean(axis=2)
+            if test_arr.ndim > 2:
+                done_arr = _load_done_array(run, cache_dir, cache_suffix="_test")
+                if done_arr is None:
+                    done_arr = _load_done_array(run, cache_dir, cache_suffix="_v1")
+                if done_arr is not None:
+                    test_arr = _compute_episode_metrics(test_arr, done_arr, time_axis=2)
+                    test_arr = np.asarray(test_arr).mean(axis=2)
+                else:
+                    test_arr = test_arr.sum(axis=2).mean(axis=2)
             train_arrays.append(train_arr)
             test_arrays.append(test_arr)
 
@@ -394,6 +427,40 @@ def build_aht_collection(
 # =============================================================================
 # Layer 2: Plotting
 # =============================================================================
+
+def aht_minmax_normalize(
+    collection: AHTCollection,
+) -> Dict[str, Dict[str, Tuple[np.ndarray, np.ndarray]]]:
+    """Min-max normalize AHT curves within each environment.
+
+    Pools all data points (train + test, all algorithms) per environment
+    to compute min/max, then normalizes both splits to [0, 1].
+
+    Returns:
+        {env: {algo: (norm_train, norm_test)}}
+    """
+    result: Dict[str, Dict[str, Tuple[np.ndarray, np.ndarray]]] = {}
+
+    for env_name in collection.env_names:
+        env_data = collection.data[env_name]
+        all_points = np.concatenate(
+            [cd.train_returns.ravel() for cd in env_data.values()]
+            + [cd.test_returns.ravel() for cd in env_data.values()]
+        )
+        env_min = float(all_points.min())
+        env_max = float(all_points.max())
+        denom = env_max - env_min
+        if denom == 0:
+            denom = 1.0
+
+        result[env_name] = {}
+        for algo_name, cd in env_data.items():
+            norm_train = (cd.train_returns - env_min) / denom
+            norm_test = (cd.test_returns - env_min) / denom
+            result[env_name][algo_name] = (norm_train, norm_test)
+
+    return result
+
 
 def _aht_steps_axis(curve: AHTCurveData, indices: np.ndarray) -> np.ndarray:
     """Convert update indices to environment step values."""
@@ -526,6 +593,170 @@ def plot_aht_shared_legend(
     )
     fig.tight_layout()
     _save_or_show(fig, save_path)
+
+
+def plot_aht_normalized_learning_curves(
+    collection: AHTCollection,
+    n_subsample: int = 10,
+    save_path: Optional[str] = None,
+    usetex_fallback: bool = False,
+) -> None:
+    """Plot minmax-normalized AHT curves aggregated across environments.
+
+    One pair of lines (solid=test, dashed=train) per algorithm on a single
+    axis, with bootstrap CI bands.
+
+    Args:
+        collection: AHT experiment data.
+        n_subsample: Number of subsampled points per curve.
+        save_path: If set, save figure to this path.
+        usetex_fallback: Use sans-serif fonts if LaTeX is unavailable.
+    """
+    set_paper_style(usetex_fallback)
+    norm_data = aht_minmax_normalize(collection)
+
+    # Aggregate across envs per algo
+    algo_train_agg: Dict[str, List[np.ndarray]] = {}
+    algo_test_agg: Dict[str, List[np.ndarray]] = {}
+    algo_ref: Dict[str, AHTCurveData] = {}
+
+    for env_name in collection.env_names:
+        for algo_name, (norm_train, norm_test) in norm_data[env_name].items():
+            algo_train_agg.setdefault(algo_name, []).append(norm_train)
+            algo_test_agg.setdefault(algo_name, []).append(norm_test)
+            if algo_name not in algo_ref:
+                algo_ref[algo_name] = collection.data[env_name][algo_name]
+
+    fig, ax = plt.subplots(figsize=(PAPER_COLUMN_WIDTH, 2.2))
+
+    for algo_name in sorted(algo_train_agg.keys()):
+        # Truncate to min length, concatenate seeds
+        train_arrs = algo_train_agg[algo_name]
+        test_arrs = algo_test_agg[algo_name]
+        min_len = min(
+            min(a.shape[1] for a in train_arrs),
+            min(a.shape[1] for a in test_arrs),
+        )
+        train_stacked = np.concatenate([a[:, :min_len] for a in train_arrs], axis=0)
+        test_stacked = np.concatenate([a[:, :min_len] for a in test_arrs], axis=0)
+
+        fallback = _get_color(algo_name)
+        test_color, train_color = AHT_TRAIN_TEST_COLORS.get(
+            algo_name, (fallback, fallback)
+        )
+        marker = _get_marker(algo_name)
+
+        # Test curve (solid)
+        test_sub, test_idx = subsample_curve(test_stacked, n_subsample)
+        x_vals = _aht_steps_axis(algo_ref[algo_name], test_idx)
+        mean_t, lo_t, hi_t = bootstrap_ci_mean(test_sub)
+        ax.plot(x_vals, mean_t, color=test_color, marker=marker,
+                linestyle="-", label=f"{algo_name} (test)")
+        ax.fill_between(x_vals, lo_t, hi_t, color=test_color, alpha=0.15)
+
+        # Train curve (dashed)
+        train_sub, train_idx = subsample_curve(train_stacked, n_subsample)
+        x_train = _aht_steps_axis(algo_ref[algo_name], train_idx)
+        mean_tr, lo_tr, hi_tr = bootstrap_ci_mean(train_sub)
+        ax.plot(x_train, mean_tr, color=train_color, marker=marker,
+                linestyle="-", label=f"{algo_name} (train)")
+        ax.fill_between(x_train, lo_tr, hi_tr, color=train_color, alpha=0.08)
+
+        # --- Generalization gap arrow at last datapoint ---
+        target_x = algo_ref[algo_name].total_timesteps
+        gap_idx_test = int(np.argmin(np.abs(x_vals - target_x)))
+        gap_idx_train = int(np.argmin(np.abs(x_train - target_x)))
+        gap_x = x_vals[gap_idx_test]
+        train_y_at_gap = mean_tr[gap_idx_train]
+        test_y_at_gap = mean_t[gap_idx_test]
+        ax.annotate(
+            "",
+            xy=(gap_x, train_y_at_gap),
+            xytext=(gap_x, test_y_at_gap),
+            arrowprops=dict(arrowstyle="<->", color="red", lw=2.5),
+        )
+
+    ax.set_xlabel("Environment Steps")
+    ax.set_ylabel("Mean Test Return")
+    ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+    fig.tight_layout()
+    _save_or_show(fig, save_path)
+
+
+def plot_aht_pref_learning_curves(
+    collection: AHTCollection,
+    n_subsample: int = 10,
+    save_dir: Optional[str] = None,
+    usetex_fallback: bool = False,
+) -> None:
+    """Plot per-environment AHT preference reward learning curves.
+
+    Identical layout to ``plot_aht_learning_curves`` but with y-axis label
+    "Preference Reward" and file suffix ``_aht_pref_reward``.
+
+    Args:
+        collection: AHT experiment data.
+        n_subsample: Number of subsampled points per curve.
+        save_dir: If set, save individual figures to this directory.
+        usetex_fallback: Use sans-serif fonts if LaTeX is unavailable.
+    """
+    set_paper_style(usetex_fallback)
+
+    for env_name in collection.env_names:
+        env_data = collection.data[env_name]
+
+        for algo_name in sorted(env_data.keys()):
+            fig, ax = plt.subplots(figsize=(PAPER_COLUMN_WIDTH, 2.2))
+            cd = env_data[algo_name]
+            fallback = _get_color(algo_name)
+            test_color, train_color = AHT_TRAIN_TEST_COLORS.get(
+                algo_name, (fallback, fallback)
+            )
+            marker = _get_marker(algo_name)
+
+            # --- Test curve (solid — zero-shot coordination) ---
+            test_sub, test_idx = subsample_curve(cd.test_returns, n_subsample)
+            x_vals = _aht_steps_axis(cd, test_idx)
+            mean_t, lo_t, hi_t = bootstrap_ci_mean(test_sub)
+            ax.plot(x_vals, mean_t, color=test_color, marker=marker,
+                    linestyle="-", label=f"{algo_name} (test)")
+            ax.fill_between(x_vals, lo_t, hi_t, color=test_color, alpha=0.15)
+
+            # --- Train curve (dashed — seen partners) ---
+            train_sub, train_idx = subsample_curve(cd.train_returns, n_subsample)
+            x_train = _aht_steps_axis(cd, train_idx)
+            mean_tr, lo_tr, hi_tr = bootstrap_ci_mean(train_sub)
+            ax.plot(x_train, mean_tr, color=train_color, marker=marker,
+                    linestyle="-", label=f"{algo_name} (train)")
+            ax.fill_between(x_train, lo_tr, hi_tr, color=train_color, alpha=0.08)
+
+            # --- Generalization gap arrow at last datapoint ---
+            target_x = cd.total_timesteps
+            gap_idx_test = int(np.argmin(np.abs(x_vals - target_x)))
+            gap_idx_train = int(np.argmin(np.abs(x_train - target_x)))
+            gap_x = x_vals[gap_idx_test]
+            train_y_at_gap = mean_tr[gap_idx_train]
+            test_y_at_gap = mean_t[gap_idx_test]
+            ax.annotate(
+                "",
+                xy=(gap_x, train_y_at_gap),
+                xytext=(gap_x, test_y_at_gap),
+                arrowprops=dict(arrowstyle="<->", color="red", lw=2.5),
+            )
+
+            ax.set_xlabel("Environment Steps")
+            ax.set_ylabel("Mean Test Return")
+            ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+            ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+            fig.tight_layout()
+
+            safe_algo = algo_name.replace(" ", "_").replace("(", "").replace(")", "")
+            save_path = (
+                os.path.join(save_dir, f"{env_name}_{safe_algo}_aht_pref_reward.pdf")
+                if save_dir else None
+            )
+            _save_or_show(fig, save_path)
 
 
 # =============================================================================
