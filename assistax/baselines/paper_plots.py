@@ -774,8 +774,7 @@ def plot_aggregate_normalized_returns(
         ax.vlines(m[0], i - bar_height / 2, i + bar_height / 2,
                   color=color, linewidth=1.5)
 
-    ax.set_yticks(np.arange(n_algos))
-    ax.set_yticklabels([])
+    ax.set_yticks([])
     ax.invert_yaxis()
     ax.set_xlabel("Mean Test Return")
     ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
@@ -856,7 +855,7 @@ def plot_sps_scaling(
     env_real_names = {
         'scratchitch': 'Scratching',
         'bedbathing': 'Bed Bathing',
-        'armmnipulation': 'Arm Assist',
+        'armmanipulation': 'Arm Assist',
         'teethbrushing': 'Tooth Brushing',
         'feeding': 'Feeding'
     }

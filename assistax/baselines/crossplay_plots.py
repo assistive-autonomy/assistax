@@ -116,7 +116,7 @@ def plot_crossplay_heatmap(
 
     # Colorbar
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label("Return")
+    cbar.set_label("Return", fontsize=24)
 
     # Diagonal highlight: thin box outlines on diagonal cells
     for i in range(n):
@@ -132,8 +132,8 @@ def plot_crossplay_heatmap(
     ax.set_yticks(range(n))
     ax.set_xticklabels(range(n))
     ax.set_yticklabels(range(n))
-    ax.set_xlabel("Human policy index", fontsize=16)
-    ax.set_ylabel("Robot policy index", fontsize=16)
+    ax.set_xlabel("Human policy index", fontsize=24)
+    ax.set_ylabel("Robot policy index", fontsize=24)
 
     # Title
     env_display = ENV_DISPLAY_NAMES.get(env_name, env_name.replace("_", " ").title())
@@ -336,7 +336,7 @@ def plot_combined_crossplay(
 
     # Colorbar
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label("Return", fontsize=16)
+    cbar.set_label("Return", fontsize=24)
 
     # Block-diagonal highlight: black rectangle outlines on trained-partner cells
     for r in range(n_rows):
@@ -353,8 +353,8 @@ def plot_combined_crossplay(
 
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_xlabel("Human policy index", fontsize=16)
-    ax.set_ylabel("Robot policy index", fontsize=16)
+    ax.set_xlabel("Human policy index", fontsize=24)
+    ax.set_ylabel("Robot policy index", fontsize=24)
 
     fig.tight_layout()
 
