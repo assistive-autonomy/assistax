@@ -30,9 +30,7 @@ from assistax.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper
 from assistax.wrappers.aht import ZooManager, LoadAgentWrapper
 
 
-# ============================================================================
-# NEURAL NETWORK ARCHITECTURES
-# ============================================================================
+# ================================ NETWORK ARCHITECTURE ================================
 
 class ScannedRNN(nn.Module):
     """
@@ -216,9 +214,7 @@ class CriticRNN(nn.Module):
         return hstate, jnp.squeeze(critic, axis=-1)
 
 
-# ============================================================================
-# DATA STRUCTURES
-# ============================================================================
+# ================================ DATA STRUCTURES ================================
 
 class Transition(NamedTuple):
     """Single transition data structure for PPO training."""
@@ -287,6 +283,7 @@ class EvalInfo(NamedTuple):
     obs: Optional[jnp.ndarray]
     info: Optional[jnp.ndarray]
     avail_actions: Optional[jnp.ndarray]
+    env_metrics: Optional[Dict[str, jnp.ndarray]]
 
 
 @struct.dataclass
@@ -301,11 +298,10 @@ class EvalInfoLogConfig:
     obs: bool = True
     info: bool = True
     avail_actions: bool = True
+    env_metrics: bool = True
 
 
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
+# ================================ UTILITY FUNCTIONS ================================
 
 def batchify(qty: Dict[str, jnp.ndarray], agents: Sequence[str]) -> jnp.ndarray:
     """
@@ -335,9 +331,7 @@ def unbatchify(qty: jnp.ndarray, agents: Sequence[str]) -> Dict[str, jnp.ndarray
     return dict(zip(agents, qty))
 
 
-# ============================================================================
-# TRAINING FUNCTION
-# ============================================================================
+# ================================ TRAINING FUNCTION ================================
 
 def make_train(config, save_train_state=False, load_zoo=False):
     """
@@ -847,7 +841,7 @@ def make_train(config, save_train_state=False, load_zoo=False):
             # Optionally save training state
             if save_train_state:
                 metric.update({"train_state": update_state.train_state})
-            
+
             # Update runner state
             runner_state = RunnerState(
                 train_state=update_state.train_state,
@@ -890,9 +884,7 @@ def make_train(config, save_train_state=False, load_zoo=False):
     return train
 
 
-# ============================================================================
-# EVALUATION FUNCTION
-# ============================================================================
+# ================================ EVALUATION FUNCTION ================================
 
 def make_evaluation(config, load_zoo=False):
     """
@@ -943,9 +935,9 @@ def make_evaluation(config, load_zoo=False):
         init_hstate_actor = jnp.zeros(
             (env.num_agents, config["NUM_EVAL_EPISODES"], config["network"]["gru_hidden_dim"])
         )
-        init_hstate_critic = jnp.zeros(
-            (config["NUM_EVAL_EPISODES"], config["network"]["gru_hidden_dim"])
-        )
+        #init_hstate_critic = jnp.zeros(
+        #    (config["NUM_EVAL_EPISODES"], config["network"]["gru_hidden_dim"])
+        #)
         
         runner_state = RunnerState(
             train_state=train_state,
@@ -955,7 +947,7 @@ def make_evaluation(config, load_zoo=False):
             last_all_done=init_all_dones,
             hstate=ActorCriticHiddenState(
                 actor=init_hstate_actor, 
-                critic=init_hstate_critic
+                critic=None
             ),
             update_step=0,
             rng=rng_env,
@@ -980,8 +972,8 @@ def make_evaluation(config, load_zoo=False):
             )
 
             # Select actions
-            actor_hstate, (actor_mean, actor_std) = runner_state.train_state.actor.apply_fn(
-                runner_state.train_state.actor.params,
+            actor_hstate, (actor_mean, actor_std) = runner_state.train_state.apply_fn(
+                runner_state.train_state.params,
                 runner_state.hstate.actor, actor_in,
             )
             
@@ -993,19 +985,19 @@ def make_evaluation(config, load_zoo=False):
             env_act = unbatchify(action, env.agents)
 
             # Compute values if requested
-            if config["eval"]["compute_value"]:
-                critic_in = (
-                    jnp.expand_dims(runner_state.last_obs["global"], 0),
-                    jnp.expand_dims(runner_state.last_all_done.squeeze(0), 0),
-                )
-                critic_hstate, value = runner_state.train_state.critic.apply_fn(
-                    runner_state.train_state.critic.params,
-                    runner_state.hstate.critic, critic_in,
-                )
-                value = value.squeeze(0)
-                value = jnp.broadcast_to(value, (env.num_agents, *value.shape))
-            else:
-                value = None
+            #if config["eval"]["compute_value"]:
+            #    critic_in = (
+            #        jnp.expand_dims(runner_state.last_obs["global"], 0),
+            #        jnp.expand_dims(runner_state.last_all_done.squeeze(0), 0),
+            #    )
+            #    critic_hstate, value = runner_state.train_state.critic.apply_fn(
+            #        runner_state.train_state.critic.params,
+            #        runner_state.hstate.critic, critic_in,
+            #    )
+            #    value = value.squeeze(0)
+            #    value = jnp.broadcast_to(value, (env.num_agents, *value.shape))
+            #else:
+            #    value = None
 
             # Step environment
             rng, _rng = jax.random.split(rng)
@@ -1030,8 +1022,9 @@ def make_evaluation(config, load_zoo=False):
                 obs=(obs_batch if log_eval_info.obs else None),
                 info=(info if log_eval_info.info else None),
                 avail_actions=(avail_actions if log_eval_info.avail_actions else None),
+                env_metrics=(env_state.env_state.metrics if log_eval_info.env_metrics else None),
             )
-            
+
             # Update runner state
             runner_state = RunnerState(
                 train_state=runner_state.train_state,
@@ -1040,8 +1033,8 @@ def make_evaluation(config, load_zoo=False):
                 last_done=done_batch,
                 last_all_done=all_done,
                 hstate=ActorCriticHiddenState(
-                    actor=actor_hstate, 
-                    critic=critic_hstate
+                    actor=actor_hstate,
+                    critic=None
                 ),
                 update_step=runner_state.update_step,
                 rng=rng,

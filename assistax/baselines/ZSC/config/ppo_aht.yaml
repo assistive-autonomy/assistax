@@ -13,16 +13,16 @@ ENV_KWARGS:
     joint_restriction_factor: 1.0
     joint_strength: 1.0
     tremor_magnitude: 0.0
-TOTAL_TIMESTEPS: 1e6
-NUM_STEPS: 64
+TOTAL_TIMESTEPS: 4e7
+NUM_STEPS: 64 
 NUM_ENVS: 1024
-NUM_SEEDS: 4
-SEED: 0
-NUM_EVAL_EPISODES: 12 
+NUM_SEEDS: 16 
+SEED: 0 
+NUM_EVAL_EPISODES: 32 
 
 # RL HYPERPARAMETERS
-ALGORITHM: IPPO
-PARTNER_ALGORITHMS: ["IPPO", "MAPPO"]
+ALGORITHM: PPO
+PARTNER_ALGORITHMS: ["IPPO", "MAPPO", "MASAC"]
 UPDATE_EPOCHS: 4
 NUM_MINIBATCHES: 4
 ANNEAL_LR: False
@@ -36,21 +36,67 @@ GAE_LAMBDA: 0.95
 VF_COEF: 1.0
 MAX_GRAD_NORM: 0.5
 ADAM_EPS: 1e-8
+SPLIT_RATIO: 0.25 # The train/test split ratio e.g. 0.2 means 20% train, 80% test
+
+# When present and not null, replaces SPLIT_RATIO with extreme-based selection.
+# When absent/commented out, the existing random SPLIT_RATIO split is used.
+EXTREME_SPLIT:
+  num_extreme: 5          # Number of extreme agents to select (total)
+  role: "train"             # Where extreme agents go: "test" or "train"
+  mode: "single"           # Selection mode: "single", "multi", or "composite"
+
+  # --- mode: "single" ---
+  # Select top/bottom agents along ONE preference dimension
+  column: "w_speed"        # Which preference column to rank by
+  end: "max"              # "min", "max", or "both" (default). "both" selects num_extreme/2 from each end
+
+  #--- mode: "multi" ---
+  #Select top/bottom agents along MULTIPLE dimensions independently.
+  #Total extreme agents = num_extreme * len(columns) (deduplicated).
+  columns:
+    - column: "w_force"
+      end: "both"
+    - column: "w_speed"
+      end: "max"
+
+  #--- mode: "composite" ---
+  #Rank agents by Euclidean distance from centroid across preference dimensions.
+  #Selects the num_extreme most "extreme" agents overall.
+  dimensions: ["w_speed", "w_force", "w_touch"]  # optional, defaults to all 3
 
 # COMPUTE OPTIONS
 GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False
 DEVICE: 0
+PRINT_MEMORY_STATS: True
+SAVE_METRICS: True
+COLLECT_PARTNER_DATA: False
 
 # ZOO SETTINGS
-ZOO_PATH: ./path/to/assistax/zoo
+ZOO_PATH: /pvc/assistax/zoo
+
+# Visualization settings
+SAVE_MUJOCO_TRAJECTORIES: True
+SAVE_HTML_RENDER: False 
+RENDER_VIDEOS: False 
+VIDEO_FPS: 30
+VIDEO_WIDTH: 1920
+VIDEO_HEIGHT: 1080
+VIDEO_QUALITY: "high"
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}
+
+# WandB Params
+ALG: PPO_AHT
+ENTITY: "lh-from-kb"
+PROJECT: "assistax-dev"
+WANDB_MODE: "online"
+EXP_TAGS: ["ZSC","PPO","AHT"]
 
 hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/ZSC/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED}
+    dir: multirun/ZSC/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}

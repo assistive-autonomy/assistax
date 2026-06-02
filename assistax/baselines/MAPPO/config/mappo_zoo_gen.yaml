@@ -13,18 +13,25 @@ ENV_KWARGS:
     joint_restriction_factor: 1.0
     joint_strength: 1.0
     tremor_magnitude: 0.0
-  #TOTAL_TIMESTEPS: 30e6
-  #NUM_STEPS: 256
-  #NUM_ENVS: 512
-  #NUM_SEEDS: 1
-  #SEED: 0
-  #NUM_EVAL_EPISODES: 64
-TOTAL_TIMESTEPS: 1e3
+  preference_rewards:
+    preference_weights:
+      speed_preference: 0.25
+      force_preference: 0.35
+      touch_penalty: -0.03
+    preference_ranges:
+      speed_range: [0.06, 0.14]
+      force_range: [1.5, 3.5]
+    touch_threshold: 0.3
+    variable_names:
+      speed: "ee_speed"
+      force: "ee_force"
+
+TOTAL_TIMESTEPS: 30e6
 NUM_STEPS: 256
-NUM_ENVS: 1
-NUM_SEEDS: 3
+NUM_ENVS: 1024
+NUM_SEEDS: 1 
 SEED: 0
-NUM_EVAL_EPISODES: 2
+NUM_EVAL_EPISODES: 5
 
 # RL HYPERPARAMETERS
 ALGORITHM: MAPPO
@@ -49,14 +56,39 @@ DISABLE_JIT: False
 DEVICE: 0
 
 # ZOO SETTINGS
-ZOO_PATH: ./path/to/zoo
+ZOO_PATH: /home/lhin/assistax/zoo
 
+# Preference sweep for diverse zoo generation
+# Remove/comment out to disable preference vmapping
+PREFERENCE_SWEEP:
+  num_configs: 4
+  w_speed:
+    min: 0.05
+    max: 0.8
+  w_force:
+    min: 0.05
+    max: 0.8
+  w_touch:
+    min: -0.3
+    max: -0.01
+  speed_range_min:
+    min: 0.01
+    max: 0.15
+  speed_range_max:
+    min: 0.05
+    max: 0.40
+  force_range_min:
+    min: 0.5
+    max: 4.0
+  force_range_max:
+    min: 2.0
+    max: 10.0
 
 hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/mabrax/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED}
+    dir: multirun/mabrax/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: prefrew_s${ENV_KWARGS.preference_rewards.preference_weights.speed_preference}_f${ENV_KWARGS.preference_rewards.preference_weights.force_preference}_t${ENV_KWARGS.preference_rewards.preference_weights.touch_penalty}

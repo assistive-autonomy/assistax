@@ -47,7 +47,7 @@ class ScratchItch(PipelineEnv):
         backend="mjx",
         **kwargs
     ):
-        """Creates a Hopper environment.
+        """Creates a ScratchItch environment.
 
         Args:
           ctrl_cost_weight: Weight for the control cost.
@@ -68,6 +68,8 @@ class ScratchItch(PipelineEnv):
                     "opt.ls_iterations": 4,
                 }
             )
+
+        self.n_agents = 2
 
         self.panda_actuators_ids = []
         self.humanoid_actuators_ids = []
@@ -158,7 +160,10 @@ class ScratchItch(PipelineEnv):
                 "arm": scratch_arm,
                 "arm_geom_idx": scratch_arm_geom_idx,
                 "pos": scratch_pos,
-            }
+            },
+            "ee_speed": 0.0, # add for preference tracking
+            "ee_force": 0.0,
+            "action_magnitude": 0.0,
         }
 
         pipeline_state = self.pipeline_init(qpos, qvel)
@@ -187,7 +192,7 @@ class ScratchItch(PipelineEnv):
         metrics = {
             "reward_dist": zero,
             "reward_ctrl": zero,
-            "reward_scratching": zero
+            "reward_scratching": zero,
         }
         return State(pipeline_state, obs, reward, done, metrics, info)
 
@@ -223,8 +228,9 @@ class ScratchItch(PipelineEnv):
             human_obs["human_joint_angles"],           
         ))
         
-        dist = -robo_obs["distance_to_target"]
+        dist = -robo_obs["distance_to_target"] # Why the double negative? I guess this is squared away anyways?
         r_dist = jp.exp(-dist**2/self._dist_scale)
+
         # This reward should mimick scratching but I'm not sure the scale is correct i.e. 0.005 might be too large or too small of a distance
         scratcher_vel = (
             pipeline_state.site_xpos[self.panda_scratcher_tip_idx] - pipeline_state0.site_xpos[self.panda_scratcher_tip_idx]
@@ -233,7 +239,7 @@ class ScratchItch(PipelineEnv):
         scratcher_force = jp.linalg.norm(human_obs["force_on_human"])
         # Chosen Boltzmann-like reward functions for scratcher speed and force, but we could swap with alternatives.
         r_scratching = (
-                (r_dist < self._dist_scale)
+                (jp.abs(dist) < self._dist_scale)
                 * scratcher_speed/self._target_scratcher_speed * jp.exp(-scratcher_speed/self._target_scratcher_speed)
                 * scratcher_force/self._target_scratcher_force * jp.exp(-scratcher_force/self._target_scratcher_force)
         )
@@ -244,6 +250,12 @@ class ScratchItch(PipelineEnv):
             reward_dist = r_dist,
             reward_ctrl = ctrl_cost,
             reward_scratching = r_scratching
+        )
+
+        state.info.update(
+            ee_speed=scratcher_speed,
+            ee_force=scratcher_force,
+            action_magnitude=jp.linalg.norm(action),
         )
 
         return state.replace(
@@ -333,3 +345,4 @@ class ScratchItch(PipelineEnv):
             )
         )
         return self.sys.replace(geom_pos=self.sys.geom_pos.at[target_idx].set(new_pos))
+    

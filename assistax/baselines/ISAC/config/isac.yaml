@@ -3,17 +3,18 @@ defaults:
   - _self_
 
 ENV_NAME: scratchitch
+ALG: ISAC
 ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
   het_reward: False
   backend: mjx
-  disability:
-    joint_idx: 13
-    joint_restriction_factor:   1.0
-    joint_strength: 1.0
-    tremor_magnitude: 0.0
-TOTAL_TIMESTEPS: 1e6
+  #disability:
+  #  joint_idx: 13
+  #  joint_restriction_factor:   1.0
+  #  joint_strength: 1.0
+  #  tremor_magnitude: 0.0
+TOTAL_TIMESTEPS: 10e6
 
 # NUM_STEPS: 256
 NUM_ENVS: 32
@@ -53,8 +54,17 @@ TARGET_ENTROPY_SCALE: 5.0  # scale factor for target entropy (when auto-tuning)
 INIT_ALPHA: 0.1  # initial entropy value when not using autotune
 
 # WANDB
-WANDB_GROUP: scratchitch
-WANDB_RUN: test
+ENTITY: "lh-from-kb"
+PROJECT: "assistax-dev"
+WANDB_MODE: "online"
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}
+EXP_TAGS: ["ISAC","FF","NoPS","NoPref"]
+
+# VISUALIZATION
+SAVE_HTML_RENDER: False
+SAVE_MUJOCO_TRAJECTORIES: False
+RENDER_VIDEOS: False
+PRINT_MEMORY_STATS: True
 
 # COMPUTE OPTIONS
 GPU_ENV_CAPACITY: 8192
@@ -87,8 +97,8 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/mabrax/${ENV_NAME}/${ALG}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/mabrax/${ENV_NAME}/${ALG}/${network.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ""
 

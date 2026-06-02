@@ -34,9 +34,7 @@ import assistax
 from assistax.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper
 
 
-# ============================================================================
-# NEURAL NETWORK ARCHITECTURES
-# ============================================================================
+# ================================ NETWORK ARCHITECTURE ================================
 
 class ScannedRNN(nn.Module):
     """
@@ -215,9 +213,7 @@ class CriticRNN(nn.Module):
         return hstate, jnp.squeeze(critic, axis=-1)
 
 
-# ============================================================================
-# DATA STRUCTURES
-# ============================================================================
+# ================================ DATA STRUCTURES ================================
 
 class Transition(NamedTuple):
     """Single transition data structure for PPO training."""
@@ -286,6 +282,7 @@ class EvalInfo(NamedTuple):
     obs: Optional[jnp.ndarray]
     info: Optional[jnp.ndarray]
     avail_actions: Optional[jnp.ndarray]
+    env_metrics: Optional[Dict[str, jnp.ndarray]]
 
 
 @struct.dataclass
@@ -300,11 +297,10 @@ class EvalInfoLogConfig:
     obs: bool = True
     info: bool = True
     avail_actions: bool = True
+    env_metrics: bool = True
 
 
-# ============================================================================
-# UTILITY FUNCTIONS FOR PARAMETER SHARING
-# ============================================================================
+# ================================ UTILITY FUNCTIONS FOR PARAMETER SHARING ================================
 
 def batchify(qty: Dict[str, jnp.ndarray], agents: Sequence[str]) -> jnp.ndarray:
     """
@@ -340,9 +336,7 @@ def unbatchify(qty: jnp.ndarray, agents: Sequence[str]) -> Dict[str, jnp.ndarray
     return dict(zip(agents, jnp.split(qty, len(agents))))
 
 
-# ============================================================================
-# TRAINING FUNCTION
-# ============================================================================
+# ================================ TRAINING FUNCTION ================================
 
 def make_train(config, save_train_state=False):
     """
@@ -893,9 +887,7 @@ def make_train(config, save_train_state=False):
     return train
 
 
-# ============================================================================
-# EVALUATION FUNCTION
-# ============================================================================
+# ================================ EVALUATION FUNCTION ================================
 
 def make_evaluation(config):
     """
@@ -978,7 +970,7 @@ def make_evaluation(config):
                 jnp.expand_dims(runner_state.last_done, 0),
                 jnp.expand_dims(avail_actions, 0),
             )
-
+            
             # Select actions using shared policy
             actor_hstate, pi = runner_state.train_state.actor.apply_fn(
                 runner_state.train_state.actor.params,
@@ -1030,8 +1022,9 @@ def make_evaluation(config):
                 obs=(obs_batch if log_eval_info.obs else None),
                 info=(info if log_eval_info.info else None),
                 avail_actions=(avail_actions if log_eval_info.avail_actions else None),
+                env_metrics=(env_state.env_state.metrics if log_eval_info.env_metrics else None),
             )
-            
+
             # Update runner state
             runner_state = RunnerState(
                 train_state=runner_state.train_state,
@@ -1040,7 +1033,7 @@ def make_evaluation(config):
                 last_done=done_batch,
                 last_all_done=all_done,
                 hstate=ActorCriticHiddenState(
-                    actor=actor_hstate, 
+                    actor=actor_hstate,
                     critic=critic_hstate
                 ),
                 update_step=runner_state.update_step,
@@ -1048,7 +1041,7 @@ def make_evaluation(config):
             )
             return runner_state, eval_info
             
-        # Run evaluation
+        # Run evaluation:w
         _, eval_info = jax.lax.scan(_env_step, runner_state, None, max_steps)
         return eval_info
         

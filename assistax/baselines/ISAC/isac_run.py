@@ -8,11 +8,13 @@ multi-agent reinforcement learning algorithm based on Soft Actor-Critic (SAC).
 import os
 import sys
 import time
+from datetime import datetime
 from typing import Dict, List, Tuple, Any, Optional, Sequence
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+import wandb
 import hydra
 from omegaconf import OmegaConf
 from tqdm import tqdm
@@ -22,7 +24,9 @@ import safetensors.flax
 import assistax
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    _tree_shape, _stack_tree, _concat_tree, _tree_split,
+    upload_eval_data_to_wandb, log_all_metrics, upload_model_parameters_to_wandb,
+    print_memory_stats
     )
 
 # ============================================================================
@@ -294,6 +298,7 @@ def _run_comprehensive_evaluation(config: Dict, training_results: Dict) -> Dict:
         obs=False,
         info=False,
         avail_actions=False,
+        env_metrics=True,
     )
     
     # JIT compile evaluation
@@ -394,10 +399,39 @@ def main(config):
     # ========================================================================
     
     config = OmegaConf.to_container(config, resolve=True)
+
+    # ===== WANDB LOGGING =====
+    now = datetime.now()
+    param_sharing = config["network"]["agent_param_sharing"]
+    ps_tag = "ps" if param_sharing else "nps"
+    rec_config = config["network"]["recurrent"]
+    rec_tag = "rnn" if rec_config else "ff"
+
+    env_name = (
+        config.get("ENV_NAME")
+        if config.get("MAP_NAME") is None
+        else config.get("MAP_NAME")
+    )
+    env_name = env_name.lower()
+    alg_name = config.get("ALG").lower()
+    name = f"{alg_name}_{ps_tag}_{rec_tag}_{env_name}_{config['EXP_ID']}_seed{config['SEED']}"
+    tags = [config["EXP_ID"]] + config.get("EXP_TAGS") + [env_name] + [alg_name]
+    config["EXP_TAGS"] = tags
+    run = wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=tags,
+        config=config,
+        mode=config["WANDB_MODE"],
+        reinit=True,
+        name=name,
+        save_code=True,
+    )
+
     print("="*80)
     print("ISAC TRAINING & EVALUATION STARTED")
     print("="*80)
-    
+
     total_start_time = time.time()
     
     # ========================================================================
@@ -440,13 +474,28 @@ def main(config):
     
     try:
         performance_analysis = _analyze_performance(evaluation_results)
-        
+
     except Exception as e:
         print(f"Error during ISAC performance analysis: {e}")
         raise
-    
 
-    
+    # ========================================================================
+    # WANDB LOGGING
+    # ========================================================================
+
+    print("Logging metrics to wandb...")
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    log_all_metrics(config, training_results["training_results"], evaluation_results["evals"], env)
+    upload_eval_data_to_wandb(evaluation_results["evals"], config, run)
+    upload_model_parameters_to_wandb(
+        training_results["training_results"]["metrics"]["actor_train_state"],
+        training_results["training_results"]["runner_state"].train_states.actor,
+        config, env, run
+    )
+
+    if config.get("PRINT_MEMORY_STATS", False):
+        print_memory_stats(f"ISAC: Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']}")
+
     # ========================================================================
     # FINAL SUMMARY
     # ========================================================================

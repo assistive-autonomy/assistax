@@ -15,6 +15,7 @@ for each agent, providing stable learning in continuous control AHT scenarios.
 """
 
 import os
+os.environ.setdefault('MUJOCO_GL', 'egl')
 import sys
 import time
 from tqdm import tqdm
@@ -35,12 +36,19 @@ from assistax.wrappers.aht import ZooManager
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict
+import wandb
+from datetime import datetime
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    _tree_shape, _stack_tree, _concat_tree, _tree_split,
+    log_all_metrics_zsc, upload_eval_data_to_wandb,
+    upload_model_parameters_to_wandb, upload_html_visualizations_to_wandb,
+    upload_mujoco_trajectories_to_wandb, upload_mujoco_videos_to_wandb,
     )
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
-
+os.environ['XLA_FLAGS'] = (
+    '--xla_gpu_triton_gemm_any=True ' # As recommended by MJX for better performance on NVIDIA GPUs
+)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -75,7 +83,27 @@ def main(config):
     from MASAC.masac_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
     print("Using: Multi-Agent Soft Actor-Critic with separate actor and dual Q-networks")
 
- # ===== TRAINING SETUP =====
+    # ===== WANDB INIT =====
+    now = datetime.now()
+    ps_tag = "ps" if config["network"]["agent_param_sharing"] else "nps"
+    rec_tag = "rnn" if config["network"]["recurrent"] else "ff"
+    env_name = config.get("ENV_NAME", "").lower()
+    alg_name = config.get("ALG", "SAC_AHT").lower()
+    name = f"{alg_name}_{ps_tag}_{rec_tag}_{env_name}_{config['EXP_ID']}_seed{config['SEED']}"
+    tags = [config["EXP_ID"]] + config.get("EXP_TAGS", []) + [env_name] + [alg_name]
+    config["EXP_TAGS"] = tags
+    run = wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=tags,
+        config=config,
+        mode=config["WANDB_MODE"],
+        reinit=True,
+        name=name,
+        save_code=True,
+    )
+
+    # ===== TRAINING SETUP =====
     rng = jax.random.PRNGKey(config["SEED"])
     train_rng, eval_rng = jax.random.split(rng)
     train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
@@ -107,10 +135,24 @@ def main(config):
         # Critical for measuring zero-shot generalization capability
         all_partners = pd.concat(partner_dict.values(), ignore_index=True)
         print(f"Total partners across all algorithms: {len(all_partners)}")
-   
-        # Do a single 50/50 split across all partners
-        train_partners = all_partners.sample(frac=0.5, random_state=42)  # Set random_state for reproducibility
-        test_partners = all_partners.drop(train_partners.index)
+
+        if "EXTREME_SPLIT" in config and config["EXTREME_SPLIT"] is not None:
+            # Extreme-based split
+            from assistax.baselines.ZSC.aht_utils import split_partners_extreme
+            extreme_cfg = config["EXTREME_SPLIT"]
+            extreme_set, remainder_set = split_partners_extreme(all_partners, extreme_cfg)
+
+            role = extreme_cfg.get("role", "test")
+            if role == "test":
+                test_partners, train_partners = extreme_set, remainder_set
+            else:
+                train_partners, test_partners = extreme_set, remainder_set
+
+            print(f"Extreme split: {len(extreme_set)} extreme agents -> {role} set")
+        else:
+            # Original random split
+            train_partners = all_partners.sample(frac=config["SPLIT_RATIO"], random_state=42)
+            test_partners = all_partners.drop(train_partners.index)
 
         # Split back into algorithm-specific dictionaries
         train_set = {}
@@ -122,8 +164,8 @@ def main(config):
             print(f" {algo}: {len(train_set[algo])} train, {len(test_set[algo])} test partners")
 
         # Create zoo loading dictionaries for training and testing
-        load_zoo_dict_train = {algo: {"human": list(train_set[algo].agent_uuid)} for algo in partner_dict.keys()}
-        load_zoo_dict_test = {algo: {"human": list(test_set[algo].agent_uuid)} for algo in partner_dict.keys()}
+        load_zoo_dict_train = {algo: {"human": list(train_set[algo].agent_uuid)} for algo in partner_dict.keys() if len(train_set[algo]) > 0}
+        load_zoo_dict_test = {algo: {"human": list(test_set[algo].agent_uuid)} for algo in partner_dict.keys() if len(test_set[algo]) > 0}
 
         print(f"Training against {sum(len(train_set[algo]) for algo in train_set)} diverse partners")
         print(f"Testing against {sum(len(test_set[algo]) for algo in test_set)} unseen partners")
@@ -155,7 +197,7 @@ def main(config):
         print("Saving training results...")
         
         # Save training metrics (excluding large training states)
-        EXCLUDED_METRICS = ["train_state"]
+        EXCLUDED_METRICS = ["actor_train_state", "q1_train_state", "q2_train_state"]
         jnp.save("metrics.npy", {
             key: val
             for key, val in out["metrics"].items()
@@ -165,30 +207,10 @@ def main(config):
         )
 
         # Save model parameters
-        all_train_states = out["metrics"]["train_state"]
-        final_train_state = out["runner_state"].train_state
-        
-        safetensors.flax.save_file(
-            flatten_dict(all_train_states.params, sep='/'),
-            "all_params.safetensors"
-        )
-        
-        if config["network"]["agent_param_sharing"]:
-            # For parameter sharing: single set of shared parameters
-            safetensors.flax.save_file(
-                flatten_dict(final_train_state.params, sep='/'),
-                "final_params.safetensors"
-            )
-        else:
-            # For independent parameters: split by agent
-            split_params = _unstack_tree(
-                jax.tree.map(lambda x: x.swapaxes(0, 1), final_train_state.params)
-            )
-            for agent, params in zip(env.agents, split_params):
-                safetensors.flax.save_file(
-                    flatten_dict(params, sep='/'),
-                    f"{agent}.safetensors",
-                )
+        all_train_states = out["metrics"]["actor_train_state"]
+        final_train_state = out["runner_state"].train_states.actor
+
+        upload_model_parameters_to_wandb(all_train_states, final_train_state, config, env, run)
 
         # ===== GENERALIZATION EVALUATION SETUP =====
         print("Setting up generalization evaluation...")
@@ -223,7 +245,6 @@ def main(config):
             env_state=False,
             done=True,
             action=False,
-            value=False,
             reward=True,
             log_prob=False,
             obs=False,
@@ -278,11 +299,104 @@ def main(config):
         jnp.save("train_returns.npy", train_mean_episode_returns)
         jnp.save("test_returns.npy", test_mean_episode_returns)
 
+        # ===== WANDB METRIC LOGGING =====
+        log_all_metrics_zsc(config, out, evals_train, evals_test, env)
+        upload_eval_data_to_wandb(evals_train, config, run, suffix="_train_partners")
+        upload_eval_data_to_wandb(evals_test, config, run, suffix="_test_partners")
+
         # ===== GENERALIZATION ANALYSIS =====
         print("\nAd Hoc Teamwork Results Summary:")
         print(f"Performance with training partners: {train_mean_episode_returns.mean():.2f} ± {train_mean_episode_returns.std():.2f}")
         print(f"Performance with test partners: {test_mean_episode_returns.mean():.2f} ± {test_mean_episode_returns.std():.2f}")
-        
+
+        # ===== VISUALIZATION AND RENDERING =====
+        print("Creating episode visualizations...")
+
+        render_log_config = EvalInfoLogConfig(
+            env_state=True,
+            done=True,
+            action=False,
+            reward=True,
+            log_prob=False,
+            obs=False,
+            info=False,
+            avail_actions=False,
+        )
+
+        # Free memory before rendering
+        print("Freeing memory before rendering...")
+        del out
+        del evals_train
+        del evals_test
+        del all_train_states
+        del split_trainstate
+        time.sleep(5)
+
+        import gc
+        gc.collect()
+        jax.clear_caches()
+
+        # Render using train-partner eval environment
+        render_eval_env, render_run_eval = make_evaluation(config, load_zoo=load_zoo_dict_train)
+        render_config = config
+        render_config["NUM_EVAL_EPISODES"] = 1
+        render_eval_jit = jax.jit(
+            render_run_eval,
+            static_argnames=["log_eval_info"],
+        )
+        eval_final = render_eval_jit(eval_rng, _tree_take(final_train_state, 0, axis=0), render_log_config)
+
+        # Select worst, median, best episodes
+        first_episode_done = jnp.cumsum(eval_final.done["__all__"], axis=0, dtype=bool)
+        first_episode_rewards = eval_final.reward["__all__"] * (1 - first_episode_done)
+        first_episode_returns = first_episode_rewards.sum(axis=0)
+        episode_argsort = jnp.argsort(first_episode_returns, axis=-1)
+
+        worst_idx = episode_argsort.take(0, axis=-1)
+        best_idx = episode_argsort.take(-1, axis=-1)
+        median_idx = episode_argsort.take(episode_argsort.shape[-1] // 2, axis=-1)
+
+        worst_episode = _take_episode(
+            eval_final.env_state.env_state.pipeline_state, first_episode_done,
+            time_idx=-1, eval_idx=worst_idx,
+        )
+        median_episode = _take_episode(
+            eval_final.env_state.env_state.pipeline_state, first_episode_done,
+            time_idx=-1, eval_idx=median_idx,
+        )
+        best_episode = _take_episode(
+            eval_final.env_state.env_state.pipeline_state, first_episode_done,
+            time_idx=-1, eval_idx=best_idx,
+        )
+        episodes_dict = {
+            'worst': worst_episode,
+            'median': median_episode,
+            'best': best_episode,
+        }
+
+        if config.get("SAVE_HTML_RENDER", True):
+            upload_html_visualizations_to_wandb(render_eval_env, episodes_dict, run)
+
+        if config.get("SAVE_MUJOCO_TRAJECTORIES", True):
+            upload_mujoco_trajectories_to_wandb(render_eval_env, episodes_dict, run)
+
+        if config.get("RENDER_VIDEOS", False):
+            try:
+                upload_mujoco_videos_to_wandb(
+                    render_eval_env,
+                    episodes_dict,
+                    run,
+                    fps=config.get("VIDEO_FPS", 30),
+                    quality=config.get("VIDEO_QUALITY", "high"),
+                    width=config.get("VIDEO_WIDTH", 1280),
+                    height=config.get("VIDEO_HEIGHT", 720),
+                )
+            except Exception as e:
+                print(f"Warning: Video rendering failed: {e}")
+                print("Continuing without videos...")
+
+        print("\nTraining and evaluation completed successfully!")
+
 if __name__ == "__main__":
     main()
 

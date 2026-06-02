@@ -1,3 +1,4 @@
+name: rnn_ps
 recurrent: true
 agent_param_sharing: true
 embedding_dim: 128

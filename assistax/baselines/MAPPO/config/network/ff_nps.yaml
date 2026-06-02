@@ -1,3 +1,4 @@
+name: ff_nps
 recurrent: false
 agent_param_sharing: false
 actor_hidden_dim: 128

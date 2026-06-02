@@ -1,9 +1,23 @@
-# Byte-compiled / optimized / DLL files
+#
+zoo/
+*/zoo/
+
+*/figs/
+figs/
+*/figs/*
+*/baselines/figs/
+assistax/baselines/MAPPO/config/mappo_zoo_gen.yaml
+assistax/baselines/figs/*.pdf
+assistax/baselines/paper_plots_notebook.ipynb
+MUJOCO_LOG.TXT
+MUJOCO_LOG.txt
+
+*.safetensors Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
-*.ipynb
+#*.ipynb
 *.DS_Store
 .vscode/
 .ipynb_checkpoints/
@@ -13,12 +27,19 @@ results/
 tmp/
 *-checkpoint.py
 wandb/
+wandb_structured_artifacts/
 outputs/
 models/
 multirun/
 *.npy
-*.sh
 *.png
+CLAUDE.md
+
+zoo*/
+*zoo/
+*zoo*/
+
+*.csv
 
 # Build outputs
 build/
@@ -32,3 +53,29 @@ node_modules/
 # Environment
 .env.local
 .env.production
+.claude 
+
+# Agent Zoo
+zoo/
+
+## Configs 
+#config/
+#*/config/
+#**/config/
+#**/config/**
+
+slurm/
+*/slurm/
+
+*.out
+
+MUJOCO_LOG.TXT
+MUJOCO_LOG.txt
+
+*.safetensors
+
+wandb_download_project.py
+
+*/wandb_project_artifacts/*
+
+*/zoo_assistax/*

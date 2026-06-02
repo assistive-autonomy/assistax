@@ -165,6 +165,7 @@ class EvalInfo(NamedTuple):
     obs: Optional[jnp.ndarray]
     info: Optional[jnp.ndarray]
     avail_actions: Optional[jnp.ndarray]
+    env_metrics: Optional[Dict[str, jnp.ndarray]]
 
 
 @struct.dataclass
@@ -179,6 +180,7 @@ class EvalInfoLogConfig:
     obs: bool = True
     info: bool = True
     avail_actions: bool = True
+    env_metrics: bool = True
 
 
 # ================================ UTILITY FUNCTIONS ================================

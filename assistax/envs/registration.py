@@ -8,6 +8,9 @@ from assistax.envs.base_env import (
     BedBathing,
     ArmManipulation,
     PushCoop,
+    CooperativeHandover,
+    Feeding,
+    TeethBrushing,
 )
 
 def make(env_id: str, **env_kwargs):
@@ -22,6 +25,12 @@ def make(env_id: str, **env_kwargs):
         env = ArmManipulation(**env_kwargs)
     elif env_id == "pushcoop":
         env = PushCoop(**env_kwargs)    
+    elif env_id == "handover":
+        env = CooperativeHandover(**env_kwargs)
+    elif env_id == "feeding":
+        env = Feeding(**env_kwargs)
+    elif env_id == "teethbrushing":
+        env = TeethBrushing(**env_kwargs)
 
     return env
    
@@ -30,4 +39,7 @@ registered_envs = [
     "bedbathing",
     "armmanipulation",
     "pushcoop",
+    "handover",
+    "feeding",
+    "teethbrushing",
 ]

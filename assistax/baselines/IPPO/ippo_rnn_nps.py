@@ -18,8 +18,8 @@ from flax.training.train_state import TrainState
 import optax
 import distrax
 import assistax
-from assistax.wrappers.baselines import  get_space_dim, LogEnvState, LogWrapper
-from assistax.wrappers.aht import ZooManager, LoadAgentWrapper
+from assistax.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper, LogCrossplayWrapper
+from assistax.wrappers.aht import ZooManager, LoadAgentWrapper, LoadEvalAgentWrapper
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict, Optional
@@ -217,6 +217,7 @@ class RunnerState(NamedTuple):
     hstate: jnp.ndarray                        # RNN hidden states for all agents
     update_step: int                           # Current update iteration
     rng: jnp.ndarray                          # Random number generator state
+    ag_idx: Optional[int] = None               # Agent index for crossplay evaluation
 
 
 class UpdateState(NamedTuple):
@@ -248,6 +249,9 @@ class EvalInfo(NamedTuple):
     obs: Optional[jnp.ndarray]
     info: Optional[jnp.ndarray]
     avail_actions: Optional[jnp.ndarray]
+    ag_idx: Optional[jnp.ndarray]
+    env_metrics: Optional[Dict[str, Any]]   
+    
 
 
 @struct.dataclass
@@ -262,6 +266,7 @@ class EvalInfoLogConfig:
     obs: bool = True
     info: bool = True
     avail_actions: bool = True
+    env_metrics: bool = True
 
 
 # ================================ UTILITY FUNCTIONS ================================
@@ -296,19 +301,25 @@ def unbatchify(qty: jnp.ndarray, agents: Sequence[str]) -> Dict[str, jnp.ndarray
 
 # ================================ TRAINING FUNCTION ================================
 
-def make_train(config, save_train_state=False):
+def make_train(config, save_train_state=False, load_zoo=False):
     """
     Create a training function for IPPO with RNN networks.
-    
+
     Args:
         config: Configuration dictionary with all hyperparameters
         save_train_state: Whether to save training state in metrics
-        
+        load_zoo: Whether to load pre-trained agents from zoo
+
     Returns:
         Compiled training function
     """
     # Environment setup
-    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    if load_zoo:
+        zoo = ZooManager(config["ZOO_PATH"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
+    else:
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     
     # Configuration calculations
     config["NUM_UPDATES"] = (
@@ -745,128 +756,210 @@ def make_train(config, save_train_state=False):
 
 # ================================ EVALUATION FUNCTION ================================
 
-def make_evaluation(config):
+def make_evaluation(config, load_zoo=False, crossplay=False):
     """
     Create an evaluation function for trained RNN-based IPPO agents.
-    
+
     Args:
         config: Configuration dictionary
-        
+        load_zoo: Whether to load agents from zoo
+        crossplay: Whether to enable crossplay evaluation
+
     Returns:
         Tuple of (environment, evaluation_function)
     """
     # Environment setup
-    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    config["OBS_DIM"] = get_space_dim(env.observation_space(env.agents[0]))
-    config["ACT_DIM"] = get_space_dim(env.action_space(env.agents[0]))
-    env = LogWrapper(env, replace_info=True)
+    if load_zoo:
+        zoo = ZooManager(config["ZOO_PATH"])
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        if crossplay:
+            env = LoadEvalAgentWrapper.load_from_zoo(env, zoo, load_zoo)
+        else:
+            env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
+    else:
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+
+    config["OBS_DIM"] = int(get_space_dim(env.observation_space(env.agents[0])))
+    config["ACT_DIM"] = int(get_space_dim(env.action_space(env.agents[0])))
+
+    if crossplay:
+        env = LogCrossplayWrapper(env, replace_info=True, crossplay_info=crossplay)
+    else:
+        env = LogWrapper(env, replace_info=True)
+
     max_steps = env.episode_length
 
-    def run_evaluation(rng, train_state, log_eval_info=EvalInfoLogConfig()):
+    def run_evaluation(rngs, train_state, log_eval_info=EvalInfoLogConfig()):
         """
         Run evaluation episodes with trained RNN agents.
-        
+
         Args:
-            rng: Random number generator key
+            rngs: Random number generator keys
             train_state: Trained model state
             log_eval_info: Configuration for what to log
-            
+
         Returns:
             Evaluation information from all episodes
         """
-        rng_reset, rng_env = jax.random.split(rng)
+        if crossplay:
+            rng_reset, rng_env = jax.random.split(rngs[0])
+        else:
+            rng_reset, rng_env = jax.random.split(rngs)
+
         rngs_reset = jax.random.split(rng_reset, config["NUM_EVAL_EPISODES"])
-        obsv, env_state = jax.vmap(env.reset)(rngs_reset)
         init_dones = jnp.zeros((env.num_agents, config["NUM_EVAL_EPISODES"]), dtype=bool)
-        
+
         # Initialize RNN hidden states for evaluation
         init_hstate = jnp.zeros(
             (env.num_agents, config["NUM_EVAL_EPISODES"], config["network"]["gru_hidden_dim"])
         )
-        
-        runner_state = RunnerState(
-            train_state=train_state,
-            env_state=env_state,
-            last_obs=obsv,
-            last_done=init_dones,
-            hstate=init_hstate,
-            update_step=0,
-            rng=rng_env,
-        )
 
-        def _env_step(runner_state, unused):
-            """Single environment step during evaluation."""
-            rng = runner_state.rng
-            
-            # Prepare inputs and get actions from RNN network
-            obs_batch = batchify(runner_state.last_obs, env.agents)
-            avail_actions = jax.vmap(env.get_avail_actions)(runner_state.env_state.env_state)
-            avail_actions = jax.lax.stop_gradient(
-                batchify(avail_actions, env.agents)
+        # Initialize evaluation state
+        if crossplay:
+            init_obsv, init_env_state = jax.vmap(env.reset, in_axes=(0, None))(rngs_reset, None)
+            init_runner_state = RunnerState(
+                train_state=train_state,
+                env_state=init_env_state,
+                last_obs=init_obsv,
+                last_done=init_dones,
+                hstate=init_hstate,
+                update_step=0,
+                rng=rng_env,
+                ag_idx=init_env_state.env_state.ag_idx
             )
-            
-            # Add time dimension for RNN processing
-            ac_in = (
-                jnp.expand_dims(obs_batch, 1),
-                jnp.expand_dims(runner_state.last_done, 1),
-                jnp.expand_dims(avail_actions, 1),
+        else:
+            init_obsv, init_env_state = jax.vmap(env.reset)(rngs_reset)
+            init_runner_state = RunnerState(
+                train_state=train_state,
+                env_state=init_env_state,
+                last_obs=init_obsv,
+                last_done=init_dones,
+                hstate=init_hstate,
+                update_step=0,
+                rng=rng_env,
             )
-            
-            hstate, (actor_mean, actor_std), value = runner_state.train_state.apply_fn(
-                runner_state.train_state.params,
-                runner_state.hstate, ac_in,
-            )
-            
-            # Remove time dimension
-            value = value.squeeze(1)
-            actor_mean = actor_mean.squeeze(1)
-            actor_std = jnp.expand_dims(actor_std, axis=1)  # Add env batch dim
-            
-            pi = distrax.MultivariateNormalDiag(actor_mean, actor_std)
-            rng, act_rng = jax.random.split(rng)
-            action, log_prob = pi.sample_and_log_prob(seed=act_rng)
-            env_act = unbatchify(action, env.agents)
 
-            # Execute environment step
-            rng, _rng = jax.random.split(rng)
-            rng_step = jax.random.split(_rng, config["NUM_EVAL_EPISODES"])
-            obsv, env_state, reward, done, info = jax.vmap(env.step)(
-                rng_step, runner_state.env_state, env_act,
-            )
-            
-            done_batch = batchify(done, env.agents)
-            info = jax.tree_util.tree_map(lambda x: x.swapaxes(0, 1), info)
-            
-            # Log evaluation information based on configuration
-            eval_info = EvalInfo(
-                env_state=(env_state if log_eval_info.env_state else None),
-                done=(done if log_eval_info.done else None),
-                action=(action if log_eval_info.action else None),
-                value=(value if log_eval_info.value else None),
-                reward=(reward if log_eval_info.reward else None),
-                log_prob=(log_prob if log_eval_info.log_prob else None),
-                obs=(obs_batch if log_eval_info.obs else None),
-                info=(info if log_eval_info.info else None),
-                avail_actions=(avail_actions if log_eval_info.avail_actions else None),
-            )
-            
-            runner_state = RunnerState(
-                train_state=runner_state.train_state,
-                env_state=env_state,
-                last_obs=obsv,
-                last_done=done_batch,
-                hstate=hstate,  # Update RNN hidden state
-                update_step=runner_state.update_step,
-                rng=rng,
-            )
-            
-            return runner_state, eval_info
-        
-        _, eval_info = jax.lax.scan(
-            _env_step, runner_state, None, max_steps
-        )
+        def _run_episode(runner_state, episode_rng):
+            """Run a single evaluation episode."""
+            rng_reset, rng_env = jax.random.split(episode_rng)
+            rngs_reset = jax.random.split(rng_reset, config["NUM_EVAL_EPISODES"])
+            init_dones = jnp.zeros((env.num_agents, config["NUM_EVAL_EPISODES"]), dtype=bool)
 
-        return eval_info
-    
+            # Initialize RNN hidden states for this episode
+            init_hstate = jnp.zeros(
+                (env.num_agents, config["NUM_EVAL_EPISODES"], config["network"]["gru_hidden_dim"])
+            )
+
+            # Reset environment for episode
+            if crossplay:
+                obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(rngs_reset, runner_state.ag_idx)
+                runner_state = RunnerState(
+                    train_state=runner_state.train_state,
+                    env_state=env_state,
+                    last_obs=obsv,
+                    last_done=init_dones,
+                    hstate=init_hstate,
+                    update_step=runner_state.update_step,
+                    rng=rng_env,
+                    ag_idx=env_state.env_state.ag_idx
+                )
+            else:
+                obsv, env_state = jax.vmap(env.reset)(rngs_reset)
+                runner_state = RunnerState(
+                    train_state=runner_state.train_state,
+                    env_state=env_state,
+                    last_obs=obsv,
+                    last_done=init_dones,
+                    hstate=init_hstate,
+                    update_step=runner_state.update_step,
+                    rng=rng_env,
+                )
+
+            def _env_step(runner_state, unused):
+                """Single environment step during evaluation."""
+                rng = runner_state.rng
+
+                # Prepare inputs and get actions from RNN network
+                obs_batch = batchify(runner_state.last_obs, env.agents)
+                avail_actions = jax.vmap(env.get_avail_actions)(runner_state.env_state.env_state)
+                avail_actions = jax.lax.stop_gradient(
+                    batchify(avail_actions, env.agents)
+                )
+
+                # Add time dimension for RNN processing
+                ac_in = (
+                    jnp.expand_dims(obs_batch, 1),
+                    jnp.expand_dims(runner_state.last_done, 1),
+                    jnp.expand_dims(avail_actions, 1),
+                )
+
+                hstate, (actor_mean, actor_std), value = runner_state.train_state.apply_fn(
+                    runner_state.train_state.params,
+                    runner_state.hstate, ac_in,
+                )
+
+                # Remove time dimension
+                value = value.squeeze(1)
+                actor_mean = actor_mean.squeeze(1)
+                actor_std = jnp.expand_dims(actor_std, axis=1)  # Add env batch dim
+
+                pi = distrax.MultivariateNormalDiag(actor_mean, actor_std)
+                rng, act_rng = jax.random.split(rng)
+                action, log_prob = pi.sample_and_log_prob(seed=act_rng)
+                env_act = unbatchify(action, env.agents)
+
+                # Execute environment step
+                rng, _rng = jax.random.split(rng)
+                rng_step = jax.random.split(_rng, config["NUM_EVAL_EPISODES"])
+                obsv, env_state, reward, done, info = jax.vmap(env.step)(
+                    rng_step, runner_state.env_state, env_act,
+                )
+
+                done_batch = batchify(done, env.agents)
+                info = jax.tree_util.tree_map(lambda x: x.swapaxes(0, 1), info)
+                # Log evaluation information based on configuration
+                eval_info = EvalInfo(
+                    env_state=(env_state if log_eval_info.env_state else None),
+                    done=(done if log_eval_info.done else None),
+                    action=(action if log_eval_info.action else None),
+                    value=(value if log_eval_info.value else None),
+                    reward=(reward if log_eval_info.reward else None),
+                    log_prob=(log_prob if log_eval_info.log_prob else None),
+                    obs=(obs_batch if log_eval_info.obs else None),
+                    info=(info if log_eval_info.info else None),
+                    avail_actions=(avail_actions if log_eval_info.avail_actions else None),
+                    ag_idx=(runner_state.ag_idx if crossplay else None),
+                    env_metrics=(env_state.env_state.metrics if log_eval_info.env_metrics else None),
+                )
+
+                runner_state = RunnerState(
+                    train_state=runner_state.train_state,
+                    env_state=env_state,
+                    last_obs=obsv,
+                    last_done=done_batch,
+                    hstate=hstate,  # Update RNN hidden state
+                    update_step=runner_state.update_step,
+                    rng=rng,
+                    ag_idx=(runner_state.ag_idx if crossplay else None),
+                )
+
+                return runner_state, eval_info
+
+            runner_state, episode_eval_info = jax.lax.scan(
+                _env_step, runner_state, None, max_steps
+            )
+
+            return runner_state, episode_eval_info
+
+        # Run evaluation episodes
+        if crossplay:
+            runner_state, all_episode_eval_infos = jax.lax.scan(
+                _run_episode, init_runner_state, rngs
+            )
+        else:
+            runner_state, all_episode_eval_infos = _run_episode(init_runner_state, rngs)
+
+        return all_episode_eval_infos
+
     return env, run_evaluation
 

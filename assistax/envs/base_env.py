@@ -3,7 +3,7 @@
 
 from typing import Dict, Literal, Optional, Tuple
 import chex
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
+from assistax.envs.multi_agent_env import MultiAgentEnv
 from gymnax.environments import spaces
 # from brax import envs
 from assistax import envs 
@@ -38,6 +38,18 @@ _agent_action_mapping = {
         "robot1": jnp.array([0, 1, 2, 3, 4, 5, 6]),
         "robot2": jnp.array([7, 8, 9, 10, 11, 12, 13]),
     },
+    "handover": {
+        "robot1": jnp.array([0, 1, 2, 3, 4, 5, 6, 7]),
+        "robot2": jnp.array([8, 9, 10, 11, 12, 13, 14, 15]),
+    },
+    "feeding": {
+        "robot": jnp.array([19, 20, 21, 22, 23, 24, 25]),
+        "human": jnp.array([0, 1]), # head 
+    },
+    "teethbrushing": {
+        "robot": jnp.array([19, 20, 21, 22, 23, 24, 25]),
+        "human": jnp.array([0, 1]), # head 
+    },
 }
 
 
@@ -71,6 +83,23 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
         "robot1": [(0, 26)],
         "robot2": [(27, 53)],
         "global": [(0, 53)],
+    },
+
+    "handover": {
+        "robot1": [(0, 30), (62, 87)],    # Robot1 sees: itself + object + sensors + goals + phase
+        "robot2": [(31, 61), (62, 87)],   # Robot2 sees: itself + object + sensors + goals + phase
+        "global": [(0, 87)],
+    },
+
+    "feeding": {
+        "robot": [(0,21)],
+        "human": [(22, 54)],
+        "global": [(0,54)],
+    },
+    "teethbrushing": {
+        "robot": [(0,21)],
+        "human": [(22, 54)],
+        "global": [(0,54)],
     },
 }
 
@@ -125,6 +154,17 @@ class MABraxEnv(MultiAgentEnv):
         self.agent_action_mapping = _agent_action_mapping[env_name]
         self.agents = list(self.agent_action_mapping.keys())
         self.num_agents = len(self.agents)
+
+        # Extend obs mapping if preference obs are appended by PreferenceRewardWrapper
+        self._num_pref_obs = getattr(self.env, '_num_pref_obs', 0)
+        if self._num_pref_obs > 0:
+            base_obs_size = self.env.observation_size - self._num_pref_obs
+            pref_indices = jnp.arange(base_obs_size, self.env.observation_size)
+            self.agent_obs_mapping = {
+                agent: jnp.concatenate([indices, pref_indices])
+                for agent, indices in self.agent_obs_mapping.items()
+            }
+
         self.max_agent_obs_size = max(
             o.size 
             for a,o in self.agent_obs_mapping.items()
@@ -296,3 +336,15 @@ class ArmManipulation(MABraxEnv):
 class PushCoop(MABraxEnv):
     def __init__(self, **kwargs):
         super().__init__("pushcoop", **kwargs)
+
+class CooperativeHandover(MABraxEnv):
+    def __init__(self, **kwargs):
+        super().__init__("handover", **kwargs)
+
+class Feeding(MABraxEnv):
+    def __init__(self, **kwargs):
+        super().__init__("feeding", **kwargs)
+
+class TeethBrushing(MABraxEnv):
+    def __init__(self, **kwargs):
+        super().__init__("teethbrushing", **kwargs)
