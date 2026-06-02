@@ -28,9 +28,7 @@ import assistax
 from assistax.wrappers.baselines import  get_space_dim, LogEnvState, LogWrapper
 
 
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
+# ================================ UTILITY FUNCTIONS ================================
 
 def _tree_take(pytree, indices, axis=None):
     """Take elements from pytree along specified axis."""
@@ -137,9 +135,7 @@ def reshape_for_buffer(x):
     return x.reshape(timesteps * num_envs, *x.shape[2:])
 
 
-# ============================================================================
-# NEURAL NETWORK ARCHITECTURES
-# ============================================================================
+# ================================ NETWORK ARCHITECTURE ================================
 
 @functools.partial(
     nn.vmap,
@@ -287,9 +283,7 @@ class MultiSACQNetwork(nn.Module):
         return jnp.squeeze(x, axis=-1)
 
 
-# ============================================================================
-# DATA STRUCTURES
-# ============================================================================
+# ================================ DATA STRUCTURES ================================
 
 class Transition(NamedTuple):
     """Single transition for experience replay buffer."""
@@ -367,9 +361,7 @@ class EvalInfoLogConfig:
     env_metrics: bool = True
 
 
-# ============================================================================
-# MAIN TRAINING FUNCTION
-# ============================================================================
+# ================================ TRAINING FUNCTION ================================
 
 def make_train(config, save_train_state=True, dynamic_preferences=False):
     """
@@ -1154,9 +1146,7 @@ def make_train(config, save_train_state=True, dynamic_preferences=False):
     return train
 
 
-# ============================================================================
-# EVALUATION FUNCTION
-# ============================================================================
+# ================================ EVALUATION FUNCTION ================================
 
 def make_evaluation(config):
     """
