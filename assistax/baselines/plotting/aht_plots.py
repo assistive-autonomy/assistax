@@ -16,7 +16,7 @@ import matplotlib.ticker as ticker
 import numpy as np
 import wandb
 
-from assistax.baselines.paper_plots import (
+from assistax.baselines.plotting.paper_plots import (
     ALGO_COLORS,
     ALGO_MARKERS,
     DEFAULT_CACHE_DIR,
@@ -33,7 +33,7 @@ from assistax.baselines.paper_plots import (
     set_paper_style,
     subsample_curve,
 )
-from assistax.baselines.sweep_plots import bootstrap_ci_mean
+from assistax.baselines.plotting.sweep_plots import bootstrap_ci_mean
 from assistax.baselines.utils import _compute_episode_metrics, load_compact_npz
 
 # Distinct colours for train vs test curves in AHT plots.

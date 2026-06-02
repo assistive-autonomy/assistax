@@ -339,7 +339,7 @@ def main(config):
         if config.get("SAVE_HTML_RENDER", True):
             upload_html_visualizations_to_wandb(render_eval_env, episodes_dict, run)
 
-        if config.get("RENDER_MUJOCO_TRAJECTORIES", True):
+        if config.get("SAVE_MUJOCO_TRAJECTORIES", True):
             upload_mujoco_trajectories_to_wandb(render_eval_env, episodes_dict, run)
 
         # Conditionally upload rendered videos (larger files, immediate visual feedback)

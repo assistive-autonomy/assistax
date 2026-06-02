@@ -33,7 +33,7 @@ from assistax.baselines.utils import (
     print_memory_stats
     )
 
-from assistax.baselines.sweep_util import (
+from assistax.baselines.sweep_utils import (
     scan_completed_sweeps,
     config_already_run_sac,
     )

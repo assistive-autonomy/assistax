@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 
-from assistax.baselines.paper_plots import (
+from assistax.baselines.plotting.paper_plots import (
     ALGO_COLORS,
     ENV_DISPLAY_NAMES,
     PAPER_COLUMN_WIDTH,

@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import wandb
 
-from assistax.baselines.sweep_plots import bootstrap_ci_mean
+from assistax.baselines.plotting.sweep_plots import bootstrap_ci_mean
 from assistax.baselines.utils import load_compact_npz
 
 

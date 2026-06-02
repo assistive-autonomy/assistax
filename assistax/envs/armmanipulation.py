@@ -33,7 +33,9 @@ class ArmManipulation(PipelineEnv):
     def __init__(
         self,
         ctrl_cost_weight: float = 1e-6,
-        dist_reward_weight: float = 0.1,
+        dist_reward_weight: float = 1.0,
+        rot_scale: float = 0.1,
+        waist_scale: float = 10.0,
         dist_scale: float = 0.1,
         # wiping_reward_weight: float = 1.0,
         reset_noise_scale=5e-3,
@@ -137,7 +139,9 @@ class ArmManipulation(PipelineEnv):
 
         self._ctrl_cost_weight = ctrl_cost_weight
         self._dist_reward_weight = dist_reward_weight
-        
+        self._rot_scale = rot_scale
+        self._waist_scale = waist_scale
+
         self._dist_scale = dist_scale
         self._reset_noise_scale = reset_noise_scale
 
@@ -263,18 +267,15 @@ class ArmManipulation(PipelineEnv):
         # 1) inverse distance reward for end-effector to reach itch target (tanh minimises dist faster)
         hook_arm_dist = robo_obs["tool_target_dist_euclidean"]
         r_hook_dist = (1 - jp.tanh(hook_arm_dist / self._dist_scale))
-        self._dist_reward_weight = 1
 
         ang_dist = robo_obs["tool_target_dist_angular"]
-        rot_scale = 0.1
-        r_rot = jp.sqrt(jp.sum(ang_dist** 2)) 
+        r_rot = jp.sqrt(jp.sum(ang_dist** 2))
 
         # larm_waist_dist = human_obs["larm_waist_dist_euclidean"]
         # r_waist_dist = (1 - jp.tanh(larm_waist_dist / self._dist_scale))
         r_waist_dist = jp.exp(-human_obs["larm_waist_dist_euclidean"]**2/self._dist_scale)
 
-        waist_scale = 10
-        reward = waist_scale*r_waist_dist + self._dist_reward_weight*r_hook_dist + self._ctrl_cost_weight*ctrl_cost + r_rot * rot_scale
+        reward = self._waist_scale*r_waist_dist + self._dist_reward_weight*r_hook_dist + self._ctrl_cost_weight*ctrl_cost + r_rot * self._rot_scale
         
         done = 0.0
         
@@ -284,9 +285,9 @@ class ArmManipulation(PipelineEnv):
             reward_ctrl = ctrl_cost,
             reward_rot= r_rot,
             weighted_reward_hook_dist = self._dist_reward_weight*r_hook_dist,
-            weighted_reward_waist_dist = waist_scale*r_waist_dist,
+            weighted_reward_waist_dist = self._waist_scale*r_waist_dist,
             weighted_reward_ctrl = self._ctrl_cost_weight*ctrl_cost,
-            weighted_reward_rot = r_rot * rot_scale
+            weighted_reward_rot = r_rot * self._rot_scale
         )
 
         ee_speed = (
