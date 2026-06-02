@@ -652,8 +652,13 @@ def plot_normalized_learning_curves(
    #     else "Normalized Return (z-score)"
    # )
     ax.set_ylabel(ylabel)
-    ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
-    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+    if normalization == "minmax":
+        ref_total_timesteps = max(ad.total_timesteps for ad in algo_ref_ad.values())
+        ax.xaxis.set_major_locator(ticker.MultipleLocator(ref_total_timesteps / 4))
+        ax.set_yticks([0.2, 0.4, 0.6, 0.8])
+    else:
+        ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+        ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
     fig.tight_layout()
     _save_or_show(fig, save_path)
 
