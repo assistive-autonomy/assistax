@@ -34,9 +34,7 @@ import assistax
 from assistax.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper
 
 
-# ============================================================================
-# NEURAL NETWORK ARCHITECTURES
-# ============================================================================
+# ================================ NETWORK ARCHITECTURE ================================
 
 class ScannedRNN(nn.Module):
     """
@@ -215,9 +213,7 @@ class CriticRNN(nn.Module):
         return hstate, jnp.squeeze(critic, axis=-1)
 
 
-# ============================================================================
-# DATA STRUCTURES
-# ============================================================================
+# ================================ DATA STRUCTURES ================================
 
 class Transition(NamedTuple):
     """Single transition data structure for PPO training."""
@@ -304,9 +300,7 @@ class EvalInfoLogConfig:
     env_metrics: bool = True
 
 
-# ============================================================================
-# UTILITY FUNCTIONS FOR PARAMETER SHARING
-# ============================================================================
+# ================================ UTILITY FUNCTIONS FOR PARAMETER SHARING ================================
 
 def batchify(qty: Dict[str, jnp.ndarray], agents: Sequence[str]) -> jnp.ndarray:
     """
@@ -342,9 +336,7 @@ def unbatchify(qty: jnp.ndarray, agents: Sequence[str]) -> Dict[str, jnp.ndarray
     return dict(zip(agents, jnp.split(qty, len(agents))))
 
 
-# ============================================================================
-# TRAINING FUNCTION
-# ============================================================================
+# ================================ TRAINING FUNCTION ================================
 
 def make_train(config, save_train_state=False):
     """
@@ -895,9 +887,7 @@ def make_train(config, save_train_state=False):
     return train
 
 
-# ============================================================================
-# EVALUATION FUNCTION
-# ============================================================================
+# ================================ EVALUATION FUNCTION ================================
 
 def make_evaluation(config):
     """

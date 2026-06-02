@@ -24,6 +24,9 @@ import functools
 def _tree_shape(pytree):
     return jax.tree.map(lambda x: x.shape, pytree)
 
+
+# ================================ NETWORK ARCHITECTURE ================================
+
 @functools.partial(
     nn.vmap,
     in_axes=0, out_axes=0,
@@ -101,6 +104,9 @@ class Critic(nn.Module):
 
         return jnp.squeeze(critic, axis=-1)
 
+
+# ================================ DATA STRUCTURES ================================
+
 class Transition(NamedTuple):
     done: jnp.ndarray
     all_done: jnp.ndarray
@@ -165,6 +171,9 @@ class EvalInfoLogConfig:
     avail_actions: bool = True
     env_metrics: bool = True
 
+
+# ================================ UTILITY FUNCTIONS ================================
+
 def batchify(qty: Dict[str, jnp.ndarray], agents: Sequence[str]) -> jnp.ndarray:
     """Convert dict of arrays to batched array."""
     return jnp.stack(tuple(qty[a] for a in agents))
@@ -174,7 +183,24 @@ def unbatchify(qty: jnp.ndarray, agents: Sequence[str]) -> Dict[str, jnp.ndarray
     # N.B. assumes the leading dimension is the agent dimension
     return dict(zip(agents, qty))
 
+
+# ================================ TRAINING FUNCTION ================================
+
 def make_train(config, save_train_state=False, load_zoo=False, dynamic_preferences=False):
+    """
+    Create a training function for MAPPO.
+
+    Args:
+        config: Configuration dictionary with all hyperparameters.
+        save_train_state: Whether to retain per-update train states in the metrics.
+        load_zoo: Whether to load pre-trained partner agents from the zoo.
+        dynamic_preferences: When True, preference rewards are computed inside the
+            training loop from explicit weight arrays (vmappable) instead of via
+            the PreferenceRewardWrapper.
+
+    Returns:
+        The MAPPO training loop function.
+    """
 
     if dynamic_preferences:
         env_kwargs = {k: v for k, v in config["ENV_KWARGS"].items() if k != "preference_rewards"}
@@ -613,6 +639,9 @@ def make_train(config, save_train_state=False, load_zoo=False, dynamic_preferenc
         return {"runner_state": runner_state, "metrics": metric}
 
     return train
+
+
+# ================================ EVALUATION FUNCTION ================================
 
 def make_evaluation(config, load_zoo=False, crossplay=False):
     

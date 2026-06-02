@@ -30,9 +30,7 @@ from assistax.wrappers.baselines import get_space_dim, LogEnvState, LogWrapper
 from assistax.wrappers.aht import ZooManager, LoadAgentWrapper
 
 
-# ============================================================================
-# NEURAL NETWORK ARCHITECTURES
-# ============================================================================
+# ================================ NETWORK ARCHITECTURE ================================
 
 class ScannedRNN(nn.Module):
     """
@@ -216,9 +214,7 @@ class CriticRNN(nn.Module):
         return hstate, jnp.squeeze(critic, axis=-1)
 
 
-# ============================================================================
-# DATA STRUCTURES
-# ============================================================================
+# ================================ DATA STRUCTURES ================================
 
 class Transition(NamedTuple):
     """Single transition data structure for PPO training."""
@@ -305,9 +301,7 @@ class EvalInfoLogConfig:
     env_metrics: bool = True
 
 
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
+# ================================ UTILITY FUNCTIONS ================================
 
 def batchify(qty: Dict[str, jnp.ndarray], agents: Sequence[str]) -> jnp.ndarray:
     """
@@ -337,9 +331,7 @@ def unbatchify(qty: jnp.ndarray, agents: Sequence[str]) -> Dict[str, jnp.ndarray
     return dict(zip(agents, qty))
 
 
-# ============================================================================
-# TRAINING FUNCTION
-# ============================================================================
+# ================================ TRAINING FUNCTION ================================
 
 def make_train(config, save_train_state=False, load_zoo=False):
     """
@@ -892,9 +884,7 @@ def make_train(config, save_train_state=False, load_zoo=False):
     return train
 
 
-# ============================================================================
-# EVALUATION FUNCTION
-# ============================================================================
+# ================================ EVALUATION FUNCTION ================================
 
 def make_evaluation(config, load_zoo=False):
     """

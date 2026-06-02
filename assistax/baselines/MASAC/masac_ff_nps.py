@@ -253,7 +253,7 @@ def flatten_actions(x):
     return x.reshape(n_envs, n_agents * act_dim)
 
 
-# ================================ NEURAL NETWORK ARCHITECTURES ================================
+# ================================ NETWORK ARCHITECTURE ================================
 
 @functools.partial(
     nn.vmap,
