@@ -3,9 +3,11 @@
 [Paper Link](https://arxiv.org/abs/2507.21638) 
 
 <div style="display: flex; justify-content: space-between;">
-  <img src="docs/imgs/scratch.jpeg" alt="Scratching" style="width: 32%;">
-  <img src="docs/imgs/bedbath.jpeg" alt="Scratching" style="width: 32%;">
-  <img src="docs/imgs/armassist.jpeg" alt="Bedbathing" style="width: 32%;">
+  <img src="docs/imgs/task_scratch.png" alt="Scratch Itch" style="width: 19%;">
+  <img src="docs/imgs/task_bed_bathing.png" alt="Bed Bathing" style="width: 19%;">
+  <img src="docs/imgs/task_feeding.png" alt="Feeding" style="width: 19%;">
+  <img src="docs/imgs/task_tooth_brushing.png" alt="Teeth Brushing" style="width: 19%;">
+  <img src="docs/imgs/task_arm_assist.png" alt="Arm Assist" style="width: 19%;">
 </div>
 
 Assistax is a Python library that provides hardware-accelerated environments in the domain of assistive robotics together with accompanying baseline algorithm implementations. We utilize JAX and Brax for quick RL and MARL training pipelines.
@@ -58,7 +60,7 @@ This will create a `zoo` directory where configs and parameters used during trai
 uv run python assistax/baselines/ZSC/ppo_aht.py ENV_NAME=scratchitch
 ```
 
-This will run a ZSC experiment for a single PPO robot agent against the pre-trained partner policies in the zoo. Check the config `{alg}_aht.yaml`. By default, this will do a 50-50 train-test split of the pre-trained partner agent population.
+This will run a ZSC (ad-hoc teamwork) experiment for a single PPO robot agent against the pre-trained partner policies in the zoo. Check the config `{alg}_aht.yaml`. By default this does a 50-50 train-test split of the pre-trained partner population, so generalisation to *unseen* partners can be measured. You can instead stratify partners by their preferences using the extreme-split option (see `assistax/baselines/ZSC/aht_utils.py`). Pair this with the crossplay step below to build crossplay matrices over the population.
 
 ### ⚔️ Crossplay of agent population
 
@@ -108,7 +110,23 @@ export EXP_ID=$(date +%Y-%m-%d_%H-%M-%S)
 
 - **Bed Bath**: We provide target bathing points distributed along the surface of the human's arm. The robot must reach each point and apply a certain force to activate the next point. The aim is to reach (wipe) all points before the end of an episode. [implementation](assistax/envs/bedbathing.py)
 
+- **Feeding**: The robot must guide a spoon to the human's mouth. It has to approach with the correct orientation and a gentle, well-paced motion so that contact with the human is comfortable. [implementation](assistax/envs/feeding.py)
+
+- **Teeth Brushing**: The robot must bring a toothbrush to the human's mouth and brush their teeth. This requires approaching and aligning the brush, then maintaining an appropriate brushing motion and contact force. [implementation](assistax/envs/teethbrushing.py)
+
 - **Arm Assist**: The robot must help the human lift their right arm back into a comfortable position on the bed. In this task, the human is too weak to complete the task on their own and thus requires the robot. The robot has to learn to align its end-effector with a target section of the arm, and then move the human's arm until the green and blue targets overlap. [implementation](assistax/envs/armmanipulation.py)
+
+## 🎚️ Preference rewards
+
+Each environment's reward can be augmented with **human-preference** components via the `PreferenceRewardWrapper` ([implementation](assistax/wrappers/training.py)). This lets the "human" express preferences over *how* a task is completed — for example a preferred end-effector **speed** and **contact force**, each rewarded over a configurable range. Preference rewards are added on top of the base task reward, so the robot has to satisfy the task *and* the human's preferences.
+
+Enable them by uncommenting the `preference_rewards` block under `ENV_KWARGS` in the algorithm config (see `assistax/baselines/IPPO/config/ippo.yaml`), then run as usual:
+
+```bash
+uv run python assistax/baselines/IPPO/ippo_run.py ENV_NAME=feeding
+```
+
+Preference weights and ranges can also be swept and sampled when generating partner populations for zero-shot coordination (see the *Generating multiple partner policies* section above).
 
 ## 📈 Baselines 
 

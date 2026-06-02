@@ -33,6 +33,7 @@ models/
 multirun/
 *.npy
 *.png
+!docs/imgs/*.png
 CLAUDE.md
 
 zoo*/
