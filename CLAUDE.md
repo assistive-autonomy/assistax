@@ -1,105 +1,69 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
-## Project Overview
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
-Assistax is a hardware-accelerated reinforcement learning benchmark for assistive robotics using JAX and Brax. It provides multi-agent environments where robots assist humans with tasks like scratching, bed bathing, and arm manipulation.
+## 1. Think Before Coding
 
-## Imporant Rules
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
 
-Do not make changes to environments unless given explicit permission by the user. This is espeically relevant to the reward function of the environments, these are completely off limits unless explicit premission by the user is given to make changes. 
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
 
-## Common Commands
+## 2. Simplicity First
 
-### Training and Execution
-```bash
-# Run IPPO baseline training
-uv run python assistax/baselines/IPPO/ippo_run.py ENV_NAME=scratchitch
+**Minimum code that solves the problem. Nothing speculative.**
 
-# Generate partner policy zoo
-uv run python assistax/baselines/IPPO/ippo_zoo_gen.py ENV_NAME=scratchitch
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
 
-# Train for Zero-Shot Coordination (ZSC)
-uv run python assistax/baselines/ZSC/ppo_aht.py ENV_NAME=scratchitch
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
 
-# Run crossplay evaluation
-uv run python assistax/baselines/crossplay_zoo.py ENV_NAME=scratchitch
+## 3. Surgical Changes
 
-# Run hyperparameter sweeps
-uv run python assistax/baselines/IPPO/ippo_sweep.py ENV_NAME=scratchitch
+**Touch only what you must. Clean up only your own mess.**
 
-# Test preference rewards wrapper
-uv run python assistax/baselines/IPPO/preference_rewards_test.py
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
 ```
 
-### Installation and Environment
-```bash
-# Install with CUDA support
-uv sync && uv pip install -e ".[cuda]"
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-# Install CPU-only version
-uv sync && uv pip install -e ".[cpu]"
-```
+## 5. Git interactions, Commits and Pushes 
 
-## Architecture Overview
+I wan't to commit, push, pull and merge manually, but it can be very helpful if you provide the appropriate commands when needed for me to copy paste in the terminal. Do not youself commit or write commit messages push or merge all git interaction should happen through me the user.
 
-### Environment Structure
-- **assistax/envs/**: Core environment implementations
-  - `scratchitch.py`: Robot scratches target on human's arm
-  - `bedbathing.py`: Robot wipes bathing points on human's body
-  - `armmanipulation.py`: Robot helps lift human's weak arm
-  - `pushcoop.py`: Cooperative pushing task
-  - `base_env.py`: Base environment class with common functionality
+---
 
-### Algorithm Implementations
-- **assistax/baselines/**: Multi-agent RL algorithm implementations
-  - **IPPO/**: Independent PPO with feedforward/recurrent networks, parameter sharing variants
-  - **MAPPO/**: Multi-agent PPO with centralized critic
-  - **ISAC/MASAC/**: Independent and Multi-agent Soft Actor-Critic
-  - **ZSC/**: Zero-Shot Coordination algorithms for training with partner populations
-
-### Environment Creation Pipeline
-Environments are created through `assistax.envs.create()` which applies wrappers in sequence:
-1. Base environment (e.g., ScratchItch)
-2. EpisodeWrapper (episode length, action repeat)  
-3. VmapWrapper (batching)
-4. AutoResetWrapper (automatic episode reset)
-5. DisabilityWrapper (human impairment simulation)
-6. PreferenceRewardWrapper (human preference modeling)
-
-### Configuration System
-- Uses Hydra for configuration management
-- Config files in `config/` directories with network-specific variants
-- Main configs: `ippo.yaml`, `mappo.yaml`, `isac.yaml`, `masac.yaml`
-- Sweep configs for hyperparameter optimization
-- ZSC configs for population-based training
-
-## Key Implementation Details
-
-### Multi-Agent Setup
-- **Agent 0**: Robot (action space varies by environment)
-- **Agent 1**: Human (can be passive or active participant)
-- Heterogeneous rewards supported via `het_reward` flag
-- Parameter sharing vs non-parameter sharing variants available
-
-### JAX/Brax Integration
-- All environments built on Brax physics engine with MJX backend
-- Hardware acceleration via JAX compilation and vectorization
-- Disable JIT compilation with `DISABLE_JIT: True` for debugging
-
-### Rendering and Evaluation
-- HTML renders generated in `outputs/` directory
-- Evaluation results saved as `.npy` files
-- Model parameters saved as `.safetensors` files
-- Hydra manages output directory structure with timestamps
-
-### Performance Optimization
-- GPU environment capacity configured via `GPU_ENV_CAPACITY`
-- Advantage computation unrolling depth via `ADVANTAGE_UNROLL_DEPTH`
-- Set `XLA_FLAGS=--xla_gpu_triton_gemm_any=true` for GPU performance
-- Use JAX memory allocation flags for memory issues
-
-### Testing
-- `preference_rewards_test.py`: Test preference reward wrapper functionality
-- No comprehensive test suite - individual algorithm test files only
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
