@@ -822,7 +822,6 @@ class LoadAgentWrapper(JaxMARLWrapper):
         hstate = self.reset_internal_hstates(key_hstate)
 
         ag_idx = self.reset_agent_index(key_ag_idx)
-        # jax.debug.print("Agent Indexes on Reset: {ag_idx}", ag_idx=ag_idx)
 
         # Append preference obs before take_internal_action so zoo networks get correct input dim
         if self._num_pref_obs > 0:
@@ -869,8 +868,6 @@ class LoadAgentWrapper(JaxMARLWrapper):
 
         # read in the loaded agent actions from the state
         actions = {**state.load_agent_actions, **actions}
-       # breakpoint()
-       # jax.debug.print("actions taken: {actions}", actions=actions)
 
         obs_st, states_st, rewards, dones, infos = self._env.step_env(
             key_step, state._state, actions
@@ -921,9 +918,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
         all_partner_actions, load_agent_hstate = self.take_internal_action(
             key_action, obs, dones, avail_actions, state.hstate,
         )
-        # jax.debug.print("Agent Indexes on Step: {ag_idx}", ag_idx=ag_idx)
         load_agent_actions = jax.tree.map(lambda i, a: a[i], ag_idx, all_partner_actions)
-        # jax.debug.print("actions taken: {actions}", actions=load_agent_actions)
         states = LoadAgentState(
             _state=states,
             load_agent_actions=load_agent_actions,

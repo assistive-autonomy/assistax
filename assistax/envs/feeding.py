@@ -138,14 +138,6 @@ class Feeding(PipelineEnv):
         robo_obs = self._get_robo_obs(pipeline_state)
         human_obs = self._get_human_obs(pipeline_state)
 
-        #print("Robo Obs Shapes:")
-        #print([f"{i}: {robo_obs[i].shape}" for i in robo_obs.keys()])
-        #print("Human Obs Shapes:")
-        #print([f"{i}: {human_obs[i].shape}" for i in human_obs.keys()])
-        #print("Robo obs indices:")
-        #print(f"0 to {sum([robo_obs[i].shape[0] for i in robo_obs.keys()])}")
-        #print("Human obs indices:")
-        #print(f"From {sum([robo_obs[i].shape[0] for i in robo_obs.keys()])} to {sum([robo_obs[i].shape[0] for i in robo_obs.keys()]) + sum([human_obs[i].shape[0] for i in human_obs.keys()])}")
 
         
         obs = jp.concatenate((
@@ -163,7 +155,6 @@ class Feeding(PipelineEnv):
 
         
         
-        #print("Total obs shape:", obs.shape)
 
         info = {
             "ee_speed": 0.0, # add for preference tracking
@@ -212,13 +203,7 @@ class Feeding(PipelineEnv):
         
         r_dist = jp.exp(-self._dist_scale * distance) # Spikier than the bolzmann esque reward from scratching
 
-        #breakpoint()
-        #jax.debug.print("Distance: {dist}, Distance_Reward: {r_dist}", dist=distance, r_dist=r_dist)
-        # 2. Spoon Feeding Reward
 
-        # 2.1 Roll orientation Reward
-        # This shoud encourage the robot to tilt the spoon appropriately when near the mouth.
-        # Define spoon local vector pointing up perpendicular up from the spoon bowl
         local_vec_spoon_up = jp.array([-1.0, 0.0, 0.0])
 
         # Vector pointing from spoon to mouth
@@ -233,8 +218,6 @@ class Feeding(PipelineEnv):
 
 
         # TODO: See if we should add this in to further improve the feeding part. 
-        # 2.2 Yaw orientation Reward
-        # I.e. approaching the mouth with the front of the spoon
         
         vec_spoon_north = jp.array([0.0, 0.0, 1.0])
         vec_spoon_tip_to_world = bmath.rotate(vec_spoon_north, spoon_quat)
@@ -333,10 +316,6 @@ class Feeding(PipelineEnv):
         total_force_on_spoon = jp.sum(jp.vstack([force_on_spoon, force_on_rside]), axis=0)
         robo_joint_angles = pipeline_state.qpos[self.panda_joint_id_start:self.panda_joint_id_end]
         target_position = pipeline_state.site_xpos[self.human_mouth]
-        #breakpoint()
-        #jax.debug.print("Tool Pos: {tp}, Target Pos: {tarp}", tp=tool_position, tarp=target_position)
-        #jax.debug.print("Distance: {dist}", dist=jp.linalg.norm(tool_position - target_position))
-        # distance_to_target = jp.linalg.norm(target_position - tool_position) # Maybe just for the reward
 
         return {
             "tool_position": tool_position,

@@ -214,7 +214,6 @@ def main(config):
     #    print(f"  {hparams_file}")
     #    results_file = hparams_file.parent / "returns.npy"
     #    print(f"    returns.npy exists: {results_file.exists()}")   
-    #breakpoint()    
     if config_already_run(config, completed, sweep):
         print(f"✓ SKIPPING - already completed:")
         print(f"  update_epochs={config['UPDATE_EPOCHS']}, num_minibatches={config['NUM_MINIBATCHES']}")

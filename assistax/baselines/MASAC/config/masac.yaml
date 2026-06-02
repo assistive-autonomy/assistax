@@ -54,8 +54,8 @@ INIT_ALPHA: 0.1  # initial entropy value when not using autotune
 
 # WANDB
 ALG: MASAC
-ENTITY: "lh-from-kb"
-PROJECT: "assistax-dev"
+ENTITY: null  # set to your wandb entity (username/team)
+PROJECT: assistax  # set to your wandb project
 WANDB_MODE: "online"
 EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}
 EXP_TAGS: ["MASAC","FF","NoPS","MARL_TEST"]
@@ -72,7 +72,7 @@ DISABLE_JIT: False
 DEVICE: 0
 
 # ZOO SETTINGS
-ZOO_PATH: /pvc/assistax/zoo
+ZOO_PATH: ./zoo  # path to your agent zoo (download or generate; override per setup)
 
 DETERMINISTIC_EVAL: False
 

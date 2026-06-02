@@ -68,7 +68,7 @@ DEVICE: 0
 PRINT_MEMORY_STATS: True
 
 # ZOO SETTINGS
-ZOO_PATH: /pvc/assistax/zoo
+ZOO_PATH: ./zoo  # path to your agent zoo (download or generate; override per setup)
 
 # EVAL TRAIN STATE
 eval:
@@ -96,8 +96,8 @@ VIDEO_QUALITY: "high"  # "low", "medium", or "high"
 EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}   # Unique experiment identifier based on timestamp
 
 # WandB Params
-ENTITY: "lh-from-kb"
-PROJECT: "assistax-dev"
+ENTITY: null  # set to your wandb entity (username/team)
+PROJECT: assistax  # set to your wandb project
 WANDB_MODE: "online" # "disabled" or "online"
 EXP_TAGS: ["IPPO","FF","NoPS","Vectorized", "NoPref"]
 

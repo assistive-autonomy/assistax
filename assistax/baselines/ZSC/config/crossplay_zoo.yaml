@@ -41,7 +41,7 @@ crossplay:
 
 PARTNER_ALGORITHMS: ["IPPO"]
 
-ZOO_PATH: /pvc/assistax/zoo 
+ZOO_PATH: ./zoo  # path to your agent zoo (download or generate; override per setup)
 GPU_ENV_CAPACITY: 1206 
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False

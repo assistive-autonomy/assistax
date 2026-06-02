@@ -62,8 +62,8 @@ SWEEP:
 SAVE_ALL_TRAIN_STATES: false
 SAVE_FINAL_TRAIN_STATE: false
 
-#ENTITY: "lh-from-kb" 
-#PROJECT: "assistax-dev"
+#ENTITY: your-entity
+#PROJECT: assistax
 #WANDB_MODE: "online" # "disabled" or "online"
 #EXP_TAGS: ["SWEEP", "IPPO","FF","NoPS","Vectorized", "NoPref"]
 #EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}   # Unique experiment identifier based on timestamp

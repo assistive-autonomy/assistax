@@ -244,10 +244,6 @@ class BedBathing(PipelineEnv):
         n_contacts = jp.count_nonzero(new_contact_vector==0)
         n_old_contacts = jp.count_nonzero(old_contact_vector==0)
         new_contacts = (n_contacts - n_old_contacts).astype(jp.float32)
-        #jax.debug.print("New contacts: {nc}, Closest distance: {cd}", nc=new_contacts, cd=closest_distance)
-        ## jax.debug.print("Contact vector: {cv}", cv=new_contact_vector)
-        #jax.debug.print("Distances: {d}, All Distances {ad}", d=distances, ad=distances_all)
-        #jax.debug.print("Reward Distance: {rd}, Control Cost: {cc}, Wiping Reward: {wr}", rd=r_dist, cc=ctrl_cost, wr=new_contacts)
 
         reward = self._dist_reward_weight*r_dist + self._ctrl_cost_weight*ctrl_cost + self._wiping_reward_weight*new_contacts
         

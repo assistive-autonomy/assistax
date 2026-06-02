@@ -357,7 +357,6 @@ def main(config):
     #    jnp.argmax(mean_episode_returns), mean_episode_returns.shape
     #)
 
-    #breakpoint()
     #best_config_info = []
     #if sweep["p_lr"]["axis"] is not None:
     #    best_config_info.append(f"p_lr={sweep['p_lr']['val'][best_config_idx[0]]:.6f}")

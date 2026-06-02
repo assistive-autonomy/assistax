@@ -56,7 +56,7 @@ DISABLE_JIT: False
 DEVICE: 0
 
 # ZOO SETTINGS
-ZOO_PATH: /home/lhin/assistax/zoo
+ZOO_PATH: ./zoo  # path to your agent zoo (download or generate; override per setup)
 
 # Preference sweep for diverse zoo generation
 # Remove/comment out to disable preference vmapping

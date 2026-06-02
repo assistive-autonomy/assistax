@@ -58,7 +58,7 @@ DEVICE: 0
 PRINT_MEMORY_STATS: True
 
 # ZOO SETTINGS
-ZOO_PATH: /home/leo/assistive-autonomy-github/assistax/zoo 
+ZOO_PATH: ./zoo  # path to your agent zoo (download or generate; override per setup)
 # Preference sweep for diverse zoo generation
 # Remove/comment out to disable preference vmapping
 PREFERENCE_SWEEP:

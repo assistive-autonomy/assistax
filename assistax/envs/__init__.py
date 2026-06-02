@@ -52,20 +52,31 @@ def create(
     **kwargs,
     ) -> Env:
 
-    """Creates an environment from the registry.
+    """Create a single-agent (Brax-style) environment with the wrapper pipeline.
+
+    Wrappers are applied in order: EpisodeWrapper -> VmapWrapper (if ``batch_size``)
+    -> AutoResetWrapper -> DisabilityWrapper -> PreferenceRewardWrapper ->
+    SparseRewardWrapper, each only if its option is set. For the multi-agent
+    (per-agent obs/reward) interface use ``assistax.make`` instead.
 
     Args:
-      env_name: environment name string
-      episode_length: length of episode
-      action_repeat: how many repeated actions to take per environment step
-      auto_reset: whether to auto reset the environment after an episode is done
-      batch_size: the number of environments to batch together
-      disability:
-      pixel_obs:
-      **kwargs: keyword argments that get passed to the Env class constructor
+      env_name: environment name string (see ``assistax.registered_envs``).
+      episode_length: length of an episode.
+      action_repeat: how many repeated actions to take per environment step.
+      auto_reset: whether to auto-reset the environment after an episode is done.
+      batch_size: if set, vmap the environment into this many parallel copies.
+      disability: optional dict configuring the DisabilityWrapper (joint
+        restriction/strength/tremor) to model a human with reduced mobility.
+      het_reward: whether rewards are heterogeneous (per-agent) rather than shared.
+      preference_rewards: optional dict configuring the PreferenceRewardWrapper
+        (human-preference reward components, e.g. speed/force preference ranges).
+      sparse_rewards: optional dict configuring the SparseRewardWrapper
+        (e.g. ``{"mode": "periodic", "period": 100, "accumulate": True}``).
+      **kwargs: extra keyword arguments passed to the environment constructor
+        (e.g. ``backend``, ``ctrl_cost_weight``).
 
     Returns:
-      env: an environment
+      A wrapped Brax ``Env``.
     """
     env = _envs[env_name](**kwargs)
 

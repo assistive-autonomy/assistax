@@ -24,8 +24,8 @@ from assistax.baselines.utils import load_compact_npz
 # Constants
 # =============================================================================
 
-DEFAULT_ENTITY = "lh-from-kb"
-DEFAULT_PROJECT = "assistax-dev"
+DEFAULT_ENTITY = None  # set to your wandb entity
+DEFAULT_PROJECT = "assistax"  # set to your wandb project
 DEFAULT_CACHE_DIR = os.path.expanduser("~/.cache/assistax_paper_plots")
 DEFAULT_METRIC = "mean_episode_returns___all__"
 

@@ -14,6 +14,19 @@ Assistax is a Python library that provides hardware-accelerated environments in 
 
 ## 🏄 Installation
 
+### As a library (pip)
+
+To use the assistax **environments** in your own project, install the package directly from GitHub (the MuJoCo/MJX assets are bundled):
+
+```bash
+# NVIDIA GPU (CUDA 12); use [cuda13] or [cpu] as appropriate
+pip install "assistax[cuda12] @ git+https://github.com/assistive-autonomy/assistax.git"
+```
+
+This gives you the environments (`assistax.make`, `assistax.envs.create`) and wrappers — see the **Using assistax in Python** section below. The **baselines** (training scripts) are run from a clone, as described next.
+
+### For development & running the baselines (uv)
+
 We use `uv` for environment and package management. We highly recommend using `uv` when working with this project. For installing `uv`, see [uv installation](https://docs.astral.sh/uv/getting-started/installation/).
 
 1. Clone the repository
@@ -35,6 +48,40 @@ uv sync --dev --extra cuda12 # if your using cuda12 else cuda13
 cd assistax
 uv sync --dev --extra cpu 
 ```
+
+## 🐍 Using assistax in Python
+
+Create an environment with `assistax.make` and step it with the functional (JAX) API. Observations, rewards and dones are dicts keyed by agent name (`rewards`/`dones` also carry an `"__all__"` entry); actions are `Box(-1, 1)` per actuator:
+
+```python
+import jax
+import jax.numpy as jnp
+import assistax
+
+env = assistax.make("scratchitch")          # one of assistax.registered_envs
+key = jax.random.PRNGKey(0)
+
+obs, state = env.reset(key)                  # obs: {agent: array}
+actions = {a: jnp.zeros(env.action_spaces[a].shape) for a in env.agents}
+obs, state, rewards, dones, info = env.step(key, state, actions)
+```
+
+Enable **preference rewards** (or `disability` / `sparse_rewards`) by passing the corresponding dict — `make` forwards it to `assistax.envs.create`:
+
+```python
+env = assistax.make(
+    "feeding",
+    preference_rewards={
+        "preference_weights": {"speed_preference": 0.25, "force_preference": 0.35},
+        "preference_ranges": {"speed_range": [0.06, 0.14], "force_range": [1.5, 3.5]},
+        "reward_budget": 1.0,
+    },
+)
+```
+
+See [`assistax/envs/README.md`](assistax/envs/README.md) for the full per-environment reference (observations, reward components, the preference system).
+
+> **Note:** `pip install` gives you the **environments**. The **baselines** (IPPO/MAPPO/ISAC/MASAC/ZSC training scripts under `assistax/baselines/`) are research scripts run from a clone — they use Hydra configs and per-directory imports. Before running them, set your own values for `ENTITY`/`PROJECT` (Weights & Biases), `ZOO_PATH`, and `DEVICE`/`GPU_ENV_CAPACITY` in the relevant `config/*.yaml`.
 
 ## 🚀 Quick Start
 

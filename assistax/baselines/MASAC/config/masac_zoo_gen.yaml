@@ -75,7 +75,7 @@ DEVICE: 0
 DETERMINISTIC_EVAL: False
 
 # ZOO SETTINGS
-ZOO_PATH: /home/leo/assistax/zoo2
+ZOO_PATH: ./zoo  # path to your agent zoo (download or generate; override per setup)
 
 # Preference sweep for diverse zoo generation
 # Remove/comment out to disable preference vmapping

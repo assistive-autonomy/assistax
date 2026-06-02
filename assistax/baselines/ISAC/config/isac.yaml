@@ -54,8 +54,8 @@ TARGET_ENTROPY_SCALE: 5.0  # scale factor for target entropy (when auto-tuning)
 INIT_ALPHA: 0.1  # initial entropy value when not using autotune
 
 # WANDB
-ENTITY: "lh-from-kb"
-PROJECT: "assistax-dev"
+ENTITY: null  # set to your wandb entity (username/team)
+PROJECT: assistax  # set to your wandb project
 WANDB_MODE: "online"
 EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}
 EXP_TAGS: ["ISAC","FF","NoPS","NoPref"]

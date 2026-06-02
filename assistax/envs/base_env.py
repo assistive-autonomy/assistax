@@ -5,13 +5,11 @@ from typing import Dict, Literal, Optional, Tuple
 import chex
 from assistax.envs.multi_agent_env import MultiAgentEnv
 from gymnax.environments import spaces
-# from brax import envs
 from assistax import envs 
 import jax
 import jax.numpy as jnp
 from functools import partial
 
-# from .mappings import _agent_action_mapping, _agent_observation_mapping
 
 from typing import Dict, List, Tuple, Union
 import jax.numpy as jnp
@@ -117,7 +115,7 @@ class MABraxEnv(MultiAgentEnv):
         action_repeat: int = 1,
         auto_reset: bool = True,
         homogenisation_method: Optional[Literal["max", "concat"]] = None,
-        backend: str = "positional",
+        backend: str = "mjx",
         **kwargs
     ):
         """Multi-Agent Brax environment.
@@ -149,7 +147,7 @@ class MABraxEnv(MultiAgentEnv):
         self.action_repeat = action_repeat
         self.auto_reset = auto_reset
         self.homogenisation_method = homogenisation_method
-        self.het_reward = kwargs['het_reward'] # adding this
+        self.het_reward = kwargs.get('het_reward', False)
         self.agent_obs_mapping = _agent_observation_mapping[env_name]
         self.agent_action_mapping = _agent_action_mapping[env_name]
         self.agents = list(self.agent_action_mapping.keys())

@@ -37,7 +37,6 @@ class JaxMARLWrapper(object):
     def __getattr__(self, name: str):
         return getattr(self._env, name)
 
-    # def _batchify(self, x: dict):
     #     x = jnp.stack([x[a] for a in self._env.agents])
     #     return x.reshape((self._env.num_agents, -1))
 

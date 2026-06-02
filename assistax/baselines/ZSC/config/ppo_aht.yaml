@@ -74,7 +74,7 @@ SAVE_METRICS: True
 COLLECT_PARTNER_DATA: False
 
 # ZOO SETTINGS
-ZOO_PATH: /pvc/assistax/zoo
+ZOO_PATH: ./zoo  # path to your agent zoo (download or generate; override per setup)
 
 # Visualization settings
 SAVE_MUJOCO_TRAJECTORIES: True
@@ -88,8 +88,8 @@ EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}
 
 # WandB Params
 ALG: PPO_AHT
-ENTITY: "lh-from-kb"
-PROJECT: "assistax-dev"
+ENTITY: null  # set to your wandb entity (username/team)
+PROJECT: assistax  # set to your wandb project
 WANDB_MODE: "online"
 EXP_TAGS: ["ZSC","PPO","AHT"]
 

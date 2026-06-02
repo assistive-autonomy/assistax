@@ -98,7 +98,6 @@ class ScratchItch(PipelineEnv):
         self.human_larm_geom_idx = mj_name2id(mjmodel, GEOM_IDX, "right_larm")
         self.human_larm_target_idx = mj_name2id(mjmodel, GEOM_IDX, "target-l")
         
-        # self.contact_force = jax.vmap(contact_force, in_axes=(None, 0, None, None))
 
         self.UARM_TOOL_CONTACT_ID = 273
         self.LARM_TOOL_CONTACT_ID = 274
@@ -169,7 +168,6 @@ class ScratchItch(PipelineEnv):
         pipeline_state = self.pipeline_init(qpos, qvel)
         robo_obs = self._get_robo_obs(pipeline_state, info)
         human_obs = self._get_human_obs(pipeline_state, info)
-        #obs = jp.concatenate((robo_obs, human_obs))
         obs = jp.concatenate((
             robo_obs["tool_position"],
             robo_obs["tool_orientation"],
