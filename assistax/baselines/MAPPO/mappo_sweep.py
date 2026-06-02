@@ -30,7 +30,7 @@ from assistax.baselines.utils import (
     _tree_shape, _stack_tree, _concat_tree, _tree_split, print_memory_stats
     )
 
-from assistax.baselines.sweep_util import scan_completed_sweeps, config_already_run
+from assistax.baselines.sweep_utils import scan_completed_sweeps, config_already_run
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
 
 os.environ['XLA_FLAGS'] = (

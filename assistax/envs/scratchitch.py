@@ -47,7 +47,7 @@ class ScratchItch(PipelineEnv):
         backend="mjx",
         **kwargs
     ):
-        """Creates a Hopper environment.
+        """Creates a ScratchItch environment.
 
         Args:
           ctrl_cost_weight: Weight for the control cost.

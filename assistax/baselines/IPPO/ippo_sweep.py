@@ -45,7 +45,7 @@ from assistax.baselines.utils import (
     log_memory_to_csv,
     )
 
-from assistax.baselines.sweep_util import scan_completed_sweeps, config_already_run
+from assistax.baselines.sweep_utils import scan_completed_sweeps, config_already_run
 
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
 

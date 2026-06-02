@@ -77,7 +77,7 @@ eval:
     robot: ./path/to/robot.safetensors
     all: ./path/to/all.safetensors
 # SWEEPER SETTINGS
-sweep:
+SWEEP:
   num_configs: 4
   lr:
     min: -4.0

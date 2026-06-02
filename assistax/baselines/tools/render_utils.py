@@ -17,9 +17,11 @@ from assistax.wrappers.baselines import LogWrapper
 import hydra
 from omegaconf import OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict, Callable
+from assistax.baselines.tree_utils import (
+    _tree_take, _unstack_tree, _tree_shape, _stack_tree,
+)
 from assistax.baselines.utils import (
-    _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    _take_episode, _compute_episode_returns, _concat_tree, _tree_split,
 )
 from flax import struct
 import argparse
@@ -31,36 +33,7 @@ class EvalNetworkState:
     params: Dict
 
 
-def _tree_take(pytree, indices, axis=None):
-    return jax.tree.map(lambda x: x.take(indices, axis=axis), pytree)
-
-
-def _unstack_tree(pytree):
-    leaves, treedef = jax.tree_util.tree_flatten(pytree)
-    unstacked_leaves = zip(*leaves)
-    return [jax.tree_util.tree_unflatten(treedef, leaves)
-            for leaves in unstacked_leaves]
-
-
-def _take_episode(pipeline_states, dones, time_idx=-1, eval_idx=0):
-    episodes = _tree_take(pipeline_states, eval_idx, axis=1)
-    dones = dones.take(eval_idx, axis=1)
-    return [
-        state
-        for state, done in zip(_unstack_tree(episodes), dones)
-        if not (done)
-    ]
-
-
-def _tree_shape(pytree):
-    return jax.tree.map(lambda x: x.shape, pytree)
-
-
-def _stack_tree(pytree_list, axis=0):
-    return jax.tree.map(
-        lambda *leaf: jnp.stack(leaf, axis=axis),
-        *pytree_list
-    )
+# Tree/episode helpers are imported above from tree_utils / utils (no local copies).
 
 
 def render_episodes(path: str):
@@ -86,54 +59,54 @@ def render_episodes(path: str):
     if config["ALG"] == "IPPO":
         match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
             case (False, False):
-                from IPPO.ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
-                from IPPO.ippo_ff_nps import MultiActorCritic as NetworkArch
+                from assistax.baselines.IPPO.ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
+                from assistax.baselines.IPPO.ippo_ff_nps import MultiActorCritic as NetworkArch
                 print("Using: Feedforward Networks with No Parameter Sharing")
             case (False, True):
-                from IPPO.ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
-                from IPPO.ippo_ff_ps import ActorCritic as NetworkArch
+                from assistax.baselines.IPPO.ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
+                from assistax.baselines.IPPO.ippo_ff_ps import ActorCritic as NetworkArch
                 print("Using: Feedforward Networks with Parameter Sharing")
             case (True, False):
-                from IPPO.ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
-                from IPPO.ippo_rnn_nps import MultiActorCriticRNN as NetworkArch
+                from assistax.baselines.IPPO.ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
+                from assistax.baselines.IPPO.ippo_rnn_nps import MultiActorCriticRNN as NetworkArch
                 print("Using: Recurrent Networks with No Parameter Sharing")
             case (True, True):
-                from IPPO.ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
-                from IPPO.ippo_rnn_ps import ActorCriticRNN as NetworkArch
+                from assistax.baselines.IPPO.ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
+                from assistax.baselines.IPPO.ippo_rnn_ps import ActorCriticRNN as NetworkArch
                 print("Using: Recurrent Networks with Parameter Sharing")
 
     elif config["ALG"] == "MAPPO":
         match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
             case (False, False):
-                from MAPPO.mappo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
-                from MAPPO.mappo_ff_nps import MultiActor as NetworkArch
+                from assistax.baselines.MAPPO.mappo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
+                from assistax.baselines.MAPPO.mappo_ff_nps import MultiActor as NetworkArch
                 print("Using: Feedforward Networks with No Parameter Sharing")
             case (False, True):
-                from MAPPO.mappo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig 
-                from MAPPO.mappo_ff_ps import Actor as NetworkArch
+                from assistax.baselines.MAPPO.mappo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig 
+                from assistax.baselines.MAPPO.mappo_ff_ps import Actor as NetworkArch
                 print("Using: Feedforward Networks with Parameter Sharing")
             case (True, False):
-                from MAPPO.mappo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
-                from MAPPO.mappo_rnn_nps import MultiActorRNN as NetworkArch
+                from assistax.baselines.MAPPO.mappo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
+                from assistax.baselines.MAPPO.mappo_rnn_nps import MultiActorRNN as NetworkArch
                 print("Using: Recurrent Networks with No Parameter Sharing")
             case (True, True):
-                from MAPPO.mappo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
-                from MAPPO.mappo_rnn_ps import ActorRNN as NetworkArch
+                from assistax.baselines.MAPPO.mappo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
+                from assistax.baselines.MAPPO.mappo_rnn_ps import ActorRNN as NetworkArch
                 print("Using: Recurrent Networks with Parameter Sharing")
 
     elif config["ALG"] == "MASAC":
         match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
             case (False, False):
-                from MASAC.masac_ff_nps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
+                from assistax.baselines.MASAC.masac_ff_nps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
                 print("Using: Feedforward Networks with No Parameter Sharing")
            # case (False, True):
-           #     from MASAC.masac_ff_ps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
+           #     from assistax.baselines.MASAC.masac_ff_ps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
            #     print("Using: Feedforward Networks with Parameter Sharing")
            # case (True, False):
-           #     from MASAC.masac_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
+           #     from assistax.baselines.MASAC.masac_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
            #     print("Using: Recurrent Networks with No Parameter Sharing")
            # case (True, True):
-           #     from MASAC.masac_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
+           #     from assistax.baselines.MASAC.masac_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig, NetworkArch
            #     print("Using: Recurrent Networks with Parameter Sharing")
     else:
         raise ValueError(f"Unknown algorithm: {config['ALG']}")

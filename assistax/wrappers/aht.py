@@ -22,25 +22,14 @@ import functools
 from omegaconf import OmegaConf
 from flax.traverse_util import flatten_dict
 
+# Shared pytree helpers (dependency-free module, avoids a utils <-> aht cycle).
+from assistax.baselines.tree_utils import _tree_take, _stack_tree, _tree_shape
 
-def _tree_take(pytree, indices, axis=None):
-    return jax.tree.map(lambda x: x.take(indices, axis=axis), pytree)
-
-
-def _stack_tree(pytree_list, axis=0):
-    return jax.tree.map(
-        lambda *leaf: jnp.stack(leaf, axis=axis),
-        *pytree_list
-    )
-
-# debug utility 
+# debug utility
 
 def get_param_keys(zoo_state) -> list[str]:
     flat_params = flatten_dict(zoo_state.params, sep='/')
     return sorted(flat_params.keys())
-
-def _tree_shape(pytree):
-    return jax.tree.map(lambda x: x.shape, pytree)
 
 
 def _default_pref_config() -> Dict[str, float]:
