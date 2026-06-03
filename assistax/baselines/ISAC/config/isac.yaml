@@ -9,6 +9,7 @@ ENV_KWARGS:
   homogenisation_method: max
   het_reward: False
   backend: mjx
+  episode_length: 1000
   #disability:
   #  joint_idx: 13
   #  joint_restriction_factor:   1.0
