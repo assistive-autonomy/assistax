@@ -38,7 +38,7 @@ mkdir -p "$JOB_ZOO_DIR"
 echo "[$(ts)] Zoo shard: $JOB_ZOO_DIR"
 
 # --- Run zoo generation ---
-uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
+uv run --extra cuda12 python assistax/baselines/IPPO/ippo_zoo_gen.py \
     -cn $CONFIG -m\
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
@@ -54,7 +54,7 @@ uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
     ++ENV_KWARGS.disability.joint_strength=0
 
 
-uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
+uv run --extra cuda12 python assistax/baselines/IPPO/ippo_zoo_gen.py \
     -cn $CONFIG -m\
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
@@ -69,7 +69,7 @@ uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
     ++ENV_KWARGS.disability.joint_restriction_factor=0.5 \
     ++ENV_KWARGS.disability.joint_strength=0.5
 
-uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
+uv run --extra cuda12 python assistax/baselines/IPPO/ippo_zoo_gen.py \
     -cn $CONFIG -m\
     ++ENV_NAME=$ENV_NAME \
     ++ZOO_PATH=$JOB_ZOO_DIR \
