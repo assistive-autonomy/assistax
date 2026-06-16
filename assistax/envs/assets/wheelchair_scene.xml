@@ -3,7 +3,7 @@
     <global offwidth="1920" offheight="1920"/>
   </visual>
 
-  <compiler angle="radian" meshdir="wheelchair_assets" autolimits="true"/>
+  <compiler angle="radian" meshdir="meshes" autolimits="true"/>
   <asset>
   <!-- Wheelchair -->
     <mesh file="wheelchair_permobil_reduced_compressed.obj" scale="0.15 0.15 0.15"/>

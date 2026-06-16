@@ -1,6 +1,6 @@
 <mujoco model="cooperative_push">
     <!-- Compiler settings -->
-    <compiler angle="radian" meshdir="push_assets" autolimits="true"/>
+    <compiler angle="radian" meshdir="meshes" autolimits="true"/>
 
     
     <!-- Asset definitions -->

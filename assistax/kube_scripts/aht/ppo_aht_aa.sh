@@ -49,7 +49,7 @@ echo "[$(ts)] Outputs symlinked to: /pvc/assistax/outputs"
 #    ++NUM_EVAL_EPISODES=32 \
 #    ++ENV_NAME=$ENV_NAME \
 #    GPU_ENV_CAPACITY=$GPU_ENV_CAPACITY
-uv run python assistax/baselines/ZSC/ppo_aht.py \
+uv run --extra cuda12 python assistax/baselines/ZSC/ppo_aht.py \
     -cn $CONFIG -m \
     network=ff_nps \
     ++ENV_NAME=$ENV_NAME \
