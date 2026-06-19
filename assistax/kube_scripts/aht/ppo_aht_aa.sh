@@ -8,7 +8,7 @@ export NETRC=/pvc/.netrc
 # --- Parse arguments ---
 CONFIG=${1:-ppo_aht}
 ENV_NAME=${2:-armmanipulation}
-GPU_ENV_CAPACITY=${3:-24576} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
+GPU_ENV_CAPACITY=${3:-49152} # For H200 49152, for A100 80 GB 24576 and for 4090 8192
 # --- Logging setup ---
 ts(){ date +'%Y-%m-%dT%H:%M:%S%z'; }
 mkdir -p /pvc/job-logs
@@ -62,6 +62,7 @@ uv run --extra cuda12 python assistax/baselines/ZSC/ppo_aht.py \
     ++NUM_STEPS=64 \
     ++NUM_SEEDS=16 \
     ++SEED=0 \
+    ++NUM_EVAL_EPISODES=8 \
     ++EXP_TAGS=[IPPO,FF_NPS,AHT_FINAL]
 # --- Cleanup ---
 rm -rf "$WORK_DIR"
