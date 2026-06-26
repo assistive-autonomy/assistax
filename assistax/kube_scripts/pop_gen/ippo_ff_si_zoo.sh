@@ -47,6 +47,7 @@ uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
     ++CLIP_EPS=0.16875672 \
     ++ENT_COEF=0.0016069901 \
     ++NUM_STEPS=64 \
+    ++ENV_KWARGS.preference_rewards.reward_budget=1 \
     ++ENV_KWARGS.disability.joint_restriction_factor=0 \
     ++ENV_KWARGS.disability.joint_strength=0
 
@@ -63,6 +64,7 @@ uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
     ++CLIP_EPS=0.16875672 \
     ++ENT_COEF=0.0016069901 \
     ++NUM_STEPS=64 \
+    ++ENV_KWARGS.preference_rewards.reward_budget=1 \
     ++ENV_KWARGS.disability.joint_restriction_factor=0.5 \
     ++ENV_KWARGS.disability.joint_strength=0.5
 
@@ -78,6 +80,7 @@ uv run python assistax/baselines/IPPO/ippo_zoo_gen.py \
     ++CLIP_EPS=0.16875672 \
     ++ENT_COEF=0.0016069901 \
     ++NUM_STEPS=64 \
+    ++ENV_KWARGS.preference_rewards.reward_budget=1 \
     ++ENV_KWARGS.disability.joint_restriction_factor=1 \
     ++ENV_KWARGS.disability.joint_strength=1
 
