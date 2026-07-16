@@ -127,7 +127,11 @@ This will generate a sweep for the specified IPPO variant for the scratchitch ta
 
 ## 🦓 Pre-trained partner policies 
 
-The pre-trained partner policies `zoo` can be downloaded on [Hugging Face](https://huggingface.co/datasets/leohink/assistax-zoo/). Downlaod the `zoo.tar.gz` file and change the `ZOO_PATH` config in `assistax/baselines/ZSC/config/ppo_aht.yaml` to train a 50-50 split agains a pre-trained population of "human" agents. 
+The pre-trained partner policies `zoo` can be downloaded on [Hugging Face](https://huggingface.co/datasets/leohink/assistax-zoo/). Download the `zoo.tar.gz` file, extract it, and point the `ZOO_PATH` config in `assistax/baselines/ZSC/config/ppo_aht.yaml` (or `sac_aht.yaml`) at the extracted `zoo/` directory to train against a pre-trained population of "human" agents.
+
+The zoo contains **630 unique "humans" per task** for each of the 5 tasks, where a human is a unique combination of preference weights (`w_speed`, `w_force`, `w_touch`). These are evenly split **210 / 210 / 210** across the IPPO, MAPPO and MASAC training algorithms, and each human is paired with the robot it was trained with (3,150 human+robot teams, 6,300 agents in total).
+
+How partners are split into train/test sets is set in the AHT config: `SPLIT_RATIO` for a random split, or `EXTREME_SPLIT` to instead select the most extreme partners along a preference dimension (e.g. the 5 highest `w_speed`) for a harder zero-shot setting.
 
 ## 💡 Running Experiments **Tip**
 

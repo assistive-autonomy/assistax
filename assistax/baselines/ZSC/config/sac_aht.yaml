@@ -56,7 +56,7 @@ SPLIT_RATIO: 0.2 # The train/test split ratio e.g. 0.2 means 20% train, 80% test
 # When present and not null, replaces SPLIT_RATIO with extreme-based selection.
 # When absent/commented out, the existing random SPLIT_RATIO split is used.
 EXTREME_SPLIT:
-  num_extreme: 10          # Number of extreme agents to select (total)
+  num_extreme: 5           # Number of extreme agents to select (total)
   role: "train"             # Where extreme agents go: "test" or "train"
   mode: "single"           # Selection mode: "single", "multi", or "composite"
 
