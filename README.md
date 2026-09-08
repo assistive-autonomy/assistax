@@ -8,6 +8,10 @@
   <img src="docs/imgs/armassist.jpeg" alt="Bedbathing" style="width: 32%;">
 </div>
 
+<p align="center">
+  <a href=""https://leohinckeldey.dev/assistax-project/>🌐 Website</a> ·  <a href="https://arxiv.org/abs/2507.21638">📄 Paper</a> · <a href="https://huggingface.co/datasets/leohink/assistax-zoo">🤗 Models</a>
+</p>
+
 Assistax is a Python library that provides hardware-accelerated environments in the domain of assistive robotics together with accompanying baseline algorithm implementations. We utilize JAX and Brax for quick RL and MARL training pipelines.
 
 ## 🏄 Installation
@@ -117,14 +121,13 @@ Some relavant repo's you should check out!
 If you use Assistax in your work please cite it as:
 
 ```
-@misc{hinckeldey2025assistaxhardwareacceleratedreinforcementlearning,
-      title={Assistax: A Hardware-Accelerated Reinforcement Learning Benchmark for Assistive Robotics}, 
-      author={Leonard Hinckeldey and Elliot Fosong and Elle Miller and Rimvydas Rubavicius and Trevor McInroe and Patricia Wollstadt and Christiane B. Wiebel-Herboth and Subramanian Ramamoorthy and Stefano V. Albrecht},
-      year={2025},
-      eprint={2507.21638},
-      archivePrefix={arXiv},
-      primaryClass={cs.AI},
-      url={https://arxiv.org/abs/2507.21638}, 
+@article{hinckeldey2026assistax,
+    title={Assistax: A Multi-Agent Hardware-Accelerated Reinforcement Learning Benchmark for Assistive Robotics},
+    author={Leonard Hinckeldey and Elliot Fosong and Rimvydas Rubavicius and Elle Miller and Trevor McInroe and Fan Zhang and Patricia Wollstadt and Stefano V. Albrecht and Subramanian Ramamoorthy},
+    journal={Reinforcement Learning Journal},
+    volume={7},
+    pages={},
+    year={2026}
 }
 ```
 
