@@ -3,6 +3,7 @@ defaults:
   - _self_
 
 ENV_NAME: scratchitch
+ALG: MASAC
 ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
@@ -19,7 +20,7 @@ TOTAL_TIMESTEPS: 30e6
 NUM_ENVS: 256
 NUM_SEEDS: 2
 SEED: 1
-NUM_EVAL_EPISODES: 32 # lower for rendering
+NUM_EVAL_EPISODES: 16 # lower for rendering
 NUM_CHECKPOINTS: 128 # how often to save the training parameters for evaluating later
 
 TEST_DURING_TRAINING: True # not currently in use for SAC
@@ -57,8 +58,12 @@ WANDB_RUN: test
 GPU_ENV_CAPACITY: 8192
 DISABLE_JIT: False
 DEVICE: 0
+PRINT_MEMORY_STATS: True
 
 DETERMINISTIC_EVAL: True
+
+SAVE_ALL_TRAIN_STATES: false
+SAVE_FINAL_TRAIN_STATE: false
 
 # SWEEPER SETTINGS
 SWEEP:
@@ -69,12 +74,12 @@ SWEEP:
   q_lr:
     min: -5.0
     max: -2.0
-  alpha_lr: false
-    # min: -5.0
-    # max: -2.0
-  tau: false
-    # min: -4.0
-    # max: -1.0 
+  alpha_lr: 
+    min: -5.0
+    max: -2.0
+  tau: 
+    min: -4.0
+    max: -1.0 
 
 eval: # path to actor all params for eval
   path: ./path/to/all.safetensors/actor_all_params.safetensors
@@ -83,7 +88,7 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/${ENV_NAME}/${ALG}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/${ENV_NAME}/${ALG}/${network.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ""

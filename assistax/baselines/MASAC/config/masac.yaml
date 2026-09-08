@@ -14,17 +14,17 @@ ENV_KWARGS:
   #   joint_restriction_factor: 1.0
   #   joint_strength: 1.0
   #   tremor_magnitude: 0.0
-TOTAL_TIMESTEPS: 1e5
+TOTAL_TIMESTEPS: 1e7
 
 # NUM_STEPS: 256
 NUM_ENVS: 64
-NUM_SEEDS: 6
+NUM_SEEDS: 1 
 SEED: 0
-NUM_EVAL_EPISODES: 32 # lower for rendering
+NUM_EVAL_EPISODES: 32
 NUM_CHECKPOINTS: 256 # how often to save the training parameters for evaluating later
 
-TEST_DURING_TRAINING: True # not currently in use for SAC
-VIZ_POLICY: True # Whether or not to generate html renders of the policy
+TEST_DURING_TRAINING: False # not currently in use for SAC
+VIZ_POLICY: False # Whether or not to generate html renders of the policy
 N_RENDER_EPISODES: 4 # number of episodes to render during training
 
 # RL HYPERPARAMETERS
@@ -53,13 +53,26 @@ TARGET_ENTROPY_SCALE: 5.0  # scale factor for target entropy (when auto-tuning)
 INIT_ALPHA: 0.1  # initial entropy value when not using autotune
 
 # WANDB
-# WANDB_GROUP: scratchitch
-# WANDB_RUN: test
+ALG: MASAC
+ENTITY: null  # set to your wandb entity (username/team)
+PROJECT: assistax  # set to your wandb project
+WANDB_MODE: "online"
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}
+EXP_TAGS: ["MASAC","FF","NoPS","MARL_TEST"]
+
+# VISUALIZATION
+SAVE_HTML_RENDER: False
+SAVE_MUJOCO_TRAJECTORIES: False
+RENDER_VIDEOS: False
+PRINT_MEMORY_STATS: True
 
 # COMPUTE OPTIONS
 GPU_ENV_CAPACITY: 8192
 DISABLE_JIT: False
 DEVICE: 0
+
+# ZOO SETTINGS
+ZOO_PATH: ./zoo  # path to your agent zoo (download or generate; override per setup)
 
 DETERMINISTIC_EVAL: False
 
@@ -87,7 +100,7 @@ hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/MASAC/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: ""
+    dir: multirun/MASAC/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: "" # Add if needed.

@@ -12,6 +12,7 @@ diverse agents from multiple algorithms.
 """
 
 import os
+os.environ.setdefault('MUJOCO_GL', 'egl')
 import sys
 import time
 from tqdm import tqdm
@@ -31,13 +32,123 @@ import hydra
 from omegaconf import OmegaConf
 import pandas as pd
 from typing import Sequence, NamedTuple, Any, Dict
+import wandb
+from datetime import datetime
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    _tree_shape, _stack_tree, _concat_tree, _tree_split,
+    log_all_metrics_zsc, upload_eval_data_to_wandb,
+    upload_model_parameters_to_wandb, upload_html_visualizations_to_wandb,
+    upload_mujoco_trajectories_to_wandb, upload_mujoco_videos_to_wandb, print_memory_stats
     )
 from assistax.baselines.utils import _compute_episode_returns_sweep as _compute_episode_returns
-
+os.environ['XLA_FLAGS'] = (
+    '--xla_gpu_triton_gemm_any=True ' # As recommended by MJX for better performance on NVIDIA GPUs
+)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+
+
+# ========================= PARTNER DATA COLLECTION ===========================
+
+def make_collect_partner_data(config, load_zoo_dict, batchify, unbatchify, RunnerState):
+    """Create a JIT-able function that collects all partner actions and observations.
+
+    Runs evaluation episodes with the trained robot policy and captures the full
+    ``(total_pop_size, action_dim)`` partner action tensor at every step.
+
+    Args:
+        config: Hydra config dict.
+        load_zoo_dict: Zoo loading dict for partner selection.
+        batchify: Agent-dict → stacked-array helper from the IPPO variant.
+        unbatchify: Stacked-array → agent-dict helper from the IPPO variant.
+        RunnerState: NamedTuple class from the IPPO variant.
+
+    Returns:
+        A function ``collect(rng, train_state) -> (all_actions, all_obs)``
+        where ``all_actions`` has shape ``(max_steps, num_eps, pop_size, true_act_dim)``
+        and ``all_obs`` has shape ``(max_steps, num_eps, obs_dim)``.
+    """
+    zoo = ZooManager(config["ZOO_PATH"])
+    env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo_dict)
+    env = LogWrapper(env, replace_info=True)
+
+    num_eps = config["NUM_EVAL_EPISODES"]
+    max_steps = env.episode_length
+    loaded_agent = env._env.loaded_agents[0]  # e.g. "human"
+    true_act_dim = env._env._env.agent_action_mapping[loaded_agent].size
+
+    def collect(rng, train_state):
+        rng_reset, rng_run = jax.random.split(rng)
+        rngs_reset = jax.random.split(rng_reset, num_eps)
+        init_dones = jnp.zeros((env.num_agents, num_eps), dtype=bool)
+
+        obsv, env_state = jax.vmap(env.reset)(rngs_reset)
+        runner_state = RunnerState(
+            train_state=train_state,
+            env_state=env_state,
+            last_obs=obsv,
+            last_done=init_dones,
+            update_step=0,
+            rng=rng_run,
+        )
+
+        def _collect_step(runner_state, unused):
+            rng = runner_state.rng
+
+            # Robot policy forward pass
+            obs_batch = batchify(runner_state.last_obs, env.agents)
+            avail_actions = jax.vmap(env.get_avail_actions)(
+                runner_state.env_state.env_state
+            )
+            avail_actions = jax.lax.stop_gradient(
+                batchify(avail_actions, env.agents)
+            )
+            ac_in = (obs_batch, runner_state.last_done, avail_actions)
+
+            (actor_mean, actor_std), _ = runner_state.train_state.apply_fn(
+                runner_state.train_state.params, ac_in,
+            )
+            actor_std = jnp.expand_dims(actor_std, axis=1)
+            pi = distrax.MultivariateNormalDiag(actor_mean, actor_std)
+            rng, act_rng = jax.random.split(rng)
+            action, _ = pi.sample_and_log_prob(seed=act_rng)
+            env_act = unbatchify(action, env.agents)
+
+            # Capture partner obs *before* step (matches the obs partners acted on)
+            partner_obs = runner_state.last_obs[loaded_agent]  # (num_eps, obs_dim)
+
+            # Step the environment
+            rng, step_rng = jax.random.split(rng)
+            rng_step = jax.random.split(step_rng, num_eps)
+            obsv, env_state, reward, done, info = jax.vmap(env.step)(
+                rng_step, runner_state.env_state, env_act,
+            )
+            done_batch = batchify(done, env.agents)
+
+            # Extract all partner actions stored by LoadAgentWrapper.step()
+            all_partner_acts = env_state.env_state.all_partner_actions[loaded_agent][..., :true_act_dim]
+
+            runner_state = RunnerState(
+                train_state=runner_state.train_state,
+                env_state=env_state,
+                last_obs=obsv,
+                last_done=done_batch,
+                update_step=runner_state.update_step,
+                rng=rng,
+            )
+            return runner_state, (all_partner_acts, partner_obs)
+
+        _, (all_actions, all_obs) = jax.lax.scan(
+            _collect_step, runner_state, None, max_steps
+        )
+        # all_actions: (max_steps, num_eps, pop_size, act_dim)
+        # all_obs:     (max_steps, num_eps, obs_dim)
+        return all_actions, all_obs
+
+    return collect
 
 
 # ================================ MAIN AHT TRAINING FUNCTION ================================
@@ -67,20 +178,40 @@ def main(config):
     # Import the appropriate IPPO variant based on network architecture configuration
     match (config["network"]["recurrent"], config["network"]["agent_param_sharing"]):
         case (False, False):
-            from IPPO.ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig, batchify, unbatchify, RunnerState
             print("Using: Feedforward Networks with No Parameter Sharing")
         case (False, True):
-            from IPPO.ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig, batchify, unbatchify, RunnerState
             print("Using: Feedforward Networks with Parameter Sharing")
         case (True, False):
-            from IPPO.ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig, batchify, unbatchify, RunnerState
             print("Using: Recurrent Networks with No Parameter Sharing")
         case (True, True):
-            from IPPO.ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
+            from IPPO.ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig, batchify, unbatchify, RunnerState
             print("Using: Recurrent Networks with Parameter Sharing")
 
+    # ===== WANDB INIT =====
+    now = datetime.now()
+    ps_tag = "ps" if config["network"]["agent_param_sharing"] else "nps"
+    rec_tag = "rnn" if config["network"]["recurrent"] else "ff"
+    env_name = config.get("ENV_NAME", "").lower()
+    alg_name = config.get("ALG", "PPO_AHT").lower()
+    name = f"{alg_name}_{ps_tag}_{rec_tag}_{env_name}_{config['EXP_ID']}_seed{config['SEED']}"
+    tags = [config["EXP_ID"]] + config.get("EXP_TAGS", []) + [env_name] + [alg_name]
+    config["EXP_TAGS"] = tags
+    run = wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=tags,
+        config=config,
+        mode=config["WANDB_MODE"],
+        reinit=True,
+        name=name,
+        save_code=True,
+    )
+
     # ===== TRAINING SETUP =====
-    rng = jax.random.PRNGKey(config["SEED"])
+    rng = jax.random.key(config["SEED"])
     train_rng, eval_rng = jax.random.split(rng)
     train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
     
@@ -112,10 +243,24 @@ def main(config):
         print("Creating train/test splits for generalization evaluation...")
         all_partners = pd.concat(partner_dict.values(), ignore_index=True)
         print(f"Total partners across all algorithms: {len(all_partners)}")
-   
-        # Do a single 50/50 split across all partners
-        train_partners = all_partners.sample(frac=0.5, random_state=42)  # Set random_state for reproducibility
-        test_partners = all_partners.drop(train_partners.index)
+
+        if "EXTREME_SPLIT" in config and config["EXTREME_SPLIT"] is not None:
+            # Extreme-based split
+            from assistax.baselines.ZSC.aht_utils import split_partners_extreme
+            extreme_cfg = config["EXTREME_SPLIT"]
+            extreme_set, remainder_set = split_partners_extreme(all_partners, extreme_cfg)
+
+            role = extreme_cfg.get("role", "test")
+            if role == "test":
+                test_partners, train_partners = extreme_set, remainder_set
+            else:
+                train_partners, test_partners = extreme_set, remainder_set
+
+            print(f"Extreme split: {len(extreme_set)} extreme agents -> {role} set")
+        else:
+            # Original random split
+            train_partners = all_partners.sample(frac=config["SPLIT_RATIO"], random_state=42)
+            test_partners = all_partners.drop(train_partners.index)
 
         # Split back into algorithm-specific dictionaries
         train_set = {}
@@ -127,8 +272,8 @@ def main(config):
             print(f" {algo}: {len(train_set[algo])} train, {len(test_set[algo])} test partners")
 
         # Create zoo loading dictionaries for training and testing
-        load_zoo_dict_train = {algo: {"human": list(train_set[algo].agent_uuid)} for algo in partner_dict.keys()}
-        load_zoo_dict_test = {algo: {"human": list(test_set[algo].agent_uuid)} for algo in partner_dict.keys()}
+        load_zoo_dict_train = {algo: {"human": list(train_set[algo].agent_uuid)} for algo in partner_dict.keys() if len(train_set[algo]) > 0}
+        load_zoo_dict_test = {algo: {"human": list(test_set[algo].agent_uuid)} for algo in partner_dict.keys() if len(test_set[algo]) > 0}
 
         print(f"Training against {sum(len(train_set[algo]) for algo in train_set)} diverse partners")
         print(f"Testing against {sum(len(test_set[algo]) for algo in test_set)} unseen partners")
@@ -169,28 +314,23 @@ def main(config):
         # Save model parameters
         all_train_states = out["metrics"]["train_state"]
         final_train_state = out["runner_state"].train_state
-        
-        safetensors.flax.save_file(
-            flatten_dict(all_train_states.params, sep='/'),
-            "all_params.safetensors"
-        )
-        
-        if config["network"]["agent_param_sharing"]:
-            # For parameter sharing: single set of shared parameters
-            safetensors.flax.save_file(
-                flatten_dict(final_train_state.params, sep='/'),
-                "final_params.safetensors"
+
+        upload_model_parameters_to_wandb(all_train_states, final_train_state, config, env, run)
+
+        # ===== PARTNER DATA COLLECTION (optional) =====
+        if config.get("COLLECT_PARTNER_DATA", False):
+            print("Collecting partner action diversity data...")
+            collect_fn = make_collect_partner_data(
+                config, load_zoo_dict_test, batchify, unbatchify, RunnerState
             )
-        else:
-            # For independent parameters: split by agent
-            split_params = _unstack_tree(
-                jax.tree.map(lambda x: x.swapaxes(0, 1), final_train_state.params)
-            )
-            for agent, params in zip(env.agents, split_params):
-                safetensors.flax.save_file(
-                    flatten_dict(params, sep='/'),
-                    f"{agent}.safetensors",
-                )
+            collect_rng = jax.random.key(config["SEED"] + 999)
+            # Use seed-0 trained policy for collection
+            final_train_state_seed0 = _tree_take(final_train_state, 0, axis=0)
+            collect_jit = jax.jit(collect_fn)
+            partner_actions, partner_obs = collect_jit(collect_rng, final_train_state_seed0)
+            jnp.save("partner_actions.npy", partner_actions, allow_pickle=False)
+            jnp.save("partner_obs.npy", partner_obs, allow_pickle=False)
+            print(f"Saved partner_actions.npy {partner_actions.shape} and partner_obs.npy {partner_obs.shape}")
 
         # ===== GENERALIZATION EVALUATION SETUP =====
         print("Setting up generalization evaluation...")
@@ -231,6 +371,7 @@ def main(config):
             obs=False,
             info=False,
             avail_actions=False,
+            env_metrics=config.get("SAVE_METRICS", True)
         )
 
         # ===== DUAL EVALUATION EXECUTION =====
@@ -254,7 +395,7 @@ def main(config):
         )
         
         # Evaluate against test partners (unseen during training - zero-shot generalization)
-        print("Evaluating against test partners (zero-shot generalization)...")
+        print("Evaluating against test partners (zero-shot coordination)...")
         evals_test = _concat_tree([
             eval_test_vmap(eval_rng, ts, eval_log_config)
             for ts in tqdm(split_trainstate, desc="Test partner evaluation")
@@ -280,12 +421,107 @@ def main(config):
         jnp.save("train_returns.npy", train_mean_episode_returns)
         jnp.save("test_returns.npy", test_mean_episode_returns)
 
+        # ===== WANDB METRIC LOGGING =====
+        log_all_metrics_zsc(config, out, evals_train, evals_test, env)
+        upload_eval_data_to_wandb(evals_train, config, run, suffix="_train_partners")
+        upload_eval_data_to_wandb(evals_test, config, run, suffix="_test_partners")
+
         # ===== GENERALIZATION ANALYSIS =====
         print("\nAd Hoc Teamwork Results Summary:")
         print(f"Performance with training partners: {train_mean_episode_returns.mean():.2f} ± {train_mean_episode_returns.std():.2f}")
         print(f"Performance with test partners: {test_mean_episode_returns.mean():.2f} ± {test_mean_episode_returns.std():.2f}")
-        
 
+        # ===== VISUALIZATION AND RENDERING =====
+        print("Creating episode visualizations...")
+
+        render_log_config = EvalInfoLogConfig(
+            env_state=True,
+            done=True,
+            action=False,
+            value=False,
+            reward=True,
+            log_prob=False,
+            obs=False,
+            info=False,
+            avail_actions=False,
+        )
+
+        # Free memory before rendering
+        print("Freeing memory before rendering...")
+        del out
+        del evals_train
+        del evals_test
+        del all_train_states
+        del split_trainstate
+        time.sleep(5)
+
+        import gc
+        gc.collect()
+        jax.clear_caches()
+
+        # Render using train-partner eval environment
+        render_eval_env, render_run_eval = make_evaluation(config, load_zoo=load_zoo_dict_train)
+        render_config = config
+        render_config["NUM_EVAL_EPISODES"] = 1
+        render_eval_jit = jax.jit(
+            render_run_eval,
+            static_argnames=["log_eval_info"],
+        )
+        eval_final = render_eval_jit(eval_rng, _tree_take(final_train_state, 0, axis=0), render_log_config)
+
+        # Select worst, median, best episodes
+        first_episode_done = jnp.cumsum(eval_final.done["__all__"], axis=0, dtype=bool)
+        first_episode_rewards = eval_final.reward["__all__"] * (1 - first_episode_done)
+        first_episode_returns = first_episode_rewards.sum(axis=0)
+        episode_argsort = jnp.argsort(first_episode_returns, axis=-1)
+
+        worst_idx = episode_argsort.take(0, axis=-1)
+        best_idx = episode_argsort.take(-1, axis=-1)
+        median_idx = episode_argsort.take(episode_argsort.shape[-1] // 2, axis=-1)
+
+        worst_episode = _take_episode(
+            eval_final.env_state.env_state.pipeline_state, first_episode_done,
+            time_idx=-1, eval_idx=worst_idx,
+        )
+        median_episode = _take_episode(
+            eval_final.env_state.env_state.pipeline_state, first_episode_done,
+            time_idx=-1, eval_idx=median_idx,
+        )
+        best_episode = _take_episode(
+            eval_final.env_state.env_state.pipeline_state, first_episode_done,
+            time_idx=-1, eval_idx=best_idx,
+        )
+        episodes_dict = {
+            'worst': worst_episode,
+            'median': median_episode,
+            'best': best_episode,
+        }
+
+        if config.get("SAVE_HTML_RENDER", True):
+            upload_html_visualizations_to_wandb(render_eval_env, episodes_dict, run)
+
+        if config.get("SAVE_MUJOCO_TRAJECTORIES", True):
+            upload_mujoco_trajectories_to_wandb(render_eval_env, episodes_dict, run)
+
+        if config.get("RENDER_VIDEOS", False):
+            try:
+                upload_mujoco_videos_to_wandb(
+                    render_eval_env,
+                    episodes_dict,
+                    run,
+                    fps=config.get("VIDEO_FPS", 30),
+                    quality=config.get("VIDEO_QUALITY", "high"),
+                    width=config.get("VIDEO_WIDTH", 1280),
+                    height=config.get("VIDEO_HEIGHT", 720),
+                )
+            except Exception as e:
+                print(f"Warning: Video rendering failed: {e}")
+                print("Continuing without videos...")
+
+        print("\nTraining and evaluation completed successfully!")
+
+        if config.get("PRINT_MEMORY_STATS", False):
+            print_memory_stats(f"IPPO AHT {config['EXP_ID']}")
 
 
 if __name__ == "__main__":

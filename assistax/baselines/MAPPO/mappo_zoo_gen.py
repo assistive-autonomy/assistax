@@ -19,8 +19,11 @@ import assistax
 from assistax.wrappers.aht import ZooManager
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    _tree_shape, _stack_tree, _concat_tree, _tree_split,
+    generate_preference_configs, extract_pref_config_at_index,
     )
+import copy
+import uuid
 
 # ============================================================================
 # TREE UTILITY FUNCTIONS
@@ -230,32 +233,31 @@ def _save_agents_to_zoo(config: Dict, final_train_state, zoo: ZooManager, env):
     
     # Progress bar for saving agents
     with tqdm(total=total_agents, desc="Saving agents") as pbar:
-        for agent_idx, agent_id in enumerate(env.agents):
-            for seed_idx in range(config["NUM_SEEDS"]):
+        for seed_idx in range(config["NUM_SEEDS"]):
+            team_uuid = str(uuid.uuid4())
+            for agent_idx, agent_id in enumerate(env.agents):
                 try:
                     # Extract parameters for this specific agent and seed
                     agent_params = _extract_agent_parameters(
                         final_train_state, agent_idx, seed_idx
                     )
-                    
+
                     # Save agent to zoo with metadata
                     zoo.save_agent(
                         config=config,
                         param_dict=agent_params,
                         scenario_agent_id=agent_id,
-                        # Additional metadata can be added here
-                        seed=seed_idx,
-                        agent_index=agent_idx,
+                        team_uuid=team_uuid,
                     )
-                    
+
                     saved_count += 1
                     pbar.update(1)
                     pbar.set_postfix({
-                        'agent': agent_id, 
+                        'agent': agent_id,
                         'seed': seed_idx,
                         'saved': saved_count
                     })
-                    
+
                 except Exception as e:
                     print(f"Error saving agent {agent_id} (seed {seed_idx}): {e}")
                     continue
@@ -267,28 +269,30 @@ def _save_agents_to_zoo(config: Dict, final_train_state, zoo: ZooManager, env):
 # TRAINING PIPELINE
 # ============================================================================
 
-def _run_training_pipeline(config: Dict):
+def _run_training_pipeline(config: Dict, dynamic_preferences: bool = False, pref_configs=None):
     """
     Run the complete training pipeline for zoo generation.
-    
+
     Args:
         config: Configuration dictionary
-        
+        dynamic_preferences: Whether to use dynamic preference rewards
+        pref_configs: Dict of JAX arrays for preference sweep (when dynamic_preferences=True)
+
     Returns:
         Dictionary containing training results and final states
     """
     # Import architecture-specific functions
     make_train, make_evaluation, EvalInfoLogConfig = _import_mappo_variant(config)
-    
+
     # Setup random number generation
     rng = jax.random.PRNGKey(config["SEED"])
     train_rng, eval_rng = jax.random.split(rng)
     train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
-    
+
     # Print training configuration
     architecture = f"{'RNN' if config['network']['recurrent'] else 'FF'}"
     sharing = f"{'PS' if config['network']['agent_param_sharing'] else 'NPS'}"
-    
+
     print(f"Training Configuration:")
     print(f"  Architecture: {architecture} + {sharing}")
     print(f"  Environment: {config['ENV_NAME']}")
@@ -298,34 +302,46 @@ def _run_training_pipeline(config: Dict):
     print(f"  Learning rate: {config['LR']}")
     print(f"  Entropy coefficient: {config['ENT_COEF']}")
     print(f"  Clip epsilon: {config['CLIP_EPS']}")
-    
+    if dynamic_preferences:
+        print(f"  Dynamic preferences: enabled")
+
     # Initialize environment for agent information
     env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     print(f"  Number of agents: {len(env.agents)}")
     print(f"  Agent IDs: {env.agents}")
-    
+
     # Run training
     print(f"\nStarting training...")
     start_time = time.time()
-    
+
     with jax.disable_jit(config["DISABLE_JIT"]):
-        # Create JIT-compiled training function
-        train_jit = jax.jit(
-            make_train(config, save_train_state=False),
-            device=jax.devices()[config["DEVICE"]]
-        )
-        
-        # Train across multiple seeds in parallel
-        training_results = jax.vmap(train_jit, in_axes=(0, None, None, None))(
-            train_rngs,
-            config["LR"], 
-            config["ENT_COEF"], 
-            config["CLIP_EPS"]
-        )
-    
+        if dynamic_preferences and pref_configs is not None:
+            train_jit = jax.jit(
+                make_train(config, save_train_state=False, dynamic_preferences=True),
+                device=jax.devices()[config["DEVICE"]]
+            )
+
+            # Nested vmap: outer=preference configs, inner=seeds
+            training_results = jax.vmap(
+                jax.vmap(train_jit, in_axes=(0, None, None, None, None)),
+                in_axes=(None, None, None, None, 0),
+            )(train_rngs, config["LR"], config["ENT_COEF"], config["CLIP_EPS"], pref_configs)
+        else:
+            train_jit = jax.jit(
+                make_train(config, save_train_state=False),
+                device=jax.devices()[config["DEVICE"]]
+            )
+
+            training_results = jax.vmap(train_jit, in_axes=(0, None, None, None))(
+                train_rngs,
+                config["LR"],
+                config["ENT_COEF"],
+                config["CLIP_EPS"]
+            )
+
     training_time = time.time() - start_time
     print(f"Training completed in {training_time:.2f} seconds")
-    
+
     return {
         "training_results": training_results,
         "env": env,
@@ -415,82 +431,145 @@ def main(config):
     # ========================================================================
     
     config = OmegaConf.to_container(config, resolve=True)
-    
+
     print("="*60)
     print("MAPPO ZOO GENERATION")
     print("="*60)
-    
-    
+
+    pref_sweep_config = config.get("PREFERENCE_SWEEP", None)
+    use_dynamic_prefs = pref_sweep_config is not None
+
+    if use_dynamic_prefs:
+        print(f"Preference sweep: {pref_sweep_config['num_configs']} configs")
+
     # ========================================================================
     # RUN TRAINING PIPELINE
     # ========================================================================
-    
+
     try:
-        training_results = _run_training_pipeline(config)
+        pref_configs = None
+        if use_dynamic_prefs:
+            rng = jax.random.PRNGKey(config["SEED"])
+            _, _, pref_rng = jax.random.split(rng, 3)
+            pref_configs = generate_preference_configs(pref_rng, pref_sweep_config, config)
+
+        training_results = _run_training_pipeline(
+            config,
+            dynamic_preferences=use_dynamic_prefs,
+            pref_configs=pref_configs,
+        )
         env = training_results["env"]
-        final_train_state = training_results["training_results"]["runner_state"].train_state.actor.params
-        
+
+        if use_dynamic_prefs:
+            # Shape: (num_pref_configs, num_seeds, num_agents, ...)
+            final_train_state = training_results["training_results"]["runner_state"].train_state.actor.params
+        else:
+            final_train_state = training_results["training_results"]["runner_state"].train_state.actor.params
+
     except Exception as e:
         print(f"Error during training: {e}")
         raise
-    
+
     # ========================================================================
     # INITIALIZE ZOO MANAGER
     # ========================================================================
-    
+
     try:
         zoo = ZooManager(config["ZOO_PATH"])
         print(f"\nZoo manager initialized at: {config['ZOO_PATH']}")
-        
+
     except Exception as e:
         print(f"Error initializing zoo manager: {e}")
         raise
-    
+
     # ========================================================================
     # SAVE AGENTS TO ZOO
     # ========================================================================
-    
+
     try:
         print(f"\nSaving agents to zoo...")
         save_start_time = time.time()
-        
-        _save_agents_to_zoo(config, final_train_state, zoo, env)
-        
+        total_agents_saved = 0
+
+        if use_dynamic_prefs:
+            for pref_idx in range(pref_sweep_config["num_configs"]):
+                agent_config = copy.deepcopy(config)
+                pref_at_idx = extract_pref_config_at_index(pref_configs, pref_idx)
+                agent_config["ENV_KWARGS"]["preference_rewards"]["preference_weights"] = {
+                    "speed_preference": pref_at_idx["w_speed"],
+                    "force_preference": pref_at_idx["w_force"],
+                    "touch_penalty": pref_at_idx["w_touch"],
+                }
+                agent_config["ENV_KWARGS"]["preference_rewards"]["preference_ranges"] = {
+                    "speed_range": [pref_at_idx["speed_range_min"], pref_at_idx["speed_range_max"]],
+                    "force_range": [pref_at_idx["force_range_min"], pref_at_idx["force_range_max"]],
+                }
+                print(f"Pref config {pref_idx}: w_speed={pref_at_idx['w_speed']:.3f}, "
+                      f"w_force={pref_at_idx['w_force']:.3f}")
+
+                pref_weights_for_index = {
+                    "w_speed": round(pref_at_idx["w_speed"], 4),
+                    "w_force": round(pref_at_idx["w_force"], 4),
+                    "w_touch": round(pref_at_idx["w_touch"], 4),
+                }
+
+                for seed_idx in range(config["NUM_SEEDS"]):
+                    team_uuid = str(uuid.uuid4())
+                    for agent_idx, agent_id in enumerate(env.agents):
+                        agent_params = _tree_take(
+                            _tree_take(
+                                _tree_take(final_train_state, pref_idx, axis=0),
+                                seed_idx, axis=0,
+                            ),
+                            agent_idx, axis=0,
+                        )
+                        zoo.save_agent(
+                            config=agent_config,
+                            param_dict=agent_params,
+                            scenario_agent_id=agent_id,
+                            team_uuid=team_uuid,
+                            preference_weights=pref_weights_for_index,
+                        )
+                        total_agents_saved += 1
+        else:
+            _save_agents_to_zoo(config, final_train_state, zoo, env)
+            total_agents_saved = len(env.agents) * config["NUM_SEEDS"]
+
         save_time = time.time() - save_start_time
         print(f"Agent saving completed in {save_time:.2f} seconds")
-        
+        print(f"Total agents saved: {total_agents_saved}")
+
     except Exception as e:
         print(f"Error saving agents to zoo: {e}")
         raise
-    
+
     # ========================================================================
     # OPTIONAL EVALUATION
     # ========================================================================
-    
+
     try:
         eval_results = _run_evaluation_pipeline(config, training_results)
-        
+
     except Exception as e:
         print(f"Warning: Evaluation failed: {e}")
         eval_results = None
-    
+
     # ========================================================================
     # SUMMARY AND CLEANUP
     # ========================================================================
-    
+
     print(f"\n{'='*60}")
     print(f"ZOO GENERATION COMPLETED SUCCESSFULLY")
     print(f"{'='*60}")
-    
+
     if eval_results:
         print(f"Evaluation time: {eval_results['eval_time']:.2f} seconds")
-    
-    # Zoo statistics
-    total_agents = len(env.agents) * config["NUM_SEEDS"]
+
     print(f"\nZoo Statistics:")
-    print(f"  Total agents saved: {total_agents}")
     print(f"  Agent types: {len(env.agents)} ({', '.join(env.agents)})")
     print(f"  Seeds per agent: {config['NUM_SEEDS']}")
+    if use_dynamic_prefs:
+        print(f"  Preference configs: {pref_sweep_config['num_configs']}")
     print(f"  Zoo location: {config['ZOO_PATH']}")
 
 

@@ -110,8 +110,8 @@
                       <geom name="right_finger_collision" class="c_robot_hand" type="box" mesh="finger_0" />
                     </body>
                     <body name="hook" childclass="c_robot_tool" pos="0 0 0.1" quat="0 0 0 1">
-                      <geom name="hook_platform" type="box" pos="0 0 0.05" size="0.006 0.03 0.07" class="c_robot_hand"/> 
-                      <geom name="hook_end" type="box" pos="-0.055 0 0.115" size="0.05 0.03 0.006" rgba="1 0 0 1" class="c_robot_hand"/> 
+                      <geom name="hook_platform" type="box" pos="0 0 0.05" size="0.006 0.03 0.07" class="c_robot_tool"/> 
+                      <geom name="hook_end" type="box" pos="-0.055 0 0.115" size="0.05 0.03 0.006" rgba="1 0 0 1" class="c_robot_tool"/> 
                       <site name="platform_center" type="sphere" pos="-0.05 0 0.09" size="0.008" rgba="0 1 1 1" quat="0.707 -0.707 0 0"/> 
                     </body>
                   </body>

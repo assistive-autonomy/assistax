@@ -25,7 +25,7 @@ NUM_CHECKPOINTS: 256 # how often to save the training parameters for evaluating 
 TEST_DURING_TRAINING: True # not currently in use for SAC
 
 # RL HYPERPARAMETERS
-ALGORITHM: MASAC
+ALGORITHM: SAC
 EXPLORE_STEPS: 5000
 PARTNER_ALGORITHMS: ["IPPO", "MAPPO", "MASAC"]  # number of steps to take with random actions at the start of training
 POLICY_UPDATE_DELAY: 4  # Every `policy_update_delay` q network learning steps the policy network is trained.
@@ -51,9 +51,33 @@ AUTOTUNE: True  # whether to autotune alpha
 TARGET_ENTROPY_SCALE: 5.0  # scale factor for target entropy (when auto-tuning)
 INIT_ALPHA: 0.1  # initial entropy value when not using autotune
 
-# WANDB
-# WANDB_GROUP: scratchitch
-# WANDB_RUN: test
+SPLIT_RATIO: 0.2 # The train/test split ratio e.g. 0.2 means 20% train, 80% test
+
+# When present and not null, replaces SPLIT_RATIO with extreme-based selection.
+# When absent/commented out, the existing random SPLIT_RATIO split is used.
+EXTREME_SPLIT:
+  num_extreme: 5           # Number of extreme agents to select (total)
+  role: "train"             # Where extreme agents go: "test" or "train"
+  mode: "single"           # Selection mode: "single", "multi", or "composite"
+
+  # --- mode: "single" ---
+  # Select top/bottom agents along ONE preference dimension
+  column: "w_speed"        # Which preference column to rank by
+  end: "max"              # "min", "max", or "both" (default). "both" selects num_extreme/2 from each end
+
+  # --- mode: "multi" ---
+  # Select top/bottom agents along MULTIPLE dimensions independently.
+  # Total extreme agents = num_extreme * len(columns) (deduplicated).
+  columns:
+    - column: "w_force"
+      end: "both"
+    - column: "w_speed"
+      end: "max"
+
+  #--- mode: "composite" ---
+  #Rank agents by Euclidean distance from centroid across preference dimensions.
+  #Selects the num_extreme most "extreme" agents overall.
+  dimensions: ["w_speed", "w_force", "w_touch"]  # optional, defaults to all 3
 
 # COMPUTE OPTIONS
 GPU_ENV_CAPACITY: 8192
@@ -63,16 +87,31 @@ DEVICE: 0
 DETERMINISTIC_EVAL: False
 
 # ZOO SETTINGS
-ZOO_PATH: ./path/to/assistax/zoo
+ZOO_PATH: ./zoo  # path to your agent zoo (download or generate; override per setup)
 
-eval: # path to actor all params for eval
-  path: ./path/to/actor_all_params.safetensors
+
+# Visualization settings
+SAVE_MUJOCO_TRAJECTORIES: True
+SAVE_HTML_RENDER: False 
+RENDER_VIDEOS: True 
+VIDEO_FPS: 30
+VIDEO_WIDTH: 1920
+VIDEO_HEIGHT: 1080
+VIDEO_QUALITY: "high"
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}
+
+# WandB Params
+ALG: SAC_AHT
+ENTITY: null  # set to your wandb entity (username/team)
+PROJECT: assistax  # set to your wandb project
+WANDB_MODE: "online"
+EXP_TAGS: ["ZSC","SAC","AHT"]
 
 hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/zsc/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/zsc/${ENV_NAME}/${ALGORITHM}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ""

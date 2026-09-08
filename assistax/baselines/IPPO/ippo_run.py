@@ -13,6 +13,7 @@ values for network
 """
 
 import os
+os.environ.setdefault('MUJOCO_GL', 'egl') # Use EGL backend for offscreen rendering in MuJoCo
 import time
 from tqdm import tqdm
 import jax
@@ -28,17 +29,26 @@ import assistax
 from assistax.wrappers.baselines import get_space_dim, LogEnvState
 from assistax.wrappers.baselines import LogWrapper
 import hydra
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from typing import Sequence, NamedTuple, Any, Dict
+import wandb
+from datetime import datetime
 from assistax.baselines.utils import (
     _tree_take, _unstack_tree, _take_episode, _compute_episode_returns,
-    _tree_shape, _stack_tree, _concat_tree, _tree_split
+    _tree_shape, _stack_tree, _concat_tree, _tree_split, upload_eval_data_to_wandb, 
+    log_all_metrics, upload_html_visualizations_to_wandb, upload_model_parameters_to_wandb,
+    upload_mujoco_trajectories_to_wandb, upload_mujoco_videos_to_wandb, print_memory_stats
     )
+
+os.environ['XLA_FLAGS'] = (
+    '--xla_gpu_triton_gemm_any=True ' # As recommended by MJX for better performance on NVIDIA GPUs
+)
+
 
 # ================================ MAIN ORCHESTRATION FUNCTION ================================
 
 @hydra.main(version_base=None, config_path="config", config_name="ippo")
-def main(config):
+def main(config: DictConfig):
     """
     Main orchestration function for IPPO training and evaluation.
     
@@ -60,18 +70,55 @@ def main(config):
         case (False, False):
             from ippo_ff_nps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Feedforward Networks with No Parameter Sharing")
+            network_type = "FF_NPS"
         case (False, True):
             from ippo_ff_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Feedforward Networks with Parameter Sharing")
+            network_type = "FF_NPS"
         case (True, False):
             from ippo_rnn_nps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with No Parameter Sharing")
+            network_type = "RNN_NPS"
         case (True, True):
             from ippo_rnn_ps import make_train, make_evaluation, EvalInfoLogConfig
             print("Using: Recurrent Networks with Parameter Sharing")
 
+    # WANDB logging
+    now = datetime.now()
+    param_sharing = config["network"]["agent_param_sharing"]
+    if param_sharing:
+        ps_tag = "ps"
+    else:
+        ps_tag = "nps"
+    rec_config = config["network"]["recurrent"]
+    if rec_config:
+        rec_tag = "rnn"
+    else:
+        rec_tag = "ff"
+
+    env_name = (
+        config.get("ENV_NAME")
+        if config.get("MAP_NAME") is None
+        else config.get("MAP_NAME")
+    )
+    env_name = env_name.lower()
+    alg_name = config.get("ALG").lower()
+    name = f"{alg_name}_{ps_tag}_{rec_tag}_{env_name}_{config['EXP_ID']}_seed{config['SEED']}"
+    tags = [config["EXP_ID"]] + config.get("EXP_TAGS") + [env_name] + [alg_name]
+    config["EXP_TAGS"] = tags  # Update config with full tags list for easier grouping in WandB
+    run = wandb.init(
+        entity=config["ENTITY"],
+        project=config["PROJECT"],
+        tags=tags,
+        config=config,
+        mode=config["WANDB_MODE"],
+        reinit=True,
+        name=name,
+        save_code=True,
+    )
     # ===== TRAINING SETUP =====
-    rng = jax.random.PRNGKey(config["SEED"])
+    #rng = jax.random.PRNGKey(config["SEED"])
+    rng = jax.random.key(config["SEED"]) # TODO update to new jax API
     train_rng, eval_rng = jax.random.split(rng)
     train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
     
@@ -81,6 +128,7 @@ def main(config):
     print(f"Environment: {config['ENV_NAME']}")
     
     # ===== TRAINING EXECUTION =====
+    start = time.time()
     with jax.disable_jit(config["DISABLE_JIT"]):
         train_jit = jax.jit(
             make_train(config, save_train_state=True),
@@ -96,45 +144,19 @@ def main(config):
 
         # ===== SAVE TRAINING METRICS =====
         print("Saving training metrics...")
+        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         EXCLUDED_METRICS = ["train_state"]  # Exclude large training states from metrics file
-        jnp.save("metrics.npy", {
-            key: val
-            for key, val in out["metrics"].items()
-            if key not in EXCLUDED_METRICS
-            },
-            allow_pickle=True
-        )
 
+        # TODO here I really should use something like log_multiple_training_seeds 
         # ===== SAVE MODEL PARAMETERS =====
         print("Saving model parameters...")
-        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
         all_train_states = out["metrics"]["train_state"]
         final_train_state = out["runner_state"].train_state
 
-        # Save all training states (for analysis across training)
-        safetensors.flax.save_file(
-            flatten_dict(all_train_states.params, sep='/'),
-            "all_params.safetensors"
-        )
+        # Uploading model parameters to WandB 
         
-        # Save final parameters (different format for parameter sharing vs independent)
-        if config["network"]["agent_param_sharing"]:
-            # For parameter sharing: single set of shared parameters
-            safetensors.flax.save_file(
-                flatten_dict(final_train_state.params, sep='/'),
-                "final_params.safetensors"
-            )
-        else:
-            # For independent parameters: split by agent
-            split_params = _unstack_tree(
-                jax.tree.map(lambda x: x.swapaxes(0, 1), final_train_state.params)
-            )
-            for agent, params in zip(env.agents, split_params):
-                safetensors.flax.save_file(
-                    flatten_dict(params, sep='/'),
-                    f"{agent}.safetensors",
-                )
-
+        upload_model_parameters_to_wandb(all_train_states, final_train_state, config, env, run)
+        
         # ===== EVALUATION SETUP =====
         print("Setting up evaluation...")
         
@@ -174,6 +196,7 @@ def main(config):
             obs=False,
             info=False,
             avail_actions=False,
+            env_metrics=True,
         )
         
         # JIT compile evaluation functions for efficiency
@@ -201,8 +224,13 @@ def main(config):
         first_episode_returns = first_episode_returns["__all__"]
         mean_episode_returns = first_episode_returns.mean(axis=-1)
 
-        # Save evaluation results
-        jnp.save("returns.npy", mean_episode_returns)
+        
+        
+        # TODO Save evaluation results with wandb utility
+        log_all_metrics(config, out, evals, env)
+        upload_eval_data_to_wandb(evals, config, run)
+        # jnp.save("returns.npy", mean_episode_returns)
+
         print(f"Mean episode return: {mean_episode_returns.mean():.2f} ± {mean_episode_returns.std():.2f}")
 
         # ===== VISUALIZATION AND RENDERING =====
@@ -223,8 +251,30 @@ def main(config):
         
         # Evaluate final model for visualization
         # TODO: limit to fewer evaluation episodes to make rendering more memory efficient
-        eval_final = eval_jit(eval_rng, _tree_take(final_train_state, 0, axis=0), render_log_config)
+        print("Freeing memory before rendering...")
+        del out
+        del evals  
+        del all_train_states
+        del split_trainstate
+        time.sleep(5)  # Wait a moment to ensure memory is freed
         
+        # STEP 2: Python garbage collection
+        import gc
+        gc.collect()
+        
+        # STEP 3: Clear JAX's compilation cache and force memory release
+        jax.clear_caches()
+
+        render_eval_env, render_run_eval = make_evaluation(config)
+        render_config = config
+        render_config["NUM_EVAL_EPISODES"] = 1 
+        render_eval_jit = jax.jit(
+            render_run_eval,
+            static_argnames=["log_eval_info"],
+        )
+        eval_final = render_eval_jit(eval_rng, _tree_take(final_train_state, 0, axis=0), render_log_config) #Take a single seed
+        
+
         # Compute episode returns and select representative episodes
         first_episode_done = jnp.cumsum(eval_final.done["__all__"], axis=0, dtype=bool)
         first_episode_rewards = eval_final.reward["__all__"] * (1 - first_episode_done)
@@ -237,8 +287,6 @@ def main(config):
         median_idx = episode_argsort.take(episode_argsort.shape[-1] // 2, axis=-1)
 
         # Extract episode data for visualization
-        from assistax.render import html
-        
         worst_episode = _take_episode(
             eval_final.env_state.env_state.pipeline_state, first_episode_done,
             time_idx=-1, eval_idx=worst_idx,
@@ -251,18 +299,51 @@ def main(config):
             eval_final.env_state.env_state.pipeline_state, first_episode_done,
             time_idx=-1, eval_idx=best_idx,
         )
+        episodes_dict = {
+            'worst': worst_episode,
+            'median': median_episode,
+            'best': best_episode,
+        }
         
+        # Upload HTML visualizations to WandB
+        if config.get("SAVE_HTML_RENDER", True):
+            upload_html_visualizations_to_wandb(render_eval_env, episodes_dict, run)
+
+        if config.get("SAVE_MUJOCO_TRAJECTORIES", True):
+            upload_mujoco_trajectories_to_wandb(render_eval_env, episodes_dict, run)
+
+        # Conditionally upload rendered videos (larger files, immediate visual feedback)
+        if config.get("RENDER_VIDEOS", False):
+            try:
+                upload_mujoco_videos_to_wandb(
+                    render_eval_env,
+                    episodes_dict,
+                    run,
+                    fps=config.get("VIDEO_FPS", 30),
+                    quality=config.get("VIDEO_QUALITY", "high"),
+                    width=config.get("VIDEO_WIDTH", 1280),
+                    height=config.get("VIDEO_HEIGHT", 720),
+                )
+            except Exception as e:
+                print(f"Warning: Video rendering failed: {e}")
+                print("Continuing without videos...")
+
         # Generate interactive HTML visualizations
-        html.save("final_worst.html", eval_env.sys, worst_episode)
-        html.save("final_median.html", eval_env.sys, median_episode)
-        html.save("final_best.html", eval_env.sys, best_episode)
+        # html.save("final_worst.html", eval_env.sys, worst_episode)
+        # html.save("final_median.html", eval_env.sys, median_episode)
+        # html.save("final_best.html", eval_env.sys, best_episode)
         
-        print("Visualizations saved:")
-        print("  - final_worst.html: Worst performing episode")
-        print("  - final_median.html: Median performing episode") 
-        print("  - final_best.html: Best performing episode")
+        print("Visualizations saved to WANDB artifacts:")
+        # print("  - final_worst.html: Worst performing episode")
+        # print("  - final_median.html: Median performing episode") 
+        # print("  - final_best.html: Best performing episode")
         
         print("\nTraining and evaluation completed successfully!")
+        end = time.time()
+        print(f"MARL Run took {end - start:.2f} seconds") 
+        if config["PRINT_MEMORY_STATS"]:
+            print_memory_stats(f"IPPO Sweep: Final Network={network_type}, Env={config['ENV_NAME']}, Seeds={config['NUM_SEEDS']}, Num Envs={config['NUM_ENVS']},  Num Steps={config['NUM_STEPS']}")
+
 
 
 if __name__ == "__main__":

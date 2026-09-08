@@ -1,5 +1,9 @@
 <mujoco model="panda scene">
-  <compiler angle="radian" meshdir="wheelchair_assets" autolimits="true"/>
+  <visual>
+    <global offwidth="1920" offheight="1920"/>
+  </visual>
+
+  <compiler angle="radian" meshdir="meshes" autolimits="true"/>
   <asset>
   <!-- Wheelchair -->
     <mesh file="wheelchair_permobil_reduced_compressed.obj" scale="0.15 0.15 0.15"/>
@@ -108,7 +112,7 @@
         <joint axis="0 1 0" type="slide" range="0 0.04"/>
       </default>
       <default class="c_robot_tool">
-        <geom contype="4" conaffinity="35" rgba="0 0 1 1.0"/>
+        <geom contype="4" conaffinity="35" group="2" rgba="0 0 1 1.0"/>
       </default>
       <default class="c_robot_hand">
         <geom contype="4" conaffinity="35" group="3" rgba="0 0 1 0.1"/>
@@ -137,7 +141,7 @@
 
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
-	<camera name="default" pos="-1.102 2.367 1.930" xyaxes="-0.907 -0.421 0.000 0.231 -0.496 0.837"/>
+    <camera name="default" mode="targetbodycom" pos="1.3 2.1 1.8" target="humanoid_container"/>   
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane" conaffinity="1"/>
     <body name="wheelchair_container" pos="0 0 0.06" euler="1.57 0 0">
       <include file="wheelchair_assets/wheelchair_bare.xml"/>
@@ -189,3 +193,9 @@
   </keyframe>
 
 </mujoco>
+
+  <keyframe>
+
+    <key name="init" qpos='0.011 0.187 -0.420 0.7 0.073 -0.077 0.707 0 -0.649 0.007 -0.043 -0.018 -0.523 -1.993 -0.014 0 -0.531 -1.993 0.509 -0.427 -0.400 -0.474 0.427 -0.400 0 0 0 0 0 0 0  '/>
+
+  </keyframe>

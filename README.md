@@ -1,20 +1,35 @@
 # 🦾 Assistax 
 
 <p align="center">
-  <a href=""https://leohinckeldey.dev/assistax-project/>🌐 Website</a> ·  <a href="https://arxiv.org/abs/2507.21638">📄 Paper</a> · <a href="https://huggingface.co/datasets/leohink/assistax-zoo">🤗 Models</a>
+  <a href="https://leohinckeldey.dev/assistax-project/">🌐 Website</a> · <a href="https://arxiv.org/abs/2507.21638">📄 Paper</a> · <a href="https://huggingface.co/datasets/leohink/assistax-zoo">🤗 Models</a>
 </p>
 
 <div style="display: flex; justify-content: space-between;">
-  <img src="docs/imgs/scratch.jpeg" alt="Scratching" style="width: 32%;">
-  <img src="docs/imgs/bedbath.jpeg" alt="Scratching" style="width: 32%;">
-  <img src="docs/imgs/armassist.jpeg" alt="Bedbathing" style="width: 32%;">
+  <img src="docs/imgs/task_scratch.png" alt="Scratch Itch" style="width: 19%;">
+  <img src="docs/imgs/task_bed_bathing.png" alt="Bed Bathing" style="width: 19%;">
+  <img src="docs/imgs/task_feeding.png" alt="Feeding" style="width: 19%;">
+  <img src="docs/imgs/task_tooth_brushing.png" alt="Teeth Brushing" style="width: 19%;">
+  <img src="docs/imgs/task_arm_assist.png" alt="Arm Assist" style="width: 19%;">
 </div>
 
 Assistax is a Python library that provides hardware-accelerated environments in the domain of assistive robotics together with accompanying baseline algorithm implementations. We utilize JAX and Brax for quick RL and MARL training pipelines.
 
 ## 🏄 Installation
 
-We use `uv` for environment and package management. We highly recommend using `uv` when working with this project. For installing `uv`, see [uv installation](https://docs.astral.sh/uv/getting-started/installation/), and for more information and further documentation, see [uv docs](https://docs.astral.sh/uv/).
+### As a library (pip)
+
+To use the assistax **environments** in your own project, install the package directly from GitHub (the MuJoCo/MJX assets are bundled):
+
+```bash
+# NVIDIA GPU (CUDA 12); use [cuda13] or [cpu] as appropriate
+pip install "assistax[cuda12] @ git+https://github.com/assistive-autonomy/assistax.git"
+```
+
+This gives you the environments (`assistax.make`, `assistax.envs.create`) and wrappers — see the **Using assistax in Python** section below. The **baselines** (training scripts) are run from a clone, as described next.
+
+### For development & running the baselines (uv)
+
+We use `uv` for environment and package management. We highly recommend using `uv` when working with this project. For installing `uv`, see [uv installation](https://docs.astral.sh/uv/getting-started/installation/).
 
 1. Clone the repository
 ```bash
@@ -35,6 +50,40 @@ uv sync --dev --extra cuda12 # if your using cuda12 else cuda13
 cd assistax
 uv sync --dev --extra cpu 
 ```
+
+## 🐍 Using assistax in Python
+
+Create an environment with `assistax.make` and step it with the functional (JAX) API. Observations, rewards and dones are dicts keyed by agent name (`rewards`/`dones` also carry an `"__all__"` entry); actions are `Box(-1, 1)` per actuator:
+
+```python
+import jax
+import jax.numpy as jnp
+import assistax
+
+env = assistax.make("scratchitch")          # one of assistax.registered_envs
+key = jax.random.PRNGKey(0)
+
+obs, state = env.reset(key)                  # obs: {agent: array}
+actions = {a: jnp.zeros(env.action_spaces[a].shape) for a in env.agents}
+obs, state, rewards, dones, info = env.step(key, state, actions)
+```
+
+Enable **preference rewards** (or `disability` / `sparse_rewards`) by passing the corresponding dict — `make` forwards it to `assistax.envs.create`:
+
+```python
+env = assistax.make(
+    "feeding",
+    preference_rewards={
+        "preference_weights": {"speed_preference": 0.25, "force_preference": 0.35},
+        "preference_ranges": {"speed_range": [0.06, 0.14], "force_range": [1.5, 3.5]},
+        "reward_budget": 1.0,
+    },
+)
+```
+
+See [`assistax/envs/README.md`](assistax/envs/README.md) for the full per-environment reference (observations, reward components, the preference system).
+
+> **Note:** `pip install` gives you the **environments**. The **baselines** (IPPO/MAPPO/ISAC/MASAC/ZSC training scripts under `assistax/baselines/`) are research scripts run from a clone — they use Hydra configs and per-directory imports. Before running them, set your own values for `ENTITY`/`PROJECT` (Weights & Biases), `ZOO_PATH`, and `DEVICE`/`GPU_ENV_CAPACITY` in the relevant `config/*.yaml`.
 
 ## 🚀 Quick Start
 
@@ -60,7 +109,7 @@ This will create a `zoo` directory where configs and parameters used during trai
 uv run python assistax/baselines/ZSC/ppo_aht.py ENV_NAME=scratchitch
 ```
 
-This will run a ZSC experiment for a single PPO robot agent against the pre-trained partner policies in the zoo. Check the config `{alg}_aht.yaml`. By default, this will do a 50-50 train-test split of the pre-trained partner agent population.
+This will run a ZSC (ad-hoc teamwork) experiment for a single PPO robot agent against the pre-trained partner policies in the zoo. Check the config `{alg}_aht.yaml`. By default this does a 50-50 train-test split of the pre-trained partner population, so generalisation to *unseen* partners can be measured. You can instead stratify partners by their preferences using the extreme-split option (see `assistax/baselines/ZSC/aht_utils.py`). Pair this with the crossplay step below to build crossplay matrices over the population.
 
 ### ⚔️ Crossplay of agent population
 
@@ -80,7 +129,27 @@ This will generate a sweep for the specified IPPO variant for the scratchitch ta
 
 ## 🦓 Pre-trained partner policies 
 
-The pre-trained partner policies `zoo` can be downloaded on [Hugging Face](https://huggingface.co/datasets/leohink/assistax-zoo/). Downlaod the `zoo.tar.gz` file and change the `ZOO_PATH` config in `assistax/baselines/ZSC/config/ppo_aht.yaml` to train a 50-50 split agains a pre-trained population of "human" agents. 
+The pre-trained partner policies `zoo` can be downloaded on [Hugging Face](https://huggingface.co/datasets/leohink/assistax-zoo/). Download the `zoo.tar.gz` file, extract it, and point the `ZOO_PATH` config in `assistax/baselines/ZSC/config/ppo_aht.yaml` (or `sac_aht.yaml`) at the extracted `zoo/` directory to train against a pre-trained population of "human" agents.
+
+The zoo contains **630 unique "humans" per task** for each of the 5 tasks, where a human is a unique combination of preference weights (`w_speed`, `w_force`, `w_touch`). These are evenly split **210 / 210 / 210** across the IPPO, MAPPO and MASAC training algorithms, and each human is paired with the robot it was trained with (3,150 human+robot teams, 6,300 agents in total).
+
+How partners are split into train/test sets is set in the AHT config: `SPLIT_RATIO` for a random split, or `EXTREME_SPLIT` to instead select the most extreme partners along a preference dimension (e.g. the 5 highest `w_speed`) for a harder zero-shot setting.
+
+## 💡 Running Experiments **Tip**
+
+When running experiments the hydra config automatically creates an EXP ID based on the time but if you are using multiruns it maybe nice to have the same EXP_ID for all experiments that are launched with the multirun. To achieve this simply set the `EXP_ID` as an environment variable e.g., run:
+
+```bash
+EXP_ID=$(date +%Y-%m-%d_%H-%M-%S) python ippo_run.py -m SEED=0,1,2,3,4
+```
+
+or if you are using slurm or another launch script add the following:
+
+```bash
+export EXP_ID=$(date +%Y-%m-%d_%H-%M-%S)
+```
+
+
 
 ## 🥱 Other information
 
@@ -94,7 +163,23 @@ The pre-trained partner policies `zoo` can be downloaded on [Hugging Face](https
 
 - **Bed Bath**: We provide target bathing points distributed along the surface of the human's arm. The robot must reach each point and apply a certain force to activate the next point. The aim is to reach (wipe) all points before the end of an episode. [implementation](assistax/envs/bedbathing.py)
 
+- **Feeding**: The robot must guide a spoon to the human's mouth. It has to approach with the correct orientation and a gentle, well-paced motion so that contact with the human is comfortable. [implementation](assistax/envs/feeding.py)
+
+- **Teeth Brushing**: The robot must bring a toothbrush to the human's mouth and brush their teeth. This requires approaching and aligning the brush, then maintaining an appropriate brushing motion and contact force. [implementation](assistax/envs/teethbrushing.py)
+
 - **Arm Assist**: The robot must help the human lift their right arm back into a comfortable position on the bed. In this task, the human is too weak to complete the task on their own and thus requires the robot. The robot has to learn to align its end-effector with a target section of the arm, and then move the human's arm until the green and blue targets overlap. [implementation](assistax/envs/armmanipulation.py)
+
+## 🎚️ Preference rewards
+
+Each environment's reward can be augmented with **human-preference** components via the `PreferenceRewardWrapper` ([implementation](assistax/wrappers/training.py)). This lets the "human" express preferences over *how* a task is completed — for example a preferred end-effector **speed** and **contact force**, each rewarded over a configurable range. Preference rewards are added on top of the base task reward, so the robot has to satisfy the task *and* the human's preferences.
+
+Enable them by uncommenting the `preference_rewards` block under `ENV_KWARGS` in the algorithm config (see `assistax/baselines/IPPO/config/ippo.yaml`), then run as usual:
+
+```bash
+uv run python assistax/baselines/IPPO/ippo_run.py ENV_NAME=feeding
+```
+
+Preference weights and ranges can also be swept and sampled when generating partner populations for zero-shot coordination (see the *Generating multiple partner policies* section above).
 
 ## 📈 Baselines 
 

@@ -1,5 +1,4 @@
-from typing import Tuple
-
+from typing import Tuple, Dict, Optional
 from brax import base
 from brax.envs.base import PipelineEnv, State
 from brax.io import mjcf
@@ -25,7 +24,7 @@ class PushCoop(PipelineEnv):
 
     def __init__(
         self,
-        ctrl_cost_weight: float = 1e-6,
+        ctrl_cost_weight: float = 0.0,
         dist_reward_weight: float = 1.0,
         ee_dist_scale: float = 0.1,
         t_dist_scale: float = 0.3,
@@ -92,6 +91,10 @@ class PushCoop(PipelineEnv):
         self.t_shape_geom_idx2 = mj_name2id(mjmodel, GEOM_IDX, "t_cross")
         self.t_shape_body_idx = mj_name2id(mjmodel, BODY_IDX, "t_object")
 
+        self.table_geom_idx = mj_name2id(mjmodel, GEOM_IDX, "table_top")
+
+        self.staging_area_site_idx = mj_name2id(mjmodel, SITE_IDX, "staging_area")
+
         self.obstacle1_idx = mj_name2id(mjmodel, GEOM_IDX, "obs1")
         self.obstacle2_idx = mj_name2id(mjmodel, GEOM_IDX, "obs2")
         self.obstacle3_idx = mj_name2id(mjmodel, GEOM_IDX, "obs3")
@@ -101,18 +104,11 @@ class PushCoop(PipelineEnv):
 
         self.table_top_idx = mj_name2id(mjmodel, GEOM_IDX, "table_top")
 
-        # self.panda1_sensor_idx = mj_name2id(mjmodel, GEOM_IDX, "panda1_touch")
-        # self.panda2_sensor_idx = mj_name2id(mjmodel, GEOM_IDX, "panda2_touch")
 
-        # contact ids when all obstacles are activated
         self.contact_id_tmain = [280, 281, 282, 283]
         self.contact_id_tcross = [284, 285, 286, 287]
 
-        # panda contact ids when all obstacles are activated
-        # self.panda1_contact_id_t = [794, 795, 792, 793]
-        # self.panda2_contact_id_t = [796, 797, 798, 799]
 
-        # panda contac ids contact with less obstacles
         self.panda1_contact_id_t = [672, 673, 674, 675]
         self.panda2_contact_id_t = [676, 677, 678, 679]
 
@@ -123,12 +119,8 @@ class PushCoop(PipelineEnv):
         self.contact_t_obs4 = [336, 337, 338, 339, 352, 353, 354, 355]
         self.contact_t_obs5 = [340, 341, 342, 343, 356, 357, 358, 359]
 
-        # self.t_main_obs1 = [328, 329, 330, 331]
-        # self.t_main_obs2 = [332, 333, 334, 335]
-        # self.t_main_obs4 = [336, 337, 338, 339]
-        # self.t_main_obs5 = [340, 341, 342, 343]
 
-        n_frames = 4
+        n_frames = 5 
         kwargs["n_frames"] = kwargs.get("n_frames", n_frames)
 
         super().__init__(sys=self.sys, backend=backend, **kwargs)
@@ -196,41 +188,26 @@ class PushCoop(PipelineEnv):
         done, zero = jp.zeros(2)
 
         metrics = {
-            "robo1_reward_dist": zero,
-            "robo2_reward_dist": zero,
-            "robo1_reward_ctrl": zero,
-            "robo2_reward_ctrl": zero,
-            "robo1_reward_t_contact": zero,
-            "robo2_reward_t_contact": zero,
-            "reward_t_dist": zero,
+            "robo1_reward_dist": zero, #dist1_reward, 
+            "robo2_reward_dist": zero, #dist2_reward,
+            "robo1_reward_ctrl": zero, #ctrl_cost TODO set weight to 0 or heterogenous control costs. 
+            "robo2_reward_ctrl": zero, #ctrl_cost
+            "reward_t_to_goal": zero, #target_dist_reward
+            "robot1_staging_reward": zero, #robot1_staging_reward
+            "robot2_staging_reward": zero, #robot2_staging_reward
+            "drag_phase_locked": zero, #drag_phase_locked
+            "phase_weight": zero,#phase_weight
+            "robo1_push_reward": zero, #robo1_push_reward,
+            "robo1_drag_reward": zero, #robo1_drag_reward,
+            "robo2_push_reward": zero, #robo2_push_reward,
+            "robo2_drag_reward": zero, #robo2_drag_reward,
         }
-
-        # info = {
-        #     "robo1_dist_to_target": zero,
-        #     "robo2_dist_to_target": zero,
-        #     "robo1_t_contact": zero,
-        #     "robo2_t_contact": zero,
-        #     "t_dist": zero,
-        #     "t_contact_id": zero,
-        #     "t_contact_force": zero,
-        #     "robo1_reward_dist": zero,
-        #     "robo2_reward_dist": zero,
-        #     "robo1_reward_ctrl": zero,
-        #     "robo2_reward_ctrl": zero,
-        #     "robo1_reward_t_contact": zero,
-        #     "robo2_reward_t_contact": zero,
-        #     "reward_t_dist": zero,
-        #     "target_pos": target_pos,
-        # }
 
         info = {
-            "dist_to_target": zero,
-            "t_contact": zero,
-            "t_dist": zero,
-            "t_contact_id": zero,
-            "t_contact_force": zero,
             "target_pos": target_pos,
+            "drag_phase_locked": jp.array(0.0)
         }
+
 
         return State(pipeline_state, obs, reward, done, metrics, info)
 
@@ -239,10 +216,11 @@ class PushCoop(PipelineEnv):
         pipeline_state0 = state.pipeline_state
         assert pipeline_state0 is not None
         pipeline_state = self.pipeline_step(pipeline_state0, action)
-
         ctrl_cost = -jp.sum(jp.square(action))
+        
         robo1_obs = self._get_robo1_obs(pipeline_state, state.info["target_pos"])
         robo2_obs = self._get_robo2_obs(pipeline_state, state.info["target_pos"])
+        
         obs = jp.concatenate((
             robo1_obs["target_pos"],
             robo1_obs["pusher_pos"],
@@ -251,74 +229,100 @@ class PushCoop(PipelineEnv):
             robo1_obs["t_location"],
             robo1_obs["robo1_joint_angles"],
             robo1_obs["robot1_ee_dist"].reshape((1,)),
-            # robo1_obs["obs1_forces"],
-            # robo1_obs["obs2_forces"],
-            # robo1_obs["obs4_forces"],
-            # robo1_obs["obs5_forces"],
             robo1_obs["other_agent_ee_pos"],
             robo2_obs["target_pos"],
             robo2_obs["pusher_pos"],
             robo2_obs["pusher_rot"],
-            robo2_obs["pusher_forces"], # .reshape((1,))
+            robo2_obs["pusher_forces"],
             robo2_obs["t_location"],
             robo2_obs["robo2_joint_angles"],
             robo2_obs["robot2_ee_dist"].reshape((1,)),
-            # robo2_obs["obs1_forces"],
-            # robo2_obs["obs2_forces"],
-            # robo2_obs["obs4_forces"],
-            # robo2_obs["obs5_forces"],
             robo2_obs["other_agent_ee_pos"],
         ))
         
-        dist_target = - self._get_dist_target(pipeline_state, state.info)
-        target_dist_reward = jp.exp(-dist_target**2 / self._t_dist_scale) 
-        # dist1, dist2 = self._ee_dist_to_t(pipeline_state)
-        dist1 = - robo1_obs["robot1_ee_dist"]
-        dist2 = - robo2_obs["robot2_ee_dist"]
-        dist1_reward = jp.exp(-dist1**2 / self._ee_dist_scale)
-        dist2_reward = jp.exp(-dist2**2 / self._ee_dist_scale)
-
-        # robo1_contact = jp.sum(robo1_obs["pusher_forces"]) > 0
-        # robo2_contact = jp.sum(robo2_obs["pusher_forces"]) > 0
-
-        # print(f"dist1: {dist1}, dist2: {dist2}, dist_target: {dist_target} \n target_dist_reward: {target_dist_reward}, dist1_reward: {dist1_reward}, dist2_reward: {dist2_reward}")
-
-        # jax.debug.breakpoint()
+        # T dist to target       
+        dist_target = -self._get_dist_target(pipeline_state, state.info)
         
-        # print(f"t_at_target_reward: {t_at_target_reward}")
-
-        # TODO: contact between the two robots should be penalized
-
-        # done = self._get_t_floor_contact(pipeline_state) or (self._get_dist_target(pipeline_state, state.info) < 0.1) # add termination condition
+        # Calculate rewards
+        target_dist_reward = jp.exp(-dist_target**2 / self._t_dist_scale)
         
+        # Phase determination: Check if T-object is near middle of table
+        in_drag_phase, dist_to_middle, phase_threshold = self._determine_phase(pipeline_state)
         
-        t_at_target_reward = (self._get_dist_target(pipeline_state, state.info) < 0.1) * 10
-        failed_reward = self._get_t_floor_contact(pipeline_state) * -10
+        drag_phase_locked = state.info.get("drag_phase", 0.0)
 
-        done = ((t_at_target_reward + failed_reward) != 0)*1.0
+        drag_phase_locked = jp.logical_or(drag_phase_locked, in_drag_phase).astype(jp.float32)
 
-        reward_robo1 = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist1_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward # took out this component 1.0 * robo1_contact
-        reward_robo2 = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist2_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward
+        # Smooth transition between phases using sigmoid
+        # This prevents abrupt reward changes
+        phase_weight = jax.nn.sigmoid((dist_to_middle - phase_threshold) / 0.05)
+        phase_weight = (1.0 - drag_phase_locked) * phase_weight  # Lock into drag phase once entered
+
+        # Terminal conditions
+        t_at_target = self._get_dist_target(pipeline_state, state.info) < 0.1
+        t_fell = self._get_t_floor_contact(pipeline_state)
+        t_at_target_reward = t_at_target * 100.0
+        failed_reward = t_fell * -10.0
+       
+        # If T falls or reaches target, episode ends
+        done = jp.logical_or(t_at_target, t_fell).astype(jp.float32)
+        
+        # This prevents abrupt reward changes
+        phase_weight = jax.nn.sigmoid((dist_to_middle - phase_threshold) / 0.01)
+        phase_weight = (1.0 - drag_phase_locked) * phase_weight  # Lock into drag phase once entered
+        
+        reward_robo1, robo1_reward_info = self._robot1_reward(phase_weight, robo1_obs, failed_reward, 
+                                                              t_at_target_reward, target_dist_reward, 
+                                                              ctrl_cost, pipeline_state)
+        reward_robo2, robo2_reward_info = self._robot2_reward(phase_weight, robo2_obs, failed_reward,
+                                                              t_at_target_reward, target_dist_reward, 
+                                                              ctrl_cost, pipeline_state)
+
         reward = jp.array([reward_robo1, reward_robo2])
         
-        # metrics = {
-        #     "robo1_reward_dist": dist1_reward,
-        #     "robo2_reward_dist": dist2_reward,
-        #     "robo1_reward_ctrl": ctrl_cost,
-        #     "robo2_reward_ctrl": ctrl_cost,
-        #     "robo1_reward_t_contact": robo1_contact,
-        #     "robo2_reward_t_contact": robo2_contact,
-        #     "reward_t_dist": target_dist_reward,
-        # }
+        # Optional: Add phase info to state for debugging
+
+        u_info = {
+            "target_pos": state.info["target_pos"],
+            "drag_phase_locked": drag_phase_locked,
+        }
+
+        state.metrics.update(
+            robo1_reward_dist = robo1_reward_info["dist_reward"],
+            robo2_reward_dist = robo2_reward_info["dist_reward"],
+            robo1_reward_ctrl = robo1_reward_info["reward_ctrl"],
+            robo2_reward_ctrl = robo2_reward_info["reward_ctrl"],
+            reward_t_to_goal = target_dist_reward,
+            robot1_staging_reward = robo1_reward_info["staging_reward"],
+            robot2_staging_reward = robo2_reward_info["staging_reward"],
+            drag_phase_locked = drag_phase_locked,
+            phase_weight = phase_weight,
+            robo1_push_reward = robo1_reward_info["push_reward"],
+            robo1_drag_reward = robo1_reward_info["drag_reward"],
+            robo2_push_reward = robo2_reward_info["push_reward"],
+            robo2_drag_reward = robo2_reward_info["drag_reward"],
+        )
         
         return state.replace(
             pipeline_state=pipeline_state,
             obs=obs,
             reward=reward,
             done=done,
+            info = state.info | u_info,
         )
+    
 
-    def _get_robo1_obs(self, pipeline_state: base.State, target_pos) -> jax.Array:
+
+
+
+
+
+    #    # TODO: contact between the two robots should be penalized
+
+
+
+
+    def _get_robo1_obs(self, pipeline_state: base.State, target_pos) -> Dict[str, jax.Array]:
         """Get the observation for robot 1."""
         pusher_pos = pipeline_state.site_xpos[self.panda1_pusher_point_idx]
         pusher_rot = pipeline_state.xquat[self.panda1_pusher_body_idx]
@@ -350,7 +354,7 @@ class PushCoop(PipelineEnv):
             "other_agent_ee_pos": other_agent_ee_pos,
         }
     
-    def _get_robo2_obs(self, pipeline_state: base.State, target_pos) -> jax.Array:
+    def _get_robo2_obs(self, pipeline_state: base.State, target_pos) -> Dict[str, jax.Array]:
         """Get the observation for robot 2."""
         pusher_pos = pipeline_state.site_xpos[self.panda2_pusher_point_idx]
         pusher_rot = pipeline_state.xquat[self.panda2_pusher_body_idx]
@@ -385,15 +389,7 @@ class PushCoop(PipelineEnv):
         }
     
     # # TODO do set random target position as self
-    # def _initialize_target_pos(self, table_top_idx: int) -> jax.Array:
-    #     """Initialize the target position."""
-    #     table_top_pos = self.sys.mj_model.geom_pos[table_top_idx]
-    #     table_top_size = self.sys.mj_model.geom_size[table_top_idx]
-    #     table_top_height = table_top_pos[2] + table_top_size[2]
 
-    #     # Set the target position to be above the table
-    #     target_pos = jp.array([0.0, 0.0, table_top_height + 0.1])
-    #     return target_pos
     
     def _get_dist_target(self, pipeline_state: base.State, info) -> jax.Array:
         """Get the distance to the target."""
@@ -402,14 +398,6 @@ class PushCoop(PipelineEnv):
         dist = jp.linalg.norm(target_pos - t_location)
         return dist
     
-    # def _ee_dist_to_t(self, pipeline_state: base.State) -> jax.Array:
-    #     """Get the distance from the end effector to the target."""
-    #     t_location = pipeline_state.geom_xpos[self.t_shape_geom_idx]
-    #     panda1_pusher_pos = pipeline_state.site_xpos[self.panda1_pusher_point_idx]
-    #     panda2_pusher_pos = pipeline_state.site_xpos[self.panda2_pusher_point_idx]
-    #     dist1 = jp.linalg.norm(t_location - panda1_pusher_pos)
-    #     dist2 = jp.linalg.norm(t_location - panda2_pusher_pos)
-    #     return dist1, dist2
     
     
     def _get_t_floor_contact(self, pipeline_state: base.State) -> jax.Array:
@@ -442,10 +430,7 @@ class PushCoop(PipelineEnv):
         table_top_size = self.sys.geom_size[table_top_idx]
         table_rotation = pipeline_state.geom_xmat[table_top_idx]
 
-        # table_height = table_top_pos[2] + table_top_size[2]  # Z coordinate of table surface
         
-        # Calculate target area bounds (far side of the table, from obstacles)
-        # The target area is on the negative x-side of the table (far from T-object's starting position)
         min_x = - 0.95 * table_top_size[0]  # Left 40% of the table
         max_x = - 0.5 * table_top_size[0]  # Up to 20% from the left edge
         
@@ -501,7 +486,7 @@ class PushCoop(PipelineEnv):
         
         return force_components
     
-    def _get_t_obstacle_contact(self, pipeline_state: base.State) -> jax.Array:
+    def _get_t_obstacle_contact(self, pipeline_state: base.State) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
         """Get the contact between the T shape and the obstacles."""
         obs1_forces = []
         obs2_forces = []
@@ -533,33 +518,92 @@ class PushCoop(PipelineEnv):
 
         return obs1_forces, obs2_forces, obs4_forces, obs5_forces
 
+    def _determine_phase(self, pipeline_state: base.State) -> Tuple[jax.Array, jax.Array, jax.Array]:
+        
+        t_pos = pipeline_state.geom_xpos[self.t_shape_geom_idx] # x, y position TODO I cuuld condsider finding a better center measurement. 
+        staging_pos = pipeline_state.site_xpos[self.staging_area_site_idx]
+        
+        middle_pos = pipeline_state.geom_xpos[self.table_geom_idx] # Middle of table
+        dist_to_middle = jp.linalg.norm(t_pos[:2] - middle_pos[:2])
+        
+        # Phase 1: T-object not yet at middle (pushing phase)
+        # Phase 2: T-object at middle (dragging phase)
+        phase_threshold = 0.05  # meters - adjust based on your needs
+        in_drag_phase = dist_to_middle < phase_threshold
+
+        return in_drag_phase, dist_to_middle, phase_threshold
+    
+
+    def _robot1_reward(self, phase_weight, 
+                       robo1_obs, 
+                       failed_reward, 
+                       t_at_target_reward, 
+                       target_dist_reward, 
+                       ctrl_cost, 
+                       pipeline_state: base.State) -> Tuple[jax.Array, dict]:
+        
+        robo1_ee_pos = robo1_obs["pusher_pos"]
+        staging_pos = pipeline_state.site_xpos[self.staging_area_site_idx]
+        robot1_dist_to_staging = jp.linalg.norm(robo1_ee_pos - staging_pos)
+        robot1_staging_dist_reward = jp.exp(-robot1_dist_to_staging**2 / self._ee_dist_scale)
+
+        dist1 = - robo1_obs["robot1_ee_dist"]
+        dist1_reward = jp.exp(-dist1**2 / self._ee_dist_scale) #TODO double check this
+
+        reward_robo1_push = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist1_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward # took out this component 1.0 * robo1_contact 
+        reward_robo1_drag = self._t_dist_weight * robot1_staging_dist_reward + self._ctrl_cost * ctrl_cost + self._dist_reward_weight * target_dist_reward
+
+        reward_robo1 = phase_weight * reward_robo1_push + (1 - phase_weight) * 2.0 * reward_robo1_drag # We need to weigh this to actually encourage the robot to give up pushing.
+        reward_info = {
+            "dist_reward": dist1_reward,
+            "reward_ctrl": ctrl_cost,
+            "staging_reward": robot1_staging_dist_reward,
+            "push_reward": reward_robo1_push,
+            "drag_reward": reward_robo1_drag,
+        }
+        
+        
+        return reward_robo1, reward_info
+
+    def _robot2_reward(self, phase_weight, 
+                       robo2_obs, 
+                       failed_reward, 
+                       t_at_target_reward, 
+                       target_dist_reward, 
+                       ctrl_cost, 
+                       pipeline_state: base.State) -> Tuple[jax.Array, dict]:
+        
+        robo2_ee_pos = robo2_obs["pusher_pos"]
+        staging_pos = pipeline_state.site_xpos[self.staging_area_site_idx]
+        robot2_dist_to_staging = jp.linalg.norm(robo2_ee_pos - staging_pos)
+        robot2_staging_reward = jp.exp(-robot2_dist_to_staging**2 / self._ee_dist_scale)
+
+        dist2 = - robo2_obs["robot2_ee_dist"]
+        dist2_reward = jp.exp(-dist2**2 / self._ee_dist_scale) #TODO double check this
+
+        reward_robo2_push = robot2_staging_reward + self._ctrl_cost * ctrl_cost + failed_reward # TODO Should we include target distance here?
+        reward_robo2_drag = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist2_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward
+
+        reward_robo2 = phase_weight * reward_robo2_push + (1 - phase_weight) * reward_robo2_drag
+        
+        reward_info = {
+            "dist_reward": dist2_reward,
+            "reward_ctrl": ctrl_cost,
+            "staging_reward": robot2_staging_reward,
+            "push_reward": reward_robo2_push,
+            "drag_reward": reward_robo2_drag,
+        }
+    
+        return reward_robo2, reward_info
+    
+
+
 
     
-    # def _t_to_closest_obs(self, pipeline_state: base.State) -> jax.Array:
-    #     """Get the distance from the T shape to the closest obstacle."""
-    #     t_location = pipeline_state.geom_xpos[self.t_shape_geom_idx]
-    #     obs1_location = pipeline_state.geom_xpos[self.obstacle1_idx]
-    #     obs2_location = pipeline_state.geom_xpos[self.obstacle2_idx]
-    #     obs3_location = pipeline_state.geom_xpos[self.obstacle3_idx]
-    #     obs4_location = pipeline_state.geom_xpos[self.obstacle4_idx]
-    #     obs5_location = pipeline_state.geom_xpos[self.obstacle5_idx]
-    #     obs6_location = pipeline_state.geom_xpos[self.obstacle6_idx]
 
-    #     # Calculate distances to each obstacle
-    #     dist_obs1 = jp.linalg.norm(t_location - obs1_location)
-    #     dist_obs2 = jp.linalg.norm(t_location - obs2_location)
-    #     dist_obs3 = jp.linalg.norm(t_location - obs3_location)
-    #     dist_obs4 = jp.linalg.norm(t_location - obs4_location)
-    #     dist_obs5 = jp.linalg.norm(t_location - obs5_location)
-    #     dist_obs6 = jp.linalg.norm(t_location - obs6_location)
 
-    #     # Find the minimum distance
-    #     min_dist = jp.min(jp.array([dist_obs1, dist_obs2, dist_obs3, dist_obs4, dist_obs5, dist_obs6]))
 
-    #     return min_dist
     
     # TODO: implement termination condition 
     
-    # Could add this in for heterogenous rewards
-    # def _get_t_contact(self, contact_id, pipeline_state: base.State) -> jax.Array:
         

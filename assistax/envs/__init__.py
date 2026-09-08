@@ -18,11 +18,14 @@
 import functools
 from typing import Dict, Optional, Type, Any
 
-
+from assistax.envs.multi_agent_env import MultiAgentEnv, State
 from assistax.envs import scratchitch
 from assistax.envs import bedbathing
 from assistax.envs import armmanipulation
 from assistax.envs import pushcoop
+from assistax.envs import handover
+from assistax.envs import feeding
+from assistax.envs.teethbrushing import TeethBrushing
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from assistax.wrappers import training
 
@@ -31,31 +34,10 @@ _envs = {
     "bedbathing": bedbathing.BedBathing,
     "armmanipulation": armmanipulation.ArmManipulation,
     "pushcoop": pushcoop.PushCoop,
+    "handover": handover.CooperativeHandover,
+    "feeding": feeding.Feeding,
+    "teethbrushing": TeethBrushing,
 }
-
-
-# def get_environment(env_name: str, **kwargs) -> Env:
-#     """Returns an environment from the environment registry.
-
-#     Args:
-#       env_name: environment name string
-#       **kwargs: keyword arguments that get passed to the Env class constructor
-
-#     Returns:
-#       env: an environment
-#     """
-#     return _envs[env_name](**kwargs)
-
-
-# def register_environment(env_name: str, env_class: Type[Env]):
-#     """Adds an environment to the registry.
-
-#     Args:
-#       env_name: environment name string
-#       env_class: the Env class to add to the registry
-#     """
-#     _envs[env_name] = env_class
-
 
 def create(
     env_name: str,
@@ -65,22 +47,36 @@ def create(
     batch_size: Optional[int] = None,
     disability: Optional[dict[str, Any]] = None,
     het_reward: Optional[bool] = False,
+    preference_rewards: Optional[dict[str, Any]] = None,
+    sparse_rewards: Optional[dict[str, Any]] = None,
     **kwargs,
-) -> Env:
-    """Creates an environment from the registry.
+    ) -> Env:
+
+    """Create a single-agent (Brax-style) environment with the wrapper pipeline.
+
+    Wrappers are applied in order: EpisodeWrapper -> VmapWrapper (if ``batch_size``)
+    -> AutoResetWrapper -> DisabilityWrapper -> PreferenceRewardWrapper ->
+    SparseRewardWrapper, each only if its option is set. For the multi-agent
+    (per-agent obs/reward) interface use ``assistax.make`` instead.
 
     Args:
-      env_name: environment name string
-      episode_length: length of episode
-      action_repeat: how many repeated actions to take per environment step
-      auto_reset: whether to auto reset the environment after an episode is done
-      batch_size: the number of environments to batch together
-      disability:
-      pixel_obs:
-      **kwargs: keyword argments that get passed to the Env class constructor
+      env_name: environment name string (see ``assistax.registered_envs``).
+      episode_length: length of an episode.
+      action_repeat: how many repeated actions to take per environment step.
+      auto_reset: whether to auto-reset the environment after an episode is done.
+      batch_size: if set, vmap the environment into this many parallel copies.
+      disability: optional dict configuring the DisabilityWrapper (joint
+        restriction/strength/tremor) to model a human with reduced mobility.
+      het_reward: whether rewards are heterogeneous (per-agent) rather than shared.
+      preference_rewards: optional dict configuring the PreferenceRewardWrapper
+        (human-preference reward components, e.g. speed/force preference ranges).
+      sparse_rewards: optional dict configuring the SparseRewardWrapper
+        (e.g. ``{"mode": "periodic", "period": 100, "accumulate": True}``).
+      **kwargs: extra keyword arguments passed to the environment constructor
+        (e.g. ``backend``, ``ctrl_cost_weight``).
 
     Returns:
-      env: an environment
+      A wrapped Brax ``Env``.
     """
     env = _envs[env_name](**kwargs)
 
@@ -92,6 +88,10 @@ def create(
         env = training.AutoResetWrapper(env)
     if disability:
         env = training.DisabilityWrapper(env, disability)
+    if preference_rewards:
+        env = training.PreferenceRewardWrapper(env, preference_rewards)
+    if sparse_rewards:
+        env = training.SparseRewardWrapper(env, sparse_rewards)
 
     return env
 

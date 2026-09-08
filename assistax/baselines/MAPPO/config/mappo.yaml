@@ -3,23 +3,24 @@ defaults:
   - _self_
 
 ENV_NAME: scratchitch 
+ALG: MAPPO
 ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
   backend: mjx
   het_reward: False # needs to be true for pushcoop
   episode_length: 1000
-  disability:
-    joint_idx: 13
-    joint_restriction_factor: 1.0
-    joint_strength: 1.0
-    tremor_magnitude: 0.0
+  #disability:
+  #  joint_idx: 13
+  #  joint_restriction_factor: 1.0
+  #  joint_strength: 1.0
+  #  tremor_magnitude: 0.0
 TOTAL_TIMESTEPS: 30e6
 NUM_STEPS: 256
 NUM_ENVS: 512
 NUM_SEEDS: 4
 SEED: 0
-NUM_EVAL_EPISODES: 1
+NUM_EVAL_EPISODES: 32
 
 # RL HYPERPARAMETERS
 UPDATE_EPOCHS: 4
@@ -41,6 +42,10 @@ GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False
 DEVICE: 0
+PRINT_MEMORY_STATS: True
+
+# ZOO SETTINGS
+ZOO_PATH: ./zoo  # path to your agent zoo (download or generate; override per setup)
 
 # EVAL SETTINGS
 eval:
@@ -51,7 +56,7 @@ eval:
 
 
 # SWEEPER SETTINGS
-sweep:
+SWEEP:
   num_configs: 4
   lr:
     min: -4.0
@@ -59,11 +64,27 @@ sweep:
   ent_coef: false
   clip_eps: false
 
-hydra:
-  job:
-    chdir: true
-  run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-  sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED}
+# Visualization settings
+SAVE_MUJOCO_TRAJECTORIES: True  # Always save trajectories (minimal overhead)
+SAVE_HTML_RENDER: False 
+RENDER_VIDEOS: True  # Set to True for important runs
+VIDEO_FPS: 30  # Frames per second for videos
+VIDEO_WIDTH: 1920 # Video width in pixels
+VIDEO_HEIGHT: 1080  # Video height in pixels
+VIDEO_QUALITY: "high"  # "low", "medium", or "high"
+EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}} 
+
+# WandB Params
+ENTITY: null  # set to your wandb entity (username/team)
+PROJECT: assistax  # set to your wandb project
+WANDB_MODE: "online" # "disabled" or "online"
+EXP_TAGS: ["MAPPO","FF","NoPS","Vectorized", "NoPref"]
+
+#hydra:
+#  job:
+#    chdir: true
+#  run:
+#    dir: outputs/MAPPO/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+#  sweep:
+#    dir: multirun/MAPPO/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+#    subdir: r${ENV_KWARGS.disability.joint_restriction_factor}_s${ENV_KWARGS.disability.joint_strength}_t${ENV_KWARGS.disability.tremor_magnitude}_${SEED} # This should probably be edited a little bit. 

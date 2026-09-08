@@ -4,6 +4,7 @@ defaults:
 
     #ENV_NAME: scratchitch
 ENV_NAME: scratchitch
+ALG: IPPO
 ENV_KWARGS:
   ctrl_cost_weight: 0
   homogenisation_method: max
@@ -14,9 +15,9 @@ ENV_KWARGS:
     #  joint_restriction_factor: 1.0
     #  joint_strength: 1.0
     #  tremor_magnitude: 0.0
-TOTAL_TIMESTEPS: 10e6
+TOTAL_TIMESTEPS: 4e7
 NUM_STEPS: 64
-NUM_ENVS: 256
+NUM_ENVS: 1024 
 NUM_SEEDS: 4
 SEED: 0
 NUM_EVAL_EPISODES: 16   
@@ -41,6 +42,8 @@ GPU_ENV_CAPACITY: 8192
 ADVANTAGE_UNROLL_DEPTH: 8
 DISABLE_JIT: False
 DEVICE: 0
+PRINT_MEMORY_STATS: True
+TIME_SECOND_RUN: False 
 
 # SWEEPER SETTINGS
 SWEEP:
@@ -48,14 +51,29 @@ SWEEP:
   lr:
     min: -4.0
     max: -2.0
-  ent_coef: false
-  clip_eps: false
+  ent_coef:
+    min: -5.0
+    max: -2.0
+  clip_eps:
+    min: -2.0
+    max: -0.5 
+
+# Saving Options
+SAVE_ALL_TRAIN_STATES: false
+SAVE_FINAL_TRAIN_STATE: false
+
+#ENTITY: your-entity
+#PROJECT: assistax
+#WANDB_MODE: "online" # "disabled" or "online"
+#EXP_TAGS: ["SWEEP", "IPPO","FF","NoPS","Vectorized", "NoPref"]
+#EXP_ID: ${oc.env:EXP_ID,${now:%Y-%m-%d_%H-%M-%S}}   # Unique experiment identifier based on timestamp
 
 hydra:
   job:
     chdir: true
   run:
-    dir: outputs/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: outputs/${ENV_NAME}/${ALG}/{now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: multirun/mabrax/${ENV_NAME}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: multirun/${ENV_NAME}/${ALG}/${network.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ""
+ 

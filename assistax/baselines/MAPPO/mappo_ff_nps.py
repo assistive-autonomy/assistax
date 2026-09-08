@@ -24,6 +24,9 @@ import functools
 def _tree_shape(pytree):
     return jax.tree.map(lambda x: x.shape, pytree)
 
+
+# ================================ NETWORK ARCHITECTURE ================================
+
 @functools.partial(
     nn.vmap,
     in_axes=0, out_axes=0,
@@ -101,6 +104,9 @@ class Critic(nn.Module):
 
         return jnp.squeeze(critic, axis=-1)
 
+
+# ================================ DATA STRUCTURES ================================
+
 class Transition(NamedTuple):
     done: jnp.ndarray
     all_done: jnp.ndarray
@@ -125,6 +131,7 @@ class RunnerState(NamedTuple):
     update_step: int
     rng: jnp.ndarray
     ag_idx: Optional[int] = None # hopefully this doesn't break something in other code
+    prev_contact_force: Optional[jnp.ndarray] = None  # (num_envs,) when dynamic_preferences
 
 class UpdateState(NamedTuple):
     train_state: ActorCriticTrainState
@@ -149,7 +156,7 @@ class EvalInfo(NamedTuple):
     info: Optional[jnp.ndarray]
     avail_actions: Optional[jnp.ndarray]
     ag_idx: Optional[jnp.ndarray]
-    idx_mapping: Optional[Dict[int, str]] = None
+    env_metrics: Optional[Dict[str, jnp.ndarray]]
 
 @struct.dataclass
 class EvalInfoLogConfig:
@@ -162,6 +169,10 @@ class EvalInfoLogConfig:
     obs: bool = True
     info: bool = True
     avail_actions: bool = True
+    env_metrics: bool = True
+
+
+# ================================ UTILITY FUNCTIONS ================================
 
 def batchify(qty: Dict[str, jnp.ndarray], agents: Sequence[str]) -> jnp.ndarray:
     """Convert dict of arrays to batched array."""
@@ -172,22 +183,48 @@ def unbatchify(qty: jnp.ndarray, agents: Sequence[str]) -> Dict[str, jnp.ndarray
     # N.B. assumes the leading dimension is the agent dimension
     return dict(zip(agents, qty))
 
-def make_train(config, save_train_state=False, load_zoo=False):
-     
+
+# ================================ TRAINING FUNCTION ================================
+
+def make_train(config, save_train_state=False, load_zoo=False, dynamic_preferences=False):
+    """
+    Create a training function for MAPPO.
+
+    Args:
+        config: Configuration dictionary with all hyperparameters.
+        save_train_state: Whether to retain per-update train states in the metrics.
+        load_zoo: Whether to load pre-trained partner agents from the zoo.
+        dynamic_preferences: When True, preference rewards are computed inside the
+            training loop from explicit weight arrays (vmappable) instead of via
+            the PreferenceRewardWrapper.
+
+    Returns:
+        The MAPPO training loop function.
+    """
+
+    if dynamic_preferences:
+        env_kwargs = {k: v for k, v in config["ENV_KWARGS"].items() if k != "preference_rewards"}
+    else:
+        env_kwargs = config["ENV_KWARGS"]
+
     if load_zoo:
         zoo = ZooManager(config["ZOO_PATH"])
-        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **env_kwargs)
         env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
     else:
-        env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        env = assistax.make(config["ENV_NAME"], **env_kwargs)
     
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
     )
     
     config["OBS_DIM"] = int(get_space_dim(env.observation_space(env.agents[0])))
+    if dynamic_preferences:
+        config["OBS_DIM"] += 7
     config["ACT_DIM"] = int(get_space_dim(env.action_space(env.agents[0])))
     config["GOBS_DIM"] = int(get_space_dim(env.observation_space("global")))
+    if dynamic_preferences:
+        config["GOBS_DIM"] += 7
     env = LogWrapper(env, replace_info=True)
 
     def linear_schedule(initial_lr):
@@ -200,7 +237,7 @@ def make_train(config, save_train_state=False, load_zoo=False):
             return initial_lr * frac
         return _linear_schedule
 
-    def train(rng, lr, ent_coef, clip_eps):
+    def train(rng, lr, ent_coef, clip_eps, pref_weights=None):
 
         # INIT NETWORK
         actor_network = MultiActor(config=config)
@@ -267,6 +304,29 @@ def make_train(config, save_train_state=False, load_zoo=False):
         obsv, env_state = jax.vmap(env.reset)(reset_rng)
         init_dones = jnp.zeros((env.num_agents, config["NUM_ENVS"]), dtype=bool)
 
+        # Build helper to augment observations with preference values
+        if dynamic_preferences and pref_weights is not None:
+            pref_obs_vector = jnp.array([
+                pref_weights["w_speed"],
+                pref_weights["w_force"],
+                pref_weights["w_touch"],
+                pref_weights["speed_range_min"],
+                pref_weights["speed_range_max"],
+                pref_weights["force_range_min"],
+                pref_weights["force_range_max"],
+            ])
+
+            def _append_pref_obs(obs_dict):
+                return {
+                    k: jnp.concatenate(
+                        [v, jnp.broadcast_to(pref_obs_vector, v.shape[:-1] + (7,))],
+                        axis=-1,
+                    )
+                    for k, v in obs_dict.items()
+                }
+
+            obsv = _append_pref_obs(obsv)
+
         # TRAIN LOOP
         def _update_step(runner_state, unused):
             # COLLECT TRAJECTORIES
@@ -307,6 +367,27 @@ def make_train(config, save_train_state=False, load_zoo=False):
                 obsv, env_state, reward, done, info = jax.vmap(env.step)(
                     rng_step, runner_state.env_state, env_act,
                 )
+
+                # Augment obs with preference values for dynamic preferences
+                if dynamic_preferences and pref_weights is not None:
+                    obsv = _append_pref_obs(obsv)
+
+                # Dynamic preference rewards
+                new_prev_cf = runner_state.prev_contact_force
+                if dynamic_preferences and pref_weights is not None:
+                    from assistax.wrappers.training import compute_preference_reward
+                    brax_info = env_state.env_state.info
+                    var_names = config["ENV_KWARGS"]["preference_rewards"]["variable_names"]
+
+                    pref_reward, new_cf, _ = compute_preference_reward(
+                        speed=brax_info[var_names["speed"]],
+                        force=brax_info[var_names["force"]],
+                        prev_contact_force=runner_state.prev_contact_force,
+                        **pref_weights,
+                    )
+                    new_prev_cf = jnp.where(done["__all__"], jnp.zeros_like(new_cf), new_cf)
+                    reward = {agent: reward[agent] + pref_reward for agent in reward}
+
                 done_batch = batchify(done, env.agents)
                 all_done = done["__all__"]
                 all_done = jnp.broadcast_to(all_done, (env.num_agents, *all_done.shape))
@@ -330,6 +411,7 @@ def make_train(config, save_train_state=False, load_zoo=False):
                     last_done=done_batch,
                     update_step=runner_state.update_step,
                     rng=rng,
+                    prev_contact_force=new_prev_cf,
                 )
                 return runner_state, transition
 
@@ -536,10 +618,12 @@ def make_train(config, save_train_state=False, load_zoo=False):
                 last_done=runner_state.last_done,
                 update_step=update_step,
                 rng=runner_rng,
+                prev_contact_force=runner_state.prev_contact_force,
             )
             return runner_state, metric
 
         rng, _rng = jax.random.split(rng)
+        init_prev_cf = jnp.zeros((config["NUM_ENVS"],)) if dynamic_preferences else None
         runner_state = RunnerState(
             train_state=train_state,
             env_state=env_state,
@@ -547,6 +631,7 @@ def make_train(config, save_train_state=False, load_zoo=False):
             last_done=init_dones,
             update_step=0,
             rng=_rng,
+            prev_contact_force=init_prev_cf,
         )
         runner_state, metric = jax.lax.scan(
             _update_step, runner_state, None, config["NUM_UPDATES"]
@@ -555,7 +640,11 @@ def make_train(config, save_train_state=False, load_zoo=False):
 
     return train
 
+
+# ================================ EVALUATION FUNCTION ================================
+
 def make_evaluation(config, load_zoo=False, crossplay=False):
+    
     if load_zoo:
         zoo = ZooManager(config["ZOO_PATH"])
         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
@@ -565,6 +654,7 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
             env = LoadAgentWrapper.load_from_zoo(env, zoo, load_zoo)
     else:
         env = assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    
     config["OBS_DIM"] = int(get_space_dim(env.observation_space(env.agents[0])))
     config["ACT_DIM"] = int(get_space_dim(env.action_space(env.agents[0])))
     config["GOBS_DIM"] = int(get_space_dim(env.observation_space("global")))
@@ -699,6 +789,7 @@ def make_evaluation(config, load_zoo=False, crossplay=False):
                     info=(info if log_eval_info.info else None),
                     avail_actions=(avail_actions if log_eval_info.avail_actions else None),
                     ag_idx=(runner_state.ag_idx if crossplay else None),
+                    env_metrics=(env_state.env_state.metrics if log_eval_info.env_metrics else None),
                 )
 
                 runner_state = RunnerState(

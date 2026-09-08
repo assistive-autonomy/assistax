@@ -1,6 +1,6 @@
 <mujoco model="cooperative_push">
     <!-- Compiler settings -->
-    <compiler angle="radian" meshdir="push_assets" autolimits="true"/>
+    <compiler angle="radian" meshdir="meshes" autolimits="true"/>
 
     
     <!-- Asset definitions -->
@@ -183,6 +183,7 @@
             <geom name="table_leg2" type="box" size="0.025 0.025 0.2" pos="0.5 -0.35 -0.1" material="table" class="table"/>
             <geom name="table_leg3" type="box" size="0.025 0.025 0.2" pos="-0.5 0.35 -0.1" material="table" class="table"/>
             <geom name="table_leg4" type="box" size="0.025 0.025 0.2" pos="-0.5 -0.35 -0.1" material="table" class="table"/>
+            <site name="staging_area" pos="0 0 0.35" size="0.02" rgba="1 0 1 0.5" type="sphere"/>
         </body>
         
         <!-- T-shaped object to push (positioned on the right side of table) -->
