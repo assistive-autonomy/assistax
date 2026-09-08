@@ -1,16 +1,14 @@
 # 🦾 Assistax 
 
-[Paper Link](https://arxiv.org/abs/2507.21638) 
+<p align="center">
+  <a href=""https://leohinckeldey.dev/assistax-project/>🌐 Website</a> ·  <a href="https://arxiv.org/abs/2507.21638">📄 Paper</a> · <a href="https://huggingface.co/datasets/leohink/assistax-zoo">🤗 Models</a>
+</p>
 
 <div style="display: flex; justify-content: space-between;">
   <img src="docs/imgs/scratch.jpeg" alt="Scratching" style="width: 32%;">
   <img src="docs/imgs/bedbath.jpeg" alt="Scratching" style="width: 32%;">
   <img src="docs/imgs/armassist.jpeg" alt="Bedbathing" style="width: 32%;">
 </div>
-
-<p align="center">
-  <a href=""https://leohinckeldey.dev/assistax-project/>🌐 Website</a> ·  <a href="https://arxiv.org/abs/2507.21638">📄 Paper</a> · <a href="https://huggingface.co/datasets/leohink/assistax-zoo">🤗 Models</a>
-</p>
 
 Assistax is a Python library that provides hardware-accelerated environments in the domain of assistive robotics together with accompanying baseline algorithm implementations. We utilize JAX and Brax for quick RL and MARL training pipelines.
 
