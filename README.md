@@ -14,6 +14,11 @@
 
 Assistax is a Python library that provides hardware-accelerated environments in the domain of assistive robotics together with accompanying baseline algorithm implementations. We utilize JAX and Brax for quick RL and MARL training pipelines.
 
+## 📰 News
+
+- 🏆 Assistax won the **Outstanding Paper Award for Tooling, Environments and Evaluation for Reinforcement Learning** at the Reinforcement Learning Conference (RLC) 2026.
+- 📄 A [recent paper from Anthropic](https://arxiv.org/abs/2610.04364) uses Assistax as a benchmark.
+
 ## 🏄 Installation
 
 ### As a library (pip)
