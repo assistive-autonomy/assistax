@@ -127,7 +127,7 @@ def audit(run: Path, scene: str) -> dict:
         span = [np.ptp(q[s, first_mask(rec["done"][s])[:, e], e]) for s in range(q.shape[0]) for e in range(q.shape[2])]
         joints[m.joint(j).name] = {"range_deg": float(np.median(span)), "speed_deg_s": float(v.mean())}
     out["joints"] = joints
-    for mode in ("mean", "human_zero"):
+    for mode in ("sampled", "mean", "human_zero"):
         rec = recs[mode]
         shares, dists = [], []
         for s in range(rec["qpos"].shape[0]):
