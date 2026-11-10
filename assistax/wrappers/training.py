@@ -468,24 +468,24 @@ class PreferenceRewardWrapper(Wrapper):
             # Normalize so max positive reward = reward_budget
             # Each component contributes proportionally to its weight
             return {
-                'speed_pref_reward': self._norm_factor * self.preference_weights['speed_preference'] * speed_pref,
-                'force_pref_reward': self._norm_factor * self.preference_weights['force_preference'] * force_pref,
-                'touch_penalty_reward': self._norm_factor * self.preference_weights['touch_penalty'] * touch_penalty,
+                'speed_pref_reward': self._norm_factor * self.preference_weights.get('speed_preference', 0.0) * speed_pref,
+                'force_pref_reward': self._norm_factor * self.preference_weights.get('force_preference', 0.0) * force_pref,
+                'touch_penalty_reward': self._norm_factor * self.preference_weights.get('touch_penalty', 0.0) * touch_penalty,
             }
 
         elif self.normalization_mode == "fraction":
             # Each component normalized to its fraction of total weight
             return {
-                'speed_pref_reward': (self.preference_weights['speed_preference'] / self._total_weight) * self.reward_budget * speed_pref,
-                'force_pref_reward': (self.preference_weights['force_preference'] / self._total_weight) * self.reward_budget * force_pref,
-                'touch_penalty_reward': (self.preference_weights['touch_penalty'] / self._total_weight) * self.reward_budget * touch_penalty,
+                'speed_pref_reward': (self.preference_weights.get('speed_preference', 0.0) / self._total_weight) * self.reward_budget * speed_pref,
+                'force_pref_reward': (self.preference_weights.get('force_preference', 0.0) / self._total_weight) * self.reward_budget * force_pref,
+                'touch_penalty_reward': (self.preference_weights.get('touch_penalty', 0.0) / self._total_weight) * self.reward_budget * touch_penalty,
             }
 
         else:  # "none" - original behavior
             return {
-                'speed_pref_reward': self.preference_weights['speed_preference'] * speed_pref,
-                'force_pref_reward': self.preference_weights['force_preference'] * force_pref,
-                'touch_penalty_reward': self.preference_weights['touch_penalty'] * touch_penalty,
+                'speed_pref_reward': self.preference_weights.get('speed_preference', 0.0) * speed_pref,
+                'force_pref_reward': self.preference_weights.get('force_preference', 0.0) * force_pref,
+                'touch_penalty_reward': self.preference_weights.get('touch_penalty', 0.0) * touch_penalty,
             }
     
     def _gaussian_preference(self, value: jax.Array, preferred_range: tuple) -> jax.Array:
