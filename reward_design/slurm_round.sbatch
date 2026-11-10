@@ -19,6 +19,8 @@ env=${entry%%:*}
 seed_args=()
 out="$root/$env"
 if [ "$entry" != "$env" ]; then seed=${entry#*:}; seed_args=(--seed "$seed"); out="$root/${env}_s$seed"; fi
+# Warm start: with INIT_ROOT set at submission, start from $INIT_ROOT/<env> (robot/human.safetensors)
+if [ -n "${INIT_ROOT:-}" ]; then seed_args+=(--init "$INIT_ROOT/$env"); fi
 mkdir -p "$out"
 export MUJOCO_GL=egl XLA_PYTHON_CLIENT_MEM_FRACTION=0.9
 echo "$(date +%H:%M:%S) $(hostname) gpu=${CUDA_VISIBLE_DEVICES:-?} $entry $version $steps $seeds $*" > "$out/job.txt"

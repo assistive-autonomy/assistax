@@ -94,6 +94,17 @@ def make_rollout(eval_env, apply_fn, n_episodes: int, env_name: str, human_zero:
     return rollout
 
 
+def warm_start(config: dict, init_dir: Path, seed: int, std_max: float) -> None:
+    """Make make_train start from a saved run's params (that run's training seed `seed`) instead of a random init,
+    with each action std capped at `std_max`. Patches the network class's init for this process only."""
+    import ippo_ff_nps
+
+    agents = list(assistax.make(config["ENV_NAME"], **config["ENV_KWARGS"]).agents)
+    params = load_params(init_dir, agents, seed)
+    params["params"]["log_std"] = jnp.minimum(params["params"]["log_std"], jnp.log(std_max))
+    ippo_ff_nps.MultiActorCritic.init = lambda self, *args, **kwargs: params
+
+
 def load_rec(out_dir: Path) -> dict:
     """Seed 0's saved rollout and metrics (rollout_seed0.npz, eval.npz) in the form render.render_picks takes."""
     r, e = np.load(out_dir / "rollout_seed0.npz"), np.load(out_dir / "eval.npz")
@@ -185,6 +196,8 @@ def main() -> None:
     p.add_argument("--human-zero", action="store_true")
     p.add_argument("--deterministic", action="store_true", help="evaluate the policy means instead of sampling")
     p.add_argument("--no-render", action="store_true", help="skip the videos (render later with the render mode)")
+    p.add_argument("--init", type=Path, default=None, help="warm start: a run dir with robot/human.safetensors")
+    p.add_argument("--init-std-max", type=float, default=0.5, help="cap on the warm start's action std")
     a = p.parse_args()
     if a.mode == "render":  # videos of an evaluated run, from its saved files
         s = json.loads((a.out_dir / "summary.json").read_text())
@@ -198,7 +211,11 @@ def main() -> None:
     a.out_dir.mkdir(parents=True, exist_ok=True)
     timings = {}
     if a.mode == "train":
-        (a.out_dir / "config.json").write_text(json.dumps({**config, "REWARD_VERSION": a.version}, indent=1))
+        (a.out_dir / "config.json").write_text(json.dumps(
+            {**config, "REWARD_VERSION": a.version, "INIT": str(a.init) if a.init else None, "INIT_STD_MAX": a.init_std_max},
+            indent=1))
+        if a.init is not None:
+            warm_start(config, a.init, (a.seed or 0) % 2, a.init_std_max)
         train_rng, _ = jax.random.split(jax.random.key(config["SEED"]))
         t0 = time.time()
         train_jit = jax.jit(make_train(config, save_train_state=False), device=jax.devices()[config["DEVICE"]])
