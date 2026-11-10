@@ -151,7 +151,7 @@ def render_episodes(path: str):
     
         else:
                     
-            if config["ENV_NAME"] in ["pushcoop", "handover"]: # TODO double check the naming here
+            if config["ENV_NAME"] in ["pushcoop", "handover"]:
 
                 robot1_params = unflatten_dict(
                     safetensors.flax.load_file(robot1_path), sep='/'
@@ -207,7 +207,7 @@ def render_episodes(path: str):
                 params=agent_params,
             )
 
-        elif config["ENV_NAME"] in ["pushcoop", "handover"]: # TODO double check the naming here
+        elif config["ENV_NAME"] in ["pushcoop", "handover"]:
            robot1 = _tree_take(agent_params["robot1"], 0, axis=0)
            robot2 = _tree_take(agent_params["robot2"], 0, axis=0)
            final_eval_network_state = EvalNetworkState(

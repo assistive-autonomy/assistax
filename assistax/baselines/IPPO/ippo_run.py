@@ -118,7 +118,7 @@ def main(config: DictConfig):
     )
     # ===== TRAINING SETUP =====
     #rng = jax.random.PRNGKey(config["SEED"])
-    rng = jax.random.key(config["SEED"]) # TODO update to new jax API
+    rng = jax.random.key(config["SEED"])
     train_rng, eval_rng = jax.random.split(rng)
     train_rngs = jax.random.split(train_rng, config["NUM_SEEDS"])
     
@@ -226,7 +226,6 @@ def main(config: DictConfig):
 
         
         
-        # TODO Save evaluation results with wandb utility
         log_all_metrics(config, out, evals, env)
         upload_eval_data_to_wandb(evals, config, run)
         # jnp.save("returns.npy", mean_episode_returns)
@@ -250,7 +249,6 @@ def main(config: DictConfig):
         )
         
         # Evaluate final model for visualization
-        # TODO: limit to fewer evaluation episodes to make rendering more memory efficient
         print("Freeing memory before rendering...")
         del out
         del evals  
