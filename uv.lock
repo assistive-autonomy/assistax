@@ -125,7 +125,7 @@ wheels = [
 
 [[package]]
 name = "assistax"
-version = "0.0.1"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "absl-py" },
@@ -267,8 +267,8 @@ requires-dist = [
     { name = "mediapy", specifier = ">=1.2.4" },
     { name = "ml-collections", specifier = ">=1.1.0" },
     { name = "msgpack", specifier = ">=1.1.1" },
-    { name = "mujoco", specifier = ">=3.3.7" },
-    { name = "mujoco-mjx", specifier = ">=3.3.7" },
+    { name = "mujoco", specifier = ">=3.3.7,<3.5" },
+    { name = "mujoco-mjx", specifier = ">=3.3.7,<3.5" },
     { name = "nest-asyncio", specifier = ">=1.6.0" },
     { name = "notebook", specifier = ">=7.4.7" },
     { name = "numpy", specifier = ">=1.26.4" },

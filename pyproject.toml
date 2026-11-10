@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "assistax"
-version = "0.0.1"
+version = "0.1.0"
 description = "a hardware-accelerated reinforcement learning benchmark for assistive robotics "
 readme = "README.md"
 authors = [{name = "leonard hinckeldey", email = "l.hinckeldey@ed.ac.uk"}]
@@ -58,8 +58,8 @@ dependencies = [
     "mdurl>=0.1.2",
     "ml-collections>=1.1.0",
     "msgpack>=1.1.1",
-    "mujoco>=3.3.7",
-    "mujoco-mjx>=3.3.7",
+    "mujoco>=3.3.7,<3.5",
+    "mujoco-mjx>=3.3.7,<3.5",
     "nest-asyncio>=1.6.0",
     "numpy>=1.26.4",
     "omegaconf>=2.3.0",
