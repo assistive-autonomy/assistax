@@ -28,11 +28,13 @@ from assistax.envs.teethbrushing import TeethBrushing
 HUMAN, ROBOT = "humanoid_container", "panda_container"
 NECK_HUMAN_ACT = [17, 18]  # neck_yaw, neck_pitch actuators (feeding, teeth brushing)
 NECK_STIFFNESS, NECK_DAMPING = 10.0, 2.0  # N m/rad, N m s/rad: a head that holds itself up (v1+)
-BOUND_W = 0.1  # weight of the out-of-range-action cost (v1+, every task)
+# Weight of the out-of-range-action cost per version. 0.1 left the round-2 bed-bathing policy at |a| ~ 2.2: its
+# joint targets sit at their limits, which is what makes contact forces spike, so v4 raises it to 1.
+BOUND_W = {"v1": 0.1, "v2": 0.1, "v3": 0.1, "v4": 1.0}
 # Action-rate cost weight per version: base + near * gate, where gate rises linearly from 0 at GATE_RANGE metres
 # from the task target to 1 at it. v1 applied 0.5 everywhere: random early actions then cost ~1.6 per step, far
 # more than the approach reward pays, and the teeth-brushing robot learned to stay still 56 cm from the mouth.
-SMOOTH_W = {"v1": (0.5, 0.0), "v2": (0.02, 0.5)}
+SMOOTH_W = {"v1": (0.5, 0.0), "v2": (0.02, 0.5), "v3": (0.02, 0.5), "v4": (0.02, 0.5)}
 GATE_RANGE = 0.2
 
 
@@ -153,7 +155,7 @@ class Diag:
             reward, done, terms = getattr(self, f"_reward_{self.version}")(info0, new, diag, smooth)
             base, near = SMOOTH_W[self.version]
             w_smooth = base + near * jp.clip(1.0 - diag[self.GATE_KEY] / GATE_RANGE, 0.0, 1.0)
-            reward = reward - w_smooth * smooth - BOUND_W * bound
+            reward = reward - w_smooth * smooth - BOUND_W[self.version] * bound
             terms = {**terms, "p_smooth": smooth, "p_bound": bound, "w_smooth": w_smooth}
             info = {**new.info, "prev_act": self._ctrl(action)}
         return new.replace(reward=reward, done=done, info=info, metrics={**new.metrics, **diag, **terms})
@@ -191,7 +193,8 @@ class RDTeeth(Diag, TeethBrushing):
     while moving 0.5-10 cm/s along the face (relative to the head)."""
 
     EXTRA = ("x_f_bristle", "x_f_head_other", "x_contact_mouth_d", "x_v_tan", "x_neck_w", "x_align")
-    REWARD_KEYS = ("r_far", "r_near", "r_force", "r_brush", "r_align", "p_over", "p_other", "p_smooth", "p_bound", "p_neck")
+    REWARD_KEYS = ("r_far", "r_mid", "r_near", "r_force", "r_brush", "r_align", "p_over", "p_other", "p_smooth", "p_bound",
+                   "p_neck")
 
     def __init__(self, version: str = "v0", **kwargs):
         super().__init__(**kwargs)
@@ -225,6 +228,18 @@ class RDTeeth(Diag, TeethBrushing):
         reward, done, t = self._reward_v1(info0, new, d, smooth)
         return reward + 1.0 * t["r_far"], done, t
 
+    def _reward_v3(self, info0: dict, new: State, d: dict, smooth: jp.ndarray):
+        """v2 policies point the brush tip at the mouth from ~3.5 cm: the bristle-alignment term was weighted by the
+        1 cm near term, so it paid nothing there. v3 weights alignment by the far term (as v0 does), adds a 3 cm-scale
+        distance term, and penalises head speed 4x more (v2's human swings its head at up to 2.5 rad/s)."""
+        reward, done, t = self._reward_v2(info0, new, d, smooth)
+        align_far = d["x_align"] * t["r_far"]
+        reward = reward - 1.0 * t["r_align"] + 1.0 * align_far
+        t = {**t, "r_align": align_far, "r_mid": jp.exp(-d["x_task_d"] / 0.03)}
+        return reward + 2.0 * t["r_mid"] - 0.15 * t["p_neck"], done, t
+
+    _reward_v4 = _reward_v3  # v4 = v3's reward with the stronger out-of-range-action cost (BOUND_W)
+
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state
         f = normal_forces(ps, self.rh)
@@ -250,7 +265,7 @@ class RDFeeding(Diag, Feeding):
     relative to the head, with < 5 N on the head."""
 
     EXTRA = ("x_tip_d", "x_aim", "x_level", "x_f_head", "x_neck_w")
-    REWARD_KEYS = ("r_far", "r_near", "r_touch", "p_over", "p_other", "p_smooth", "p_bound", "p_neck")
+    REWARD_KEYS = ("r_far", "r_mid", "r_near", "r_touch", "r_shape", "p_over", "p_other", "p_smooth", "p_bound", "p_neck")
     TIP = 0.036  # spoon bowl half-length along the spoon's z axis
 
     def _reward_v1(self, info0: dict, new: State, d: dict, smooth: jp.ndarray):
@@ -269,6 +284,21 @@ class RDFeeding(Diag, Feeding):
         """v1 with v0's approach weight (2 exp(-3 d)) restored; the action-rate cost is gated by distance (SMOOTH_W)."""
         reward, done, t = self._reward_v1(info0, new, d, smooth)
         return reward + 1.0 * t["r_far"], done, t
+
+    def _reward_v4(self, info0: dict, new: State, d: dict, smooth: jp.ndarray):
+        """v2 robots carry the spoon to 1.1 m from the mouth: v0's orientation and speed terms pay ~1.6 per step at
+        any distance, and v2 charges for brushing past the human's arm on the way in. v4 scales those two terms by
+        exp(-3 d) (so they pay only near the mouth), adds a 3 cm-scale tip term, raises the head's comfort force to
+        10 N and charges incidental contact by force (0.05 per N, at most 1) instead of a flat 2 above 4 N."""
+        m = new.metrics
+        near_mouth = m["reward_dist"]  # exp(-3 d), d = spoon centre to mouth
+        t = {"r_far": near_mouth, "r_mid": jp.exp(-d["x_tip_d"] / 0.03), "r_near": jp.exp(-d["x_tip_d"] / 0.01),
+             "r_touch": peak1(d["x_f_tool"] / 1.0), "r_shape": near_mouth * (m["reward_orientation"] + m["reward_velocity"]),
+             "p_over": self._over(d["x_f_head"], 10.0), "p_other": jp.minimum(d["x_f_other"] / 10.0, 2.0),
+             "p_neck": d["x_neck_w"] ** 2}
+        reward = (2.0 * t["r_far"] + 2.0 * t["r_mid"] + 2.0 * t["r_near"] + 1.0 * t["r_shape"] + 3.0 * d["x_ok"]
+                  + 1.0 * t["r_touch"] - 1.0 * t["p_over"] - 0.5 * t["p_other"] - 0.05 * t["p_neck"])
+        return reward, new.done, t
 
     def __init__(self, version: str = "v0", **kwargs):
         super().__init__(**kwargs)
@@ -306,7 +336,8 @@ class RDScratch(Diag, ScratchItch):
     while moving 1-25 cm/s relative to the itch (Assistive Gym: < 10 N, within 2.5 cm, moving)."""
 
     EXTRA = ("x_contact_itch_d", "x_tip_itch_d")
-    REWARD_KEYS = ("r_far", "r_mid", "r_near", "r_force", "r_scratch", "p_over", "p_other", "p_smooth", "p_bound")
+    REWARD_KEYS = ("r_far", "r_mid", "r_near", "r_force", "r_scratch", "p_over", "p_harm", "p_other", "p_smooth",
+                   "p_bound")
 
     def __init__(self, version: str = "v0", **kwargs):
         super().__init__(**kwargs)
@@ -328,6 +359,20 @@ class RDScratch(Diag, ScratchItch):
 
     _reward_v2 = _reward_v1  # v2 changes only the distance gating of the action-rate cost
     GATE_KEY = "x_tip_itch_d"
+
+    def _reward_v4(self, info0: dict, new: State, d: dict, smooth: jp.ndarray):
+        """v2's terms with a 3 cm-scale distance term in place of the 10 cm Gaussian, a 15 N comfort force, incidental
+        contact charged by force (0.05 per N, at most 1), and a 5-point charge for any step above 60 N on the human."""
+        near = (d["x_contact_itch_d"] < 0.025).astype(jp.float32)
+        touching = (d["x_f_tool"] > 0.1).astype(jp.float32)
+        x = d["x_tip_itch_d"]
+        t = {"r_far": jp.exp(-x ** 2 / 0.1), "r_mid": jp.exp(-x / 0.03), "r_near": jp.exp(-x / 0.01),
+             "r_force": peak1(d["x_f_tool"] / 3.0) * near, "r_scratch": peak1(d["x_speed"] / 0.05) * touching * near,
+             "p_over": self._over(d["x_f_rh"], 15.0), "p_harm": (d["x_f_rh"] > 60.0).astype(jp.float32),
+             "p_other": jp.minimum(d["x_f_other"] / 10.0, 2.0)}
+        reward = (1.0 * t["r_far"] + 2.0 * t["r_mid"] + 2.0 * t["r_near"] + 3.0 * t["r_force"] + 3.0 * t["r_scratch"]
+                  - 1.0 * t["p_over"] - 5.0 * t["p_harm"] - 0.5 * t["p_other"])
+        return reward, new.done, t
 
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state
@@ -390,6 +435,21 @@ class RDBedBathing(Diag, BedBathing):
 
     _reward_v2 = _reward_v1  # v2 changes only the distance gating of the action-rate cost
 
+    def _reward_v4(self, info0: dict, new: State, d: dict, smooth: jp.ndarray):
+        """v2 robots hover 7-10 cm from the arm: hovering earned ~1.25 per step, and its noisy contacts rarely stayed
+        under 20 N, so wipes rarely paid. v4 pays every wipe (the env's rule) at 5, scaled by the pad force (full up
+        to 20 N, 20/F above, at least 1/4), pays light pad contact (peak at 10 N), and halves the hover term."""
+        ps, cv = new.pipeline_state, new.info["contact_vector"]
+        dist = self._target_distances(self._get_global_targets(ps), ps.site_xpos[self.panda_wiper_center_idx])
+        x = jp.where(jp.all(cv == 0), 0.0, jp.min(jp.where(cv == 0, jp.inf, dist)))
+        f = d["x_f_tool"]
+        quality = jp.where(f <= self.F_GENTLE, 1.0, jp.maximum(0.25, self.F_GENTLE / jp.maximum(f, 1e-6)))
+        new_wipes = d["x_n_wiped"] - jp.sum(info0["contact_vector"] == 0).astype(jp.float32)
+        t = {"r_dist": 0.5 * jp.exp(-x ** 2 / 0.1), "r_wipe": new_wipes * quality, "r_contact": peak1(f / 10.0),
+             "p_over": self._over(d["x_f_rh"], 40.0), "p_other": jp.minimum(d["x_f_other"] / 10.0, 2.0)}
+        reward = t["r_dist"] + 5.0 * t["r_wipe"] + 1.5 * t["r_contact"] - 1.0 * t["p_over"] - 0.5 * t["p_other"]
+        return reward, jp.zeros_like(new.done), t
+
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state
         f = normal_forces(ps, self.rh)
@@ -412,7 +472,7 @@ class RDArmManip(Diag, ArmManipulation):
     """Arm manipulation. x_ok: the arm point (hook_target site) is within 5 cm of its target (arm_target site)."""
 
     EXTRA = ("x_hook_d",)
-    REWARD_KEYS = ("r_near", "r_support", "p_rot", "p_over", "p_other", "p_speed", "p_smooth", "p_bound")
+    REWARD_KEYS = ("r_near", "r_support", "p_rot", "p_over", "p_harm", "p_other", "p_speed", "p_smooth", "p_bound")
 
     def __init__(self, version: str = "v0", **kwargs):
         super().__init__(**kwargs)
@@ -436,6 +496,19 @@ class RDArmManip(Diag, ArmManipulation):
 
     _reward_v2 = _reward_v1  # v2 changes only the distance gating of the action-rate cost (gated on the hook)
     GATE_KEY = "x_hook_d"
+
+    def _reward_v4(self, info0: dict, new: State, d: dict, smooth: jp.ndarray):
+        """v2 robots never touch the arm and nobody moves it. v4 pays 5 per step while the hook carries the arm at
+        2-60 N, charges 5 for any step above 240 N (v0 flings the arm with a 300 N hit), charges incidental contact
+        by force, and only slows the hook above 1 m/s."""
+        m, f = new.metrics, d["x_f_tool"]
+        t = {"r_near": jp.exp(-d["x_task_d"] / 0.02), "r_support": ((f >= 2.0) & (f <= 60.0)).astype(jp.float32),
+             "p_rot": m["reward_rot"], "p_over": self._over(d["x_f_rh"], 60.0),
+             "p_harm": (d["x_f_rh"] > 240.0).astype(jp.float32), "p_other": jp.minimum(d["x_f_other"] / 10.0, 2.0),
+             "p_speed": jp.maximum(d["x_speed"] - 1.0, 0.0)}
+        reward = (10.0 * m["reward_waist_dist"] + 1.0 * m["reward_hook_dist"] + 5.0 * t["r_near"] + 5.0 * t["r_support"]
+                  - 0.1 * t["p_rot"] - 1.0 * t["p_over"] - 5.0 * t["p_harm"] - 0.5 * t["p_other"] - 0.5 * t["p_speed"])
+        return reward, new.done, t
 
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state
