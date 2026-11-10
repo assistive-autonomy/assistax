@@ -30,11 +30,12 @@ NECK_HUMAN_ACT = [17, 18]  # neck_yaw, neck_pitch actuators (feeding, teeth brus
 NECK_STIFFNESS, NECK_DAMPING = 10.0, 2.0  # N m/rad, N m s/rad: a head that holds itself up (v1+)
 # Weight of the out-of-range-action cost per version. 0.1 left the round-2 bed-bathing policy at |a| ~ 2.2: its
 # joint targets sit at their limits, which is what makes contact forces spike, so v4 raises it to 1.
-BOUND_W = {"v1": 0.1, "v2": 0.1, "v3": 0.1, "v4": 1.0, "v5": 1.0}
+BOUND_W = {"v1": 0.1, "v2": 0.1, "v3": 0.1, "v4": 1.0, "v5": 1.0, "v6": 0.0}
 # Action-rate cost weight per version: base + near * gate, where gate rises linearly from 0 at GATE_RANGE metres
 # from the task target to 1 at it. v1 applied 0.5 everywhere: random early actions then cost ~1.6 per step, far
 # more than the approach reward pays, and the teeth-brushing robot learned to stay still 56 cm from the mouth.
-SMOOTH_W = {"v1": (0.5, 0.0), "v2": (0.02, 0.5), "v3": (0.02, 0.5), "v4": (0.02, 0.5), "v5": (0.02, 0.5)}
+SMOOTH_W = {"v1": (0.5, 0.0), "v2": (0.02, 0.5), "v3": (0.02, 0.5), "v4": (0.02, 0.5), "v5": (0.02, 0.5),
+            "v6": (0.0, 0.0)}
 GATE_RANGE = 0.2
 
 
@@ -356,7 +357,7 @@ class RDScratch(Diag, ScratchItch):
     while moving 1-25 cm/s relative to the itch (Assistive Gym: < 10 N, within 2.5 cm, moving)."""
 
     EXTRA = ("x_contact_itch_d", "x_tip_itch_d")
-    REWARD_KEYS = ("r_far", "r_mid", "r_near", "r_force", "r_scratch", "p_over", "p_harm", "p_other", "p_smooth",
+    REWARD_KEYS = ("r_far", "r_mid", "r_near", "r_tight", "r_force", "r_scratch", "p_over", "p_harm", "p_other", "p_smooth",
                    "p_bound")
 
     def __init__(self, version: str = "v0", **kwargs):
@@ -395,6 +396,18 @@ class RDScratch(Diag, ScratchItch):
         return reward, new.done, t
 
     _reward_v5 = _reward_v4  # v5 changes teeth brushing and the arm-manipulation human's arm gear only
+
+    def _reward_v6(self, info0: dict, new: State, d: dict, smooth: jp.ndarray):
+        """The 0.1.0 reward with two changes (Leo, 2026-11-10), still one shared reward: a tight distance term
+        exp(-d^2/0.005) added to the 0.1.0 one exp(-d^2/0.1), and the scratching bonus paid only within 2.5 cm of
+        the itch instead of 10 cm. For an itch under the arm the robot stops ~7.7 cm away (the forearm is 6.2 cm
+        thick); the 0.1.0 term pays 94% there, the tight one 31%, so lifting the arm to let the robot reach in
+        now pays the team. No penalties: BOUND_W and SMOOTH_W are 0 for v6."""
+        m, x = new.metrics, d["x_tip_itch_d"]
+        scratch = m["reward_scratching"] * (x < 0.025)  # 0.1.0's bonus, its 10 cm gate narrowed to 2.5 cm
+        t = {"r_far": m["reward_dist"], "r_tight": jp.exp(-x ** 2 / 0.005), "r_scratch": scratch}
+        reward = new.reward - self._scratching_reward_weight * (m["reward_scratching"] - scratch) + 1.0 * t["r_tight"]
+        return reward, new.done, t
 
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state

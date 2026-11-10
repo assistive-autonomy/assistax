@@ -115,12 +115,18 @@ def main() -> None:
     p.add_argument("--seeds", type=int, default=None)
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--params", type=Path, default=None)
+    p.add_argument("--version", default=None, help="reward_design.tasks version to install (0.1.0 code only)")
     a = p.parse_args()
+    if a.version is not None:  # imported only on request, so the file still runs on pre-0.1.0 code
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from reward_design import tasks
+        tasks.install(a.env, a.version)
     overrides = ([f"TOTAL_TIMESTEPS={a.steps}"] * (a.steps is not None) + [f"NUM_SEEDS={a.seeds}"] * (a.seeds is not None)
                  + [f"SEED={a.seed}"] * (a.seed is not None))
     config = load_config(a.env, overrides)
     a.out_dir.mkdir(parents=True, exist_ok=True)
-    (a.out_dir / "config.json").write_text(json.dumps({**config, "ASSISTAX_FILE": assistax.__file__}, indent=1))
+    (a.out_dir / "config.json").write_text(json.dumps(
+        {**config, "ASSISTAX_FILE": assistax.__file__, "REWARD_VERSION": a.version}, indent=1))
     params_dir = a.params
     if a.mode == "train":
         train_rng, _ = jax.random.split(jax.random.key(config["SEED"]))

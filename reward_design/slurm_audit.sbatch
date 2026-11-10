@@ -19,6 +19,9 @@ mkdir -p "$out"
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.9
 echo "$(date +%H:%M:%S) $(hostname) gpu=${CUDA_VISIBLE_DEVICES:-?} $(pwd) $entry $steps" > "$out/job.txt"
 status=0
-.venv/bin/python "$audit" train "$env" "$out" --steps "$steps" --seeds 1 --seed "$seed" > "$out/run.log" 2>&1 || status=$?
+version_args=()
+if [ -n "${VERSION:-}" ]; then version_args=(--version "$VERSION"); fi  # a reward_design.tasks version (0.1.0 code)
+.venv/bin/python "$audit" train "$env" "$out" --steps "$steps" --seeds 1 --seed "$seed" \
+    ${version_args[@]+"${version_args[@]}"} > "$out/run.log" 2>&1 || status=$?
 echo "$(date +%H:%M:%S) exit $status" >> "$out/job.txt"
 exit $status

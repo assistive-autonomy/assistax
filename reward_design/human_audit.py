@@ -71,6 +71,38 @@ def gap_share(tool: np.ndarray, target: np.ndarray, mask: np.ndarray) -> float:
     return float(h / (r + h)) if (r + h) > 1e-6 else float("nan")
 
 
+def itch_side(m: mujoco.MjModel, rec: dict) -> dict:
+    """Scratch itch: per episode, which way the itch faces at step 0 (world z of the arm's surface normal there),
+    the median and smallest tip-itch distance after the first 2 s (every 10th step), and the human's mean
+    shoulder and elbow angles over that time; grouped into itches facing up (z > 0.3), sideways, and down."""
+    d = mujoco.MjData(m)
+    tip = m.site("scratcher_point").id
+    adr = {n: m.jnt_qposadr[m.joint(n).id] for n in ("right_shoulder1", "right_shoulder2", "right_elbow")}
+    rows = []
+    for s in range(rec["qpos"].shape[0]):
+        for e in range(rec["qpos"].shape[2]):
+            dists, angles = [], []
+            for t in range(0, rec["qpos"].shape[1], 10):
+                d.qpos[:] = rec["qpos"][s, t, e]
+                mujoco.mj_kinematics(m, d)
+                g = m.geom("right_larm" if rec["itch_arm"][s, t, e] else "right_uarm1").id
+                rot, p = d.geom_xmat[g].reshape(3, 3), rec["itch_pos"][s, t, e]
+                if t == 0:
+                    z = (rot @ np.array([p[0], p[1], 0.0]) / (np.linalg.norm(p[:2]) + 1e-9))[2]
+                elif t >= 250:
+                    dists.append(np.linalg.norm(d.site_xpos[tip] - (d.geom_xpos[g] + rot @ p)))
+                    angles.append([np.degrees(d.qpos[a]) for a in adr.values()])
+            rows.append((z, np.median(dists), np.min(dists), *np.mean(angles, 0)))
+    rows = np.array(rows)
+    out = {}
+    for name, sel in (("up", rows[:, 0] > 0.3), ("sideways", np.abs(rows[:, 0]) <= 0.3), ("down", rows[:, 0] < -0.3)):
+        r = rows[sel]
+        out[name] = {"n": int(sel.sum()), "tip_itch_cm": float(100 * np.median(r[:, 1])),
+                     "closest_cm": float(100 * np.median(r[:, 2])),
+                     **{f"{k.replace('right_', '')}_deg": float(np.mean(r[:, 3 + i])) for i, k in enumerate(adr)}}
+    return out
+
+
 def capability(m: mujoco.MjModel, acts: list[int], seconds: float = 2.0) -> dict:
     """Each human actuator at full effort, + then -, from the keyframe, the robot holding its pose: joint excursion."""
     out = {}
@@ -147,6 +179,8 @@ def audit(run: Path, scene: str) -> dict:
         lower = rec["itch_arm"][:, 0].astype(bool)
         out["elbow_deg_lower_arm_itch"] = float(elbow[lower].mean())
         out["elbow_deg_upper_arm_itch"] = float(elbow[~lower].mean())
+        out["by_itch_side_mean"] = itch_side(m, recs["mean"])
+        out["by_itch_side_sampled"] = itch_side(m, recs["sampled"])
     out["capability"] = capability(m, acts)
     return out
 
