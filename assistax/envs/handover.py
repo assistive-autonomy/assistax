@@ -143,6 +143,10 @@ class CooperativeHandover(PipelineEnv):
         # Panda2 joints (7 arm + 2 fingers)
         self.panda2_joint_start = 16
         self.panda2_joint_end = 25
+
+        # qvel (dof) addresses: the object's free joint has 7 qpos but 6 dofs, so they differ from qpos addresses.
+        self.panda1_dof_start = int(mjmodel.jnt_dofadr[mj_name2id(mjmodel, mujoco.mjtObj.mjOBJ_JOINT, "panda1_joint1")])
+        self.panda2_dof_start = int(mjmodel.jnt_dofadr[mj_name2id(mjmodel, mujoco.mjtObj.mjOBJ_JOINT, "panda2_joint1")])
         
         # Touch sensor indices
         self.panda1_left_inner_touch_idx = 0
@@ -309,13 +313,13 @@ class CooperativeHandover(PipelineEnv):
         
         # Panda1 observations
         panda1_joint_pos = pipeline_state.qpos[self.panda1_joint_start:self.panda1_joint_end]
-        panda1_joint_vel = pipeline_state.qvel[self.panda1_joint_start-7:self.panda1_joint_end-7] # Why don't we just double check this as well (or we might not need this actually)
+        panda1_joint_vel = pipeline_state.qvel[self.panda1_dof_start:self.panda1_dof_start + self.panda1_joint_end - self.panda1_joint_start]
         panda1_ee_pos = pipeline_state.site_xpos[self.panda1_grip_site_idx]
         panda1_hand_quat = pipeline_state.xquat[self.panda1_hand_body_idx]
         
         # Panda2 observations
         panda2_joint_pos = pipeline_state.qpos[self.panda2_joint_start:self.panda2_joint_end]
-        panda2_joint_vel = pipeline_state.qvel[self.panda2_joint_start-7:self.panda2_joint_end-7]
+        panda2_joint_vel = pipeline_state.qvel[self.panda2_dof_start:self.panda2_dof_start + self.panda2_joint_end - self.panda2_joint_start]
         panda2_ee_pos = pipeline_state.site_xpos[self.panda2_grip_site_idx]
         panda2_hand_quat = pipeline_state.xquat[self.panda2_hand_body_idx]
         
@@ -323,7 +327,7 @@ class CooperativeHandover(PipelineEnv):
         object_pos = pipeline_state.xpos[self.object_body_idx]
         object_quat = pipeline_state.xquat[self.object_body_idx]
         object_vel = pipeline_state.qvel[self.object_joint_start:self.object_joint_start+3]
-        object_angvel = pipeline_state.qvel[self.object_joint_start+3:self.object_joint_end]
+        object_angvel = pipeline_state.qvel[self.object_joint_start+3:self.object_joint_start+6]
         
         # Touch sensor readings
 #        panda1_touch = jp.array([
@@ -350,7 +354,7 @@ class CooperativeHandover(PipelineEnv):
         
         # Phase as one-hot encoding
         phase_onehot = jp.zeros(6)
-        phase_onehot = phase_onehot.at[phase].set(1.0) # This is interesting as well. 
+        phase_onehot = phase_onehot.at[phase].set(1.0)
 
         # Concatenate all observations
         obs = jp.concatenate([
@@ -373,7 +377,7 @@ class CooperativeHandover(PipelineEnv):
             handover_goal_pos, # Need to consider getting rid of this - feels like cheating and would be harder to do this IRL. 
             place_goal_pos,
             phase_onehot, # Also ideally get rid of this. 
-        ]) # These are actually also wrong (I need duplicates to split them up correctly (or actually maybe I could have them overlap somehow))
+        ])
 
         #print(f"Total obs shape: {obs.shape}")
         #print(f"""
@@ -703,7 +707,6 @@ class CooperativeHandover(PipelineEnv):
         # HANDOVER -> RETREAT
         panda2_ee_pos = pipeline_state.site_xpos[self.panda2_grip_site_idx]
         panda2_dist_to_obj = jp.linalg.norm(panda2_ee_pos - obj_pos)
-        # TODO here we should actually just use self._check_gripper_contact function. 
         panda1_touch = self._check_gripper_contact(pipeline_state, robot_id=1)
         panda2_touch = self._check_gripper_contact(pipeline_state, robot_id=2)
         

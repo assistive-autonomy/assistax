@@ -107,18 +107,22 @@ class ArmManipulation(PipelineEnv):
         
 
         
-        # TODO: Update these indexes once XML is updated or write some sort of helper function to get these
         self.UARM_HPLATFORM_CONTACT_ID = 56
         self.LARM_HPLATFORM_CONTACT_ID = 60
-        self.UARM_HEND_CONTACT_ID = 57
+        self.UARM_HEND_CONTACT_ID = 58
         self.LARM_HEND_CONTACT_ID = 62
 
-        # TODO: Double check these or write a helper function to find these
         self.panda_joint_id_start = 18
-        self.panda_joint_id_end = 24
+        self.panda_joint_id_end = 25  # 7 Panda joints: ids 18..24
 
         self.human_joint_id_start = 1
         self.human_joint_id_end = 18
+
+        # Joint ids -> qpos addresses: the human root is a free joint (7 qpos / 6 dofs), so ids != addresses.
+        self.panda_qpos_idx = mjmodel.jnt_qposadr[self.panda_joint_id_start:self.panda_joint_id_end].copy()
+        self.human_qpos_idx = mjmodel.jnt_qposadr[self.human_joint_id_start:self.human_joint_id_end].copy()
+        self.panda_dof_idx = mjmodel.jnt_dofadr[self.panda_joint_id_start:self.panda_joint_id_end].copy()
+        self.human_dof_idx = mjmodel.jnt_dofadr[self.human_joint_id_start:self.human_joint_id_end].copy()
 
         # Retrieve joint limits
         self.upper_joint_limits = mjmodel.jnt_range[:, 0]
@@ -167,9 +171,9 @@ class ArmManipulation(PipelineEnv):
         human_obs = self._get_human_obs(pipeline_state)
 
         # NOTE: IF THE LENGTH OF ANY OBSERVATIONS CHANGE, YOU MUST UPDATE THIS HERE:
-        # jaxmarl/environments/mabrax/mappings.py#L111
+        # assistax/envs/base_env.py (`ranges`)
         obs = jp.concatenate((
-            # robot obs length = 6 + 6 + 3 + 3 + 1 + 9 = 28
+            # robot obs length = 7 + 7 + 3 + 3 + 1 + 9 = 30
             robo_obs["robo_joint_angles"],
             robo_obs["robo_joint_vel"],
             robo_obs["tool_position"],
@@ -219,7 +223,6 @@ class ArmManipulation(PipelineEnv):
         robo_obs = self._get_robo_obs(pipeline_state)
         human_obs = self._get_human_obs(pipeline_state)
         
-        # TODO: possibly replace uarm and larm positions with joint positions
         obs = jp.concatenate((
             # robot obs
             robo_obs["robo_joint_angles"],
@@ -240,7 +243,6 @@ class ArmManipulation(PipelineEnv):
 
 
 
-        # TODO: Add human preference rewards
         hook_arm_dist = robo_obs["tool_target_dist_euclidean"]
         r_hook_dist = (1 - jp.tanh(hook_arm_dist / self._dist_scale))
 
@@ -312,12 +314,11 @@ class ArmManipulation(PipelineEnv):
         # tool_target_dist_angular = jp.zeros(9)
         tool_target_dist_angular = target_orientation - tool_orientation
 
-        # # TODO: adjust this so the ._get_force_on_tool takes 3 args
 
-        robo_joint_angles = pipeline_state.qpos[self.panda_joint_id_start:self.panda_joint_id_end]
+        robo_joint_angles = pipeline_state.qpos[self.panda_qpos_idx]
         normalised_robo_joint_angles = (robo_joint_angles - self.robot_lower_joint_limits) / (self.robot_upper_joint_limits - self.robot_lower_joint_limits)
         normalised_robo_joint_angles = 2 * normalised_robo_joint_angles - 1
-        robo_joint_vel = pipeline_state.qd[self.panda_joint_id_start:self.panda_joint_id_end]
+        robo_joint_vel = pipeline_state.qd[self.panda_dof_idx]
         # TODO: normalise joint velocities?
 
 
@@ -349,10 +350,10 @@ class ArmManipulation(PipelineEnv):
         """Returns the environment observations"""
 
         
-        human_joint_angles = pipeline_state.qpos[self.human_joint_id_start:self.human_joint_id_end]
+        human_joint_angles = pipeline_state.qpos[self.human_qpos_idx]
         normalised_human_joint_angles = (human_joint_angles - self.human_lower_joint_limits) / (self.human_upper_joint_limits - self.human_lower_joint_limits)
         normalised_human_joint_angles = 2 * normalised_human_joint_angles - 1
-        human_joint_vel = pipeline_state.qd[self.human_joint_id_start:self.human_joint_id_end]
+        human_joint_vel = pipeline_state.qd[self.human_dof_idx]
 
         human_uarm_pos = pipeline_state.xpos[self.human_tuarm_idx]
         human_larm_pos = pipeline_state.xpos[self.human_tlarm_idx]

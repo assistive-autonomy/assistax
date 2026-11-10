@@ -103,10 +103,14 @@ class ScratchItch(PipelineEnv):
         self.LARM_TOOL_CONTACT_ID = 274
 
         self.panda_joint_id_start = 18
-        self.panda_joint_id_end = 24
+        self.panda_joint_id_end = 25  # 7 Panda joints: ids 18..24
 
         self.human_joint_id_start = 1
         self.human_joint_id_end = 18
+
+        # Joint ids -> qpos addresses: the human root is a free joint (7 qpos / 6 dofs), so ids != addresses.
+        self.panda_qpos_idx = mjmodel.jnt_qposadr[self.panda_joint_id_start:self.panda_joint_id_end].copy()
+        self.human_qpos_idx = mjmodel.jnt_qposadr[self.human_joint_id_start:self.human_joint_id_end].copy()
 
         
         n_frames = 4
@@ -226,10 +230,9 @@ class ScratchItch(PipelineEnv):
             human_obs["human_joint_angles"],           
         ))
         
-        dist = -robo_obs["distance_to_target"] # Why the double negative? I guess this is squared away anyways?
+        dist = -robo_obs["distance_to_target"]
         r_dist = jp.exp(-dist**2/self._dist_scale)
 
-        # This reward should mimick scratching but I'm not sure the scale is correct i.e. 0.005 might be too large or too small of a distance
         scratcher_vel = (
             pipeline_state.site_xpos[self.panda_scratcher_tip_idx] - pipeline_state0.site_xpos[self.panda_scratcher_tip_idx]
         ) / self.dt
@@ -268,7 +271,7 @@ class ScratchItch(PipelineEnv):
         tool_position = pipeline_state.site_xpos[self.panda_scratcher_tip_idx]
         tool_orientation = pipeline_state.xquat[self.panda_scratcher_body_idx]
         force_on_tool = self._get_force_on_tool(pipeline_state, self.UARM_TOOL_CONTACT_ID, self.LARM_TOOL_CONTACT_ID)
-        robo_joint_angles = pipeline_state.qpos[self.panda_joint_id_start:self.panda_joint_id_end]
+        robo_joint_angles = pipeline_state.qpos[self.panda_qpos_idx]
         target_position = self._get_scratch_xpos(pipeline_state, state_info)
         distance_to_target = jp.linalg.norm(target_position - tool_position)
         human_uarm_pos = pipeline_state.xpos[self.human_tuarm_idx]
@@ -294,7 +297,7 @@ class ScratchItch(PipelineEnv):
         tool_orientation = pipeline_state.xquat[self.panda_effector_idx]
         target_position = self._get_scratch_xpos(pipeline_state, state_info)
         distance_to_target = jp.linalg.norm(target_position - tool_position)
-        human_joint_angles = pipeline_state.qpos[self.human_joint_id_start:self.human_joint_id_end]
+        human_joint_angles = pipeline_state.qpos[self.human_qpos_idx]
         human_uarm_pos = pipeline_state.xpos[self.human_tuarm_idx]
         human_larm_pos = pipeline_state.xpos[self.human_tlarm_idx]
         

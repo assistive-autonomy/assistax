@@ -245,10 +245,12 @@ class DisabilityWrapper(Wrapper):
         self.joint_restriction_factor = cfg.get("joint_restriction_factor", 1.0)
         self.joint_strength = cfg.get("joint_strength", 1.0)
         self.tremor_magnitude = cfg.get("tremor_magnitude", 0.0)
-        orig_joint_range = self.env.unwrapped.sys.jnt_range[self.disability_jnt_idx]
+        # joint_idx indexes actuators (the action vector); restrict the range of the joint each one drives.
+        disabled_jnt_ids = self.env.unwrapped.sys.actuator_trnid[self.disability_jnt_idx, 0]
+        orig_joint_range = self.env.unwrapped.sys.jnt_range[disabled_jnt_ids]
         new_joint_range = self.joint_restriction_factor * orig_joint_range
         self.env.unwrapped.sys = self.env.unwrapped.sys.replace(
-            jnt_range=self.env.unwrapped.sys.jnt_range.at[self.disability_jnt_idx].set(
+            jnt_range=self.env.unwrapped.sys.jnt_range.at[disabled_jnt_ids].set(
                 new_joint_range
             )
         )

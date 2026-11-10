@@ -388,7 +388,6 @@ class PushCoop(PipelineEnv):
             "other_agent_ee_pos": other_agent_ee_pos,
         }
     
-    # # TODO do set random target position as self
 
     
     def _get_dist_target(self, pipeline_state: base.State, info) -> jax.Array:
@@ -548,7 +547,7 @@ class PushCoop(PipelineEnv):
         robot1_staging_dist_reward = jp.exp(-robot1_dist_to_staging**2 / self._ee_dist_scale)
 
         dist1 = - robo1_obs["robot1_ee_dist"]
-        dist1_reward = jp.exp(-dist1**2 / self._ee_dist_scale) #TODO double check this
+        dist1_reward = jp.exp(-dist1**2 / self._ee_dist_scale)
 
         reward_robo1_push = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist1_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward # took out this component 1.0 * robo1_contact 
         reward_robo1_drag = self._t_dist_weight * robot1_staging_dist_reward + self._ctrl_cost * ctrl_cost + self._dist_reward_weight * target_dist_reward
@@ -579,7 +578,7 @@ class PushCoop(PipelineEnv):
         robot2_staging_reward = jp.exp(-robot2_dist_to_staging**2 / self._ee_dist_scale)
 
         dist2 = - robo2_obs["robot2_ee_dist"]
-        dist2_reward = jp.exp(-dist2**2 / self._ee_dist_scale) #TODO double check this
+        dist2_reward = jp.exp(-dist2**2 / self._ee_dist_scale)
 
         reward_robo2_push = robot2_staging_reward + self._ctrl_cost * ctrl_cost + failed_reward # TODO Should we include target distance here?
         reward_robo2_drag = self._dist_reward_weight * target_dist_reward + self._t_dist_weight * dist2_reward + self._ctrl_cost * ctrl_cost + failed_reward + t_at_target_reward
@@ -604,6 +603,5 @@ class PushCoop(PipelineEnv):
 
 
     
-    # TODO: implement termination condition 
     
         

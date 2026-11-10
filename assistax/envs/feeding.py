@@ -98,14 +98,18 @@ class Feeding(PipelineEnv):
         self.human_mouth = mj_name2id(mjmodel, SITE_IDX, "mouth")
         self.human_head_geom_idx = mj_name2id(mjmodel, GEOM_IDX, "head") 
 
-        self.SPOON_HEAD_CONTACT_ID = 186
-        self.SPOON_RSIDE_CONTACT_ID = 187 
+        self.SPOON_HEAD_CONTACT_ID = 212
+        self.SPOON_RSIDE_CONTACT_ID = 213 
 
         self.panda_joint_id_start = 20
         self.panda_joint_id_end = 27
 
         self.human_joint_id_start = 1
         self.human_joint_id_end = 20
+
+        # Joint ids -> qpos addresses: the human root is a free joint (7 qpos / 6 dofs), so ids != addresses.
+        self.panda_qpos_idx = mjmodel.jnt_qposadr[self.panda_joint_id_start:self.panda_joint_id_end].copy()
+        self.human_qpos_idx = mjmodel.jnt_qposadr[self.human_joint_id_start:self.human_joint_id_end].copy()
 
         
         n_frames = 4
@@ -217,7 +221,6 @@ class Feeding(PipelineEnv):
         spoon_up_world = bmath.rotate(local_vec_spoon_up, spoon_quat)     
 
 
-        # TODO: See if we should add this in to further improve the feeding part. 
         
         vec_spoon_north = jp.array([0.0, 0.0, 1.0])
         vec_spoon_tip_to_world = bmath.rotate(vec_spoon_north, spoon_quat)
@@ -314,7 +317,7 @@ class Feeding(PipelineEnv):
         force_on_spoon = self._get_force_on_tool(pipeline_state, self.SPOON_HEAD_CONTACT_ID)
         force_on_rside = self._get_force_on_tool(pipeline_state, self.SPOON_RSIDE_CONTACT_ID)
         total_force_on_spoon = jp.sum(jp.vstack([force_on_spoon, force_on_rside]), axis=0)
-        robo_joint_angles = pipeline_state.qpos[self.panda_joint_id_start:self.panda_joint_id_end]
+        robo_joint_angles = pipeline_state.qpos[self.panda_qpos_idx]
         target_position = pipeline_state.site_xpos[self.human_mouth]
 
         return {
@@ -336,7 +339,7 @@ class Feeding(PipelineEnv):
         total_force_on_spoon = jp.sum(jp.vstack([force_on_spoon, force_on_rside]), axis=0)
         target_position = pipeline_state.site_xpos[self.human_mouth] 
         #distance_to_target = jp.linalg.norm(target_position - tool_position)
-        human_joint_angles = pipeline_state.qpos[self.human_joint_id_start:self.human_joint_id_end]
+        human_joint_angles = pipeline_state.qpos[self.human_qpos_idx]
         
         return {
             "tool_position": tool_position,

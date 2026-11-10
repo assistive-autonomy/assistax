@@ -67,6 +67,8 @@ def create(
       batch_size: if set, vmap the environment into this many parallel copies.
       disability: optional dict configuring the DisabilityWrapper (joint
         restriction/strength/tremor) to model a human with reduced mobility.
+        ``joint_idx`` is an actuator (action) index: strength and tremor act on
+        that action, and the range restriction scales the joint it drives.
       het_reward: whether rewards are heterogeneous (per-agent) rather than shared.
       preference_rewards: optional dict configuring the PreferenceRewardWrapper
         (human-preference reward components, e.g. speed/force preference ranges).

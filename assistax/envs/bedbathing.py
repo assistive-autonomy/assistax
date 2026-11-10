@@ -94,19 +94,21 @@ class BedBathing(PipelineEnv):
         self.human_uarm_size = mjmodel.geom_size[self.human_tuarm_geom]
         self.human_larm_size = mjmodel.geom_size[self.human_tlarm_geom]
         
-        # TODO: Update these indexes once XML is updated or write some sort of helper function to get these
         self.UARM_TOOL_CONTACT_ID1 = 58
         self.UARM_TOOL_CONTACT_ID2 = 59
     
         self.LARM_TOOL_CONTACT_ID1 = 62
         self.LARM_TOOL_CONTACT_ID2 = 63
 
-        # TODO: Double check these or write a helper function to find these
         self.panda_joint_id_start = 18
-        self.panda_joint_id_end = 24
+        self.panda_joint_id_end = 25  # 7 Panda joints: ids 18..24
 
         self.human_joint_id_start = 1
         self.human_joint_id_end = 18
+
+        # Joint ids -> qpos addresses: the human root is a free joint (7 qpos / 6 dofs), so ids != addresses.
+        self.panda_qpos_idx = mjmodel.jnt_qposadr[self.panda_joint_id_start:self.panda_joint_id_end].copy()
+        self.human_qpos_idx = mjmodel.jnt_qposadr[self.human_joint_id_start:self.human_joint_id_end].copy()
 
         n_frames = 4
         kwargs["n_frames"] = kwargs.get("n_frames", n_frames)
@@ -179,11 +181,19 @@ class BedBathing(PipelineEnv):
 
         return State(pipeline_state, obs, reward, done, metrics, info)
     
+    def _get_global_targets(self, pipeline_state: base.State) -> jax.Array:
+        """World positions of the wiping targets, shape (n_targets, 3): upper-arm targets, then lower-arm.
+
+        The targets are generated in each arm capsule's geom frame (centred on the capsule, z along its axis),
+        so they are mapped with the capsule's geom pose, not the arm body's pose.
+        """
+        global_targets_uarm = self._map_cylinder_points_to_global(self.wiping_targets_uarm, pipeline_state.geom_xmat[self.human_tuarm_geom], pipeline_state.geom_xpos[self.human_tuarm_geom])
+        global_targets_larm = self._map_cylinder_points_to_global(self.wiping_targets_larm, pipeline_state.geom_xmat[self.human_tlarm_geom], pipeline_state.geom_xpos[self.human_tlarm_geom])
+        return jp.vstack((global_targets_uarm, global_targets_larm))
+
     def get_targets(self, pipeline_state, contact_vector):
         # does this need to happen every step
-        global_targets_uarm = self._map_cylinder_points_to_global(self.wiping_targets_uarm, pipeline_state.xmat[self.human_tuarm_idx], pipeline_state.xpos[self.human_tuarm_idx])
-        global_targets_larm = self._map_cylinder_points_to_global(self.wiping_targets_larm, pipeline_state.xmat[self.human_tlarm_idx], pipeline_state.xpos[self.human_tlarm_idx])
-        global_targets = jp.vstack((global_targets_uarm, global_targets_larm))
+        global_targets = self._get_global_targets(pipeline_state)
 
         distances_all = self._target_distances(global_targets, pipeline_state.site_xpos[self.panda_wiper_center_idx])
         distances = self._mask_contacts(distances_all, contact_vector)
@@ -220,10 +230,7 @@ class BedBathing(PipelineEnv):
             human_obs["human_joint_angles"],           
         ))
 
-        global_targets_uarm = self._map_cylinder_points_to_global(self.wiping_targets_uarm, pipeline_state.xmat[self.human_tuarm_idx], pipeline_state.xpos[self.human_tuarm_idx])
-        global_targets_larm = self._map_cylinder_points_to_global(self.wiping_targets_larm, pipeline_state.xmat[self.human_tlarm_idx], pipeline_state.xpos[self.human_tlarm_idx])
-
-        global_targets = jp.vstack((global_targets_uarm, global_targets_larm))
+        global_targets = self._get_global_targets(pipeline_state)
         distances_all = self._target_distances(global_targets, pipeline_state.site_xpos[self.panda_wiper_center_idx])
         
         old_contact_vector = state.info["contact_vector"]
@@ -273,7 +280,7 @@ class BedBathing(PipelineEnv):
         tool_orientation = pipeline_state.xquat[self.panda_wiper_body_idx]
         
         force_on_tool = self._get_force_on_tool(pipeline_state, self.UARM_TOOL_CONTACT_ID1, self.UARM_TOOL_CONTACT_ID2, self.LARM_TOOL_CONTACT_ID1, self.LARM_TOOL_CONTACT_ID2)
-        robo_joint_angles = pipeline_state.qpos[self.panda_joint_id_start:self.panda_joint_id_end]
+        robo_joint_angles = pipeline_state.qpos[self.panda_qpos_idx]
 
         human_uarm_pos = pipeline_state.xpos[self.human_tuarm_idx]
         human_larm_pos = pipeline_state.xpos[self.human_tlarm_idx]
@@ -294,7 +301,7 @@ class BedBathing(PipelineEnv):
         tool_position = pipeline_state.site_xpos[self.panda_wiper_center_idx]
         tool_orientation = pipeline_state.xquat[self.panda_wiper_body_idx]
         
-        human_joint_angles = pipeline_state.qpos[self.human_joint_id_start:self.human_joint_id_end]
+        human_joint_angles = pipeline_state.qpos[self.human_qpos_idx]
         human_uarm_pos = pipeline_state.xpos[self.human_tuarm_idx]
         human_larm_pos = pipeline_state.xpos[self.human_tlarm_idx]
 

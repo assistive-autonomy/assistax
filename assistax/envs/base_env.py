@@ -63,18 +63,18 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
     "scratchitch": {
         # "robot": [(0,80)], # Old obs
         # "human": [(81,161)] # Old obs
-        "robot": [(0,28)], # New obs
-        "human": [(29,68)], # New obs
-        "global": [(0,68)],
+        "robot": [(0,29)], # New obs
+        "human": [(30,69)], # New obs
+        "global": [(0,69)],
     },
     "bedbathing": {
-        "robot": [(0,24)],
-        "human": [(25,60)],
-        "global": [(0,60)],
+        "robot": [(0,25)],
+        "human": [(26,61)],
+        "global": [(0,61)],
     },
     "armmanipulation": {
-        "robot": [(0,28)],
-        "human": [(28,67)],
+        "robot": [(0,29)],
+        "human": [(30,67)],
         "global": [(0,67)],
     },
     "pushcoop": {
@@ -84,20 +84,20 @@ ranges: Dict[str, Dict[str, List[Union[int, Tuple[int, int]]]]] = {
     },
 
     "handover": {
-        "robot1": [(0, 30), (62, 87)],    # Robot1 sees: itself + object + sensors + goals + phase
-        "robot2": [(31, 61), (62, 87)],   # Robot2 sees: itself + object + sensors + goals + phase
-        "global": [(0, 87)],
+        "robot1": [(0, 30), (62, 86)],    # Robot1 sees: itself + object + sensors + goals + phase
+        "robot2": [(31, 61), (62, 86)],   # Robot2 sees: itself + object + sensors + goals + phase
+        "global": [(0, 86)],
     },
 
     "feeding": {
-        "robot": [(0,21)],
-        "human": [(22, 54)],
-        "global": [(0,54)],
+        "robot": [(0,22)],
+        "human": [(23, 57)],
+        "global": [(0,57)],
     },
     "teethbrushing": {
-        "robot": [(0,21)],
-        "human": [(22, 54)],
-        "global": [(0,54)],
+        "robot": [(0,22)],
+        "human": [(23, 57)],
+        "global": [(0,57)],
     },
 }
 
@@ -170,12 +170,10 @@ class MABraxEnv(MultiAgentEnv):
         )
         obs_sizes = {
             agent: (
-                # TODO move the global obs out of here and treat manually. It's wrong atm, and shouldn't have the extra num_agents indicator
-                self.num_agents + (
-                    self.max_agent_obs_size if homogenisation_method == "max"
-                    else self.env.observation_size if homogenisation_method == "concat"
-                    else obs.size
-                )
+                # only `max` prepends the num_agents one-hot (see map_global_obs_to_agents)
+                (self.num_agents + self.max_agent_obs_size) if homogenisation_method == "max"
+                else self.env.observation_size if homogenisation_method == "concat"
+                else obs.size
             )
             for agent, obs in self.agent_obs_mapping.items()
             if not agent == "global"

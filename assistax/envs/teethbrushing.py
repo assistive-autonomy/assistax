@@ -98,7 +98,7 @@ class TeethBrushing(PipelineEnv):
         self.human_mouth = mj_name2id(mjmodel, SITE_IDX, "mouth")
         self.human_head_geom_idx = mj_name2id(mjmodel, GEOM_IDX, "head") 
 
-        self.TOOTHBRUSH_HEAD_CONTACT_ID = 19 #TODO: update these
+        self.TOOTHBRUSH_HEAD_CONTACT_ID = 19
         self.TOOTHBRUSH_RSIDE_CONTACT_ID = 20 
 
         self.panda_joint_id_start = 20
@@ -106,6 +106,10 @@ class TeethBrushing(PipelineEnv):
 
         self.human_joint_id_start = 1
         self.human_joint_id_end = 20
+
+        # Joint ids -> qpos addresses: the human root is a free joint (7 qpos / 6 dofs), so ids != addresses.
+        self.panda_qpos_idx = mjmodel.jnt_qposadr[self.panda_joint_id_start:self.panda_joint_id_end].copy()
+        self.human_qpos_idx = mjmodel.jnt_qposadr[self.human_joint_id_start:self.human_joint_id_end].copy()
 
         
         n_frames = 4
@@ -245,7 +249,6 @@ class TeethBrushing(PipelineEnv):
             pipeline_state, pipeline_state0, contact_force_mouth, 
             toothbrush_pos, mouth_pos, distance, toothbrush_vel
             )
-        # TODO: Add a proper brushing reward in. 
         # 5, Total Reward
         reward = (
             self._dist_reward_weight * r_dist +
@@ -282,7 +285,7 @@ class TeethBrushing(PipelineEnv):
         force_on_toothbrush = self._get_force_on_tool(pipeline_state, self.TOOTHBRUSH_HEAD_CONTACT_ID)
         force_on_rside = self._get_force_on_tool(pipeline_state, self.TOOTHBRUSH_RSIDE_CONTACT_ID)
         total_force_on_toothbrush = jp.sum(jp.vstack([force_on_toothbrush, force_on_rside]), axis=0)
-        robo_joint_angles = pipeline_state.qpos[self.panda_joint_id_start:self.panda_joint_id_end]
+        robo_joint_angles = pipeline_state.qpos[self.panda_qpos_idx]
         target_position = pipeline_state.site_xpos[self.human_mouth]
 
         return {
@@ -304,7 +307,7 @@ class TeethBrushing(PipelineEnv):
         total_force_on_toothbrush = jp.sum(jp.vstack([force_on_toothbrush, force_on_rside]), axis=0)
         target_position = pipeline_state.site_xpos[self.human_mouth] 
         #distance_to_target = jp.linalg.norm(target_position - tool_position)
-        human_joint_angles = pipeline_state.qpos[self.human_joint_id_start:self.human_joint_id_end]
+        human_joint_angles = pipeline_state.qpos[self.human_qpos_idx]
         
         return {
             "tool_position": tool_position,
