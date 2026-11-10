@@ -180,6 +180,7 @@ def main() -> None:
     p.add_argument("out_dir", type=Path)
     p.add_argument("--steps", type=float, default=None)
     p.add_argument("--seeds", type=int, default=None)
+    p.add_argument("--seed", type=int, default=None, help="config SEED (training and evaluation keys derive from it)")
     p.add_argument("--params", type=Path, default=None)
     p.add_argument("--human-zero", action="store_true")
     p.add_argument("--deterministic", action="store_true", help="evaluate the policy means instead of sampling")
@@ -191,7 +192,8 @@ def main() -> None:
         render.render_picks(a.env, a.version, a.out_dir, load_rec(a.out_dir), s["rendered_seed0_episodes"], dt)
         return
     tasks.install(a.env, a.version)
-    overrides = [f"TOTAL_TIMESTEPS={a.steps}"] * (a.steps is not None) + [f"NUM_SEEDS={a.seeds}"] * (a.seeds is not None)
+    overrides = ([f"TOTAL_TIMESTEPS={a.steps}"] * (a.steps is not None) + [f"NUM_SEEDS={a.seeds}"] * (a.seeds is not None)
+                 + [f"SEED={a.seed}"] * (a.seed is not None))
     config = load_config(a.env, overrides)
     a.out_dir.mkdir(parents=True, exist_ok=True)
     timings = {}
