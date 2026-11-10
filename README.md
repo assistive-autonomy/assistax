@@ -16,6 +16,7 @@ Assistax is a Python library that provides hardware-accelerated environments in 
 
 ## 📰 News
 
+- 🔧 **0.1.0 (breaking):** fixes observation indexing in all five human–robot tasks and the bed-bathing wipe targets. Observations differ from earlier versions, so policies trained before 0.1.0 must be retrained. See [CHANGELOG.md](CHANGELOG.md).
 - 🏆 Assistax won the **Outstanding Paper Award for Tooling, Environments and Evaluation for Reinforcement Learning** at the Reinforcement Learning Conference (RLC) 2026.
 - 📄 A [recent paper from Anthropic](https://arxiv.org/abs/2610.04364) uses Assistax as a benchmark.
 
@@ -135,6 +136,8 @@ This will generate a sweep for the specified IPPO variant for the scratchitch ta
 ## 🦓 Pre-trained partner policies 
 
 The pre-trained partner policies `zoo` can be downloaded on [Hugging Face](https://huggingface.co/datasets/leohink/assistax-zoo/). Download the `zoo.tar.gz` file, extract it, and point the `ZOO_PATH` config in `assistax/baselines/ZSC/config/ppo_aht.yaml` (or `sac_aht.yaml`) at the extracted `zoo/` directory to train against a pre-trained population of "human" agents.
+
+> **Compatibility:** zoo agents trained before assistax 0.1.0 use the old observation layout. Use them only with the pre-0.1.0 code (git tag `zoo-v1`), never with 0.1.0 or later. For scratchitch and bedbathing they would load without error but receive different inputs.
 
 The zoo contains **630 unique "humans" per task** for each of the 5 tasks, where a human is a unique combination of preference weights (`w_speed`, `w_force`, `w_touch`). These are evenly split **210 / 210 / 210** across the IPPO, MAPPO and MASAC training algorithms, and each human is paired with the robot it was trained with (3,150 human+robot teams, 6,300 agents in total).
 

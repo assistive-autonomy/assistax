@@ -16,6 +16,18 @@ Assistax provides 7 multi-agent environments built on Brax/MJX physics for assis
 | Feeding | Robot + Human | 4 | 0.008 | 1000 | No | ~5.0 |
 | TeethBrushing | Robot + Human | 4 | 0.008 | 1000 | No | ~3.14 |
 
+**Observation sizes (0.1.0).** These are the entries in each env's observation vector: the first agent's block comes first, then the second's. In the five human–robot tasks the robot sees its 7 Panda joints (`joint1`–`joint7`) and the human sees all of its hinge joints, but not the free root. Each env converts its joint-id ranges to `qpos`/`qvel` addresses with `jnt_qposadr`/`jnt_dofadr`, and `tests/test_obs_indexing.py` checks the result against the joints by name.
+
+| Env | Agent 0 | Agent 1 | Total |
+|-----|---------|---------|-------|
+| ScratchItch | 30 | 40 | 70 |
+| BedBathing | 26 | 36 | 62 |
+| ArmManipulation | 30 | 38 | 68 |
+| PushCoop | 27 | 27 | 54 |
+| Handover | 31 + 25 shared | 31 + 25 shared | 87 |
+| Feeding | 23 | 35 | 58 |
+| TeethBrushing | 23 | 35 | 58 |
+
 ---
 
 ## 3. Per-Environment Details
@@ -193,8 +205,8 @@ This environment uses **heterogeneous rewards** (each robot receives its own rew
 **Description:** A Panda robot uses a spoon to feed a human by navigating to the mouth with correct orientation, speed, and gentle contact.
 
 #### Physical Setup
-- **Robot (Agent 0):** Panda arm with spoon tool. Joints: indices 20-27.
-- **Human (Agent 1):** Humanoid seated in wheelchair. Joints: indices 1-20.
+- **Robot (Agent 0):** Panda arm with spoon tool. Observes its 7 arm joints (`joint1`–`joint7`).
+- **Human (Agent 1):** Humanoid seated in wheelchair. Observes its 19 hinge joints (neck, abdomen, legs, arms; not the free root).
 - **Physics:** MuJoCo default timestep = 0.002s, n_frames = 4, effective dt = 0.008s.
 
 #### Reward Components
@@ -226,8 +238,8 @@ Reward = `2.0 * r_dist + 1.0 * (r_orientation + r_velocity + r_force) + 1e-6 * c
 **Description:** A Panda robot uses a toothbrush to brush a human's teeth, requiring approach, alignment, and appropriate brushing motion with contact force.
 
 #### Physical Setup
-- **Robot (Agent 0):** Panda arm with toothbrush tool. Joints: indices 20-27.
-- **Human (Agent 1):** Humanoid seated. Joints: indices 1-20.
+- **Robot (Agent 0):** Panda arm with toothbrush tool. Observes its 7 arm joints (`joint1`–`joint7`).
+- **Human (Agent 1):** Humanoid seated. Observes its 19 hinge joints (neck, abdomen, legs, arms; not the free root).
 - **Physics:** MuJoCo default timestep = 0.002s, n_frames = 4, effective dt = 0.008s.
 
 #### Reward Components
