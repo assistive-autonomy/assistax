@@ -30,11 +30,11 @@ NECK_HUMAN_ACT = [17, 18]  # neck_yaw, neck_pitch actuators (feeding, teeth brus
 NECK_STIFFNESS, NECK_DAMPING = 10.0, 2.0  # N m/rad, N m s/rad: a head that holds itself up (v1+)
 # Weight of the out-of-range-action cost per version. 0.1 left the round-2 bed-bathing policy at |a| ~ 2.2: its
 # joint targets sit at their limits, which is what makes contact forces spike, so v4 raises it to 1.
-BOUND_W = {"v1": 0.1, "v2": 0.1, "v3": 0.1, "v4": 1.0}
+BOUND_W = {"v1": 0.1, "v2": 0.1, "v3": 0.1, "v4": 1.0, "v5": 1.0}
 # Action-rate cost weight per version: base + near * gate, where gate rises linearly from 0 at GATE_RANGE metres
 # from the task target to 1 at it. v1 applied 0.5 everywhere: random early actions then cost ~1.6 per step, far
 # more than the approach reward pays, and the teeth-brushing robot learned to stay still 56 cm from the mouth.
-SMOOTH_W = {"v1": (0.5, 0.0), "v2": (0.02, 0.5), "v3": (0.02, 0.5), "v4": (0.02, 0.5)}
+SMOOTH_W = {"v1": (0.5, 0.0), "v2": (0.02, 0.5), "v3": (0.02, 0.5), "v4": (0.02, 0.5), "v5": (0.02, 0.5)}
 GATE_RANGE = 0.2
 
 
@@ -193,8 +193,8 @@ class RDTeeth(Diag, TeethBrushing):
     while moving 0.5-10 cm/s along the face (relative to the head)."""
 
     EXTRA = ("x_f_bristle", "x_f_head_other", "x_contact_mouth_d", "x_v_tan", "x_neck_w", "x_align")
-    REWARD_KEYS = ("r_far", "r_mid", "r_near", "r_force", "r_brush", "r_align", "p_over", "p_other", "p_smooth", "p_bound",
-                   "p_neck")
+    REWARD_KEYS = ("r_far", "r_mid", "r_near", "r_force", "r_brush", "r_align", "p_over", "p_harm", "p_other", "p_smooth",
+                   "p_bound", "p_neck")
 
     def __init__(self, version: str = "v0", **kwargs):
         super().__init__(**kwargs)
@@ -239,6 +239,24 @@ class RDTeeth(Diag, TeethBrushing):
         return reward + 2.0 * t["r_mid"] - 0.15 * t["p_neck"], done, t
 
     _reward_v4 = _reward_v3  # v4 = v3's reward with the stronger out-of-range-action cost (BOUND_W)
+
+    def _reward_v5(self, info0: dict, new: State, d: dict, smooth: jp.ndarray):
+        """v3 policies line the bristles up but stop ~6 cm out: contact only paid near exactly 1 N and any other
+        touch cost a flat 2, so with a noisy policy touching the face lost reward. v5 pays bristle contact on the
+        mouth at full credit up to 5 N and 5/F above (at least 1/4), sets the head's comfort force to 15 N, charges
+        5 for steps above 60 N, and charges incidental contact by force (0.05 per N, at most 1)."""
+        f = d["x_f_bristle"]
+        on_mouth = ((d["x_contact_mouth_d"] < 0.025) & (f > 0.05)).astype(jp.float32)
+        quality = jp.where(f <= 5.0, 1.0, jp.maximum(0.25, 5.0 / jp.maximum(f, 1e-6)))
+        r_far = jp.exp(-3.0 * d["x_task_d"])
+        t = {"r_far": r_far, "r_mid": jp.exp(-d["x_task_d"] / 0.03), "r_near": jp.exp(-d["x_task_d"] / 0.01),
+             "r_align": d["x_align"] * r_far, "r_force": on_mouth * quality,
+             "r_brush": peak1(d["x_v_tan"] / 0.03) * on_mouth * quality,
+             "p_over": self._over(f + d["x_f_head_other"], 15.0), "p_harm": (d["x_f_rh"] > 60.0).astype(jp.float32),
+             "p_other": jp.minimum(d["x_f_other"] / 10.0, 2.0), "p_neck": d["x_neck_w"] ** 2}
+        reward = (2.0 * t["r_far"] + 2.0 * t["r_mid"] + 2.0 * t["r_near"] + 1.0 * t["r_align"] + 4.0 * t["r_force"]
+                  + 3.0 * t["r_brush"] - 1.0 * t["p_over"] - 5.0 * t["p_harm"] - 0.5 * t["p_other"] - 0.15 * t["p_neck"])
+        return reward, new.done, t
 
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state
@@ -299,6 +317,8 @@ class RDFeeding(Diag, Feeding):
         reward = (2.0 * t["r_far"] + 2.0 * t["r_mid"] + 2.0 * t["r_near"] + 1.0 * t["r_shape"] + 3.0 * d["x_ok"]
                   + 1.0 * t["r_touch"] - 1.0 * t["p_over"] - 0.5 * t["p_other"] - 0.05 * t["p_neck"])
         return reward, new.done, t
+
+    _reward_v5 = _reward_v4  # v5 changed teeth brushing only
 
     def __init__(self, version: str = "v0", **kwargs):
         super().__init__(**kwargs)
@@ -373,6 +393,8 @@ class RDScratch(Diag, ScratchItch):
         reward = (1.0 * t["r_far"] + 2.0 * t["r_mid"] + 2.0 * t["r_near"] + 3.0 * t["r_force"] + 3.0 * t["r_scratch"]
                   - 1.0 * t["p_over"] - 5.0 * t["p_harm"] - 0.5 * t["p_other"])
         return reward, new.done, t
+
+    _reward_v5 = _reward_v4  # v5 changed teeth brushing only
 
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state
@@ -450,6 +472,8 @@ class RDBedBathing(Diag, BedBathing):
         reward = t["r_dist"] + 5.0 * t["r_wipe"] + 1.5 * t["r_contact"] - 1.0 * t["p_over"] - 0.5 * t["p_other"]
         return reward, jp.zeros_like(new.done), t
 
+    _reward_v5 = _reward_v4  # v5 changed teeth brushing only
+
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state
         f = normal_forces(ps, self.rh)
@@ -509,6 +533,8 @@ class RDArmManip(Diag, ArmManipulation):
         reward = (10.0 * m["reward_waist_dist"] + 1.0 * m["reward_hook_dist"] + 5.0 * t["r_near"] + 5.0 * t["r_support"]
                   - 0.1 * t["p_rot"] - 1.0 * t["p_over"] - 5.0 * t["p_harm"] - 0.5 * t["p_other"] - 0.5 * t["p_speed"])
         return reward, new.done, t
+
+    _reward_v5 = _reward_v4  # v5 changed teeth brushing only
 
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state
