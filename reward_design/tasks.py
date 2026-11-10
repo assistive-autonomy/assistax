@@ -318,7 +318,7 @@ class RDFeeding(Diag, Feeding):
                   + 1.0 * t["r_touch"] - 1.0 * t["p_over"] - 0.5 * t["p_other"] - 0.05 * t["p_neck"])
         return reward, new.done, t
 
-    _reward_v5 = _reward_v4  # v5 changed teeth brushing only
+    _reward_v5 = _reward_v4  # v5 changes teeth brushing and the arm-manipulation human's arm gear only
 
     def __init__(self, version: str = "v0", **kwargs):
         super().__init__(**kwargs)
@@ -394,7 +394,7 @@ class RDScratch(Diag, ScratchItch):
                   - 1.0 * t["p_over"] - 5.0 * t["p_harm"] - 0.5 * t["p_other"])
         return reward, new.done, t
 
-    _reward_v5 = _reward_v4  # v5 changed teeth brushing only
+    _reward_v5 = _reward_v4  # v5 changes teeth brushing and the arm-manipulation human's arm gear only
 
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state
@@ -472,7 +472,7 @@ class RDBedBathing(Diag, BedBathing):
         reward = t["r_dist"] + 5.0 * t["r_wipe"] + 1.5 * t["r_contact"] - 1.0 * t["p_over"] - 0.5 * t["p_other"]
         return reward, jp.zeros_like(new.done), t
 
-    _reward_v5 = _reward_v4  # v5 changed teeth brushing only
+    _reward_v5 = _reward_v4  # v5 changes teeth brushing and the arm-manipulation human's arm gear only
 
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state
@@ -497,12 +497,20 @@ class RDArmManip(Diag, ArmManipulation):
 
     EXTRA = ("x_hook_d",)
     REWARD_KEYS = ("r_near", "r_support", "p_rot", "p_over", "p_harm", "p_other", "p_speed", "p_smooth", "p_bound")
+    # The scene gives the human's right-arm actuators (its whole action space) gear 0, so the human agent has no
+    # effect. From v5 (Leo, 2026-11-10): gear 10, i.e. up to 4 N m; lifting the arm off the bed takes ~6-7 N m, so
+    # the human can move and help but the robot still has to carry the arm. The other scenes use gear 25.
+    HUMAN_ARM_GEAR = {"v5": 10.0}
 
     def __init__(self, version: str = "v0", **kwargs):
         super().__init__(**kwargs)
         self._rd_setup(version, list(range(56, 64)), [11, 12, 13], list(range(17, 24)))
         if version != "v0":
             self.EXTRA = self.EXTRA + self.REWARD_KEYS
+        if version in self.HUMAN_ARM_GEAR:
+            gear = np.asarray(self.sys.actuator_gear).copy()
+            gear[self.human_act, 0] = self.HUMAN_ARM_GEAR[version]
+            self.sys = self.sys.tree_replace({"actuator_gear": jp.asarray(gear)})
 
     def _reward_v1(self, info0: dict, new: State, d: dict, smooth: jp.ndarray):
         """v0's waist and hook terms, the rotation term as a penalty (v0 adds it, rewarding misalignment), a
@@ -534,7 +542,7 @@ class RDArmManip(Diag, ArmManipulation):
                   - 0.1 * t["p_rot"] - 1.0 * t["p_over"] - 5.0 * t["p_harm"] - 0.5 * t["p_other"] - 0.5 * t["p_speed"])
         return reward, new.done, t
 
-    _reward_v5 = _reward_v4  # v5 changed teeth brushing only
+    _reward_v5 = _reward_v4  # v5: same reward; the human's arm gets gear 10 (HUMAN_ARM_GEAR)
 
     def _diag(self, ps0, new: State, action) -> dict:
         ps = new.pipeline_state
