@@ -90,11 +90,32 @@ def discover_shard_zoos(shards_root: Path) -> list[Path]:
     return sorted(shards_root.rglob("index.csv"))
 
 
+META_FILE = "zoo_meta.json"  # ZooManager.META_FILE: the zoo-version marker
+
+
+def _strict_checks(index_files: list[Path], target: Path) -> str:
+    """Strict mode: every shard carries one shared zoo version and the target is a new or empty folder, so a
+    population is never merged into, or mixed with, another. Returns the version."""
+    versions = {}
+    for idx_path in index_files:
+        meta = idx_path.parent / META_FILE
+        versions[str(idx_path.parent)] = json.loads(meta.read_text()).get("zoo_version") if meta.exists() else None
+    found = set(versions.values())
+    if None in found or len(found) != 1:
+        raise ValueError(f"Strict merge needs every shard marked with one zoo version; found {versions}")
+    if target.exists() and any(target.iterdir()):
+        raise ValueError(f"Strict merge needs a new or empty target; {target} is not empty.")
+    return found.pop()
+
+
 # ─────────────────────────────────────────────────────────────
 # Merge logic
 # ─────────────────────────────────────────────────────────────
 
-def merge_zoos(shards_root: str, target_zoo: str, dry_run: bool = False):
+def merge_zoos(shards_root: str, target_zoo: str, dry_run: bool = False, strict: bool = False):
+    """Merge every zoo shard under shards_root into target_zoo. strict: shards of one zoo version only, a new or
+    empty target, and duplicates or missing files are errors instead of being skipped; the merged zoo is marked
+    with the version."""
     shards_root = Path(shards_root)
     target = Path(target_zoo)
 
@@ -103,6 +124,7 @@ def merge_zoos(shards_root: str, target_zoo: str, dry_run: bool = False):
     if not index_files:
         print("Nothing to merge.")
         return
+    version = _strict_checks(index_files, target) if strict else None
 
     # ── Pass 1: Load all shard indices and configs, compute fingerprints ──
     all_rows = []  # (shard_zoo_dir, row_dict, config_dict, fingerprint)
@@ -117,11 +139,15 @@ def merge_zoos(shards_root: str, target_zoo: str, dry_run: bool = False):
             config_path = shard_zoo_dir / "config" / f"{agent_uuid}.yaml"
 
             if not config_path.exists():
+                if strict:
+                    raise ValueError(f"config missing for {agent_uuid} in {shard_zoo_dir}")
                 print(f"    WARNING: config missing for {agent_uuid}, skipping")
                 continue
 
             params_path = shard_zoo_dir / "params" / f"{agent_uuid}.safetensors"
             if not params_path.exists():
+                if strict:
+                    raise ValueError(f"params missing for {agent_uuid} in {shard_zoo_dir}")
                 print(f"    WARNING: params missing for {agent_uuid}, skipping")
                 continue
 
@@ -184,6 +210,11 @@ def merge_zoos(shards_root: str, target_zoo: str, dry_run: bool = False):
             print(f"  Kept {first}, skipped {len(dup_uuids)}: {dup_uuids[:3]}{'...' if len(dup_uuids) > 3 else ''}")
         print()
 
+    uuids = [entry["agent_uuid"] for entry in all_rows]
+    if strict and (dup_details or len(set(uuids)) != len(uuids)):
+        raise ValueError(f"Strict merge found {duplicate_count} duplicate humans (same config) and "
+                         f"{len(uuids) - len(set(uuids))} repeated agent ids; nothing was copied.")
+
     if dry_run:
         print("DRY RUN — no files copied.")
         _print_summary(unique_agents)
@@ -227,6 +258,10 @@ def merge_zoos(shards_root: str, target_zoo: str, dry_run: bool = False):
         print(f"Appended {len(new_rows)} new agents to existing index ({len(existing_df)} prior)")
     
     merged_df.to_csv(index_path, index=False)
+    if strict:  # marked last, so an interrupted merge leaves an unmarked folder that later merges refuse
+        (target / META_FILE).write_text(json.dumps(
+            {"zoo_version": version, "n_agents": len(merged_df), "merged_from": [str(p.parent) for p in index_files]},
+            indent=1))
 
     print(f"\n✅  Merged zoo written to: {target}")
     print(f"   Total agents in index: {len(merged_df)}")
@@ -280,5 +315,10 @@ if __name__ == "__main__":
         action="store_true",
         help="Only report what would happen, don't copy anything",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Shards of one zoo version into a new, empty zoo; duplicates and missing files are errors",
+    )
     args = parser.parse_args()
-    merge_zoos(args.shards_root, args.target_zoo, dry_run=args.dry_run)
+    merge_zoos(args.shards_root, args.target_zoo, dry_run=args.dry_run, strict=args.strict)

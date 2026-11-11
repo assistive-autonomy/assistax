@@ -1,3 +1,6 @@
+import datetime
+import fcntl
+import json
 import os
 import os.path as osp
 import warnings
@@ -426,11 +429,21 @@ class LoadAgentState:
 
 
 class ZooManager:
-    """Class for managing access to the agent zoo."""
+    """Class for managing access to the agent zoo.
 
-    def __init__(self, zoo_path: str):
+    zoo_version (e.g. "v2") marks a zoo: a new or empty folder gets a zoo_meta.json, and a folder holding another
+    version, or agents but no marker (a v1 zoo), is refused, so populations trained on different env versions never
+    mix. Opening a zoo never rewrites its files, and saving never overwrites an agent.
+    """
+
+    META_FILE = "zoo_meta.json"
+
+    def __init__(self, zoo_path: str, zoo_version: Optional[str] = None):
         self.zoo_path = zoo_path
         self.index_path = osp.join(zoo_path, "index.csv")
+        self.zoo_version = zoo_version
+        if zoo_version is not None:
+            self._check_version(zoo_path, zoo_version)
         self.index_cols = [
             "agent_uuid",
             "scenario",
@@ -446,12 +459,31 @@ class ZooManager:
 
         self._init_zoo(zoo_path)
         self.index = pd.read_csv(self.index_path)
-        # Migrate old zoo index files that lack newer columns
-        missing_cols = [c for c in self.index_cols if c not in self.index.columns]
-        if missing_cols:
-            for col in missing_cols:
-                self.index[col] = ""
-            self.index.to_csv(self.index_path, index=False)
+        # Older index files lack newer columns: add them in memory only (opening a zoo never rewrites it); save_agent
+        # refuses such a zoo, so appended rows always match the header.
+        self._missing_cols = [c for c in self.index_cols if c not in self.index.columns]
+        for col in self._missing_cols:
+            self.index[col] = ""
+
+    def _check_version(self, zoo_path: str, zoo_version: str) -> None:
+        """Mark a new or empty zoo with zoo_version; refuse one holding another version, or agents but no marker."""
+        meta_path = osp.join(zoo_path, self.META_FILE)
+        if osp.exists(meta_path):
+            with open(meta_path, encoding="utf-8") as f:
+                found = json.load(f).get("zoo_version")
+            if found != zoo_version:
+                raise ValueError(f"{zoo_path} is a {found} zoo, not {zoo_version}; populations of different "
+                                 "versions never mix.")
+            return
+        params_dir = osp.join(zoo_path, "params")
+        has_rows = osp.exists(self.index_path) and len(pd.read_csv(self.index_path)) > 0
+        if has_rows or (osp.isdir(params_dir) and os.listdir(params_dir)):
+            raise ValueError(f"{zoo_path} holds agents but no {self.META_FILE} (an older zoo); refusing to use it "
+                             f"as a {zoo_version} zoo.")
+        os.makedirs(zoo_path, exist_ok=True)
+        with open(meta_path, "x", encoding="utf-8") as f:
+            json.dump({"zoo_version": zoo_version,
+                       "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")}, f)
 
     def load_agent(self, agent_uuid: str) -> ZooState:
         """Load an agent from the zoo given an agent UUID."""
@@ -539,13 +571,24 @@ class ZooManager:
                 f.write(','.join(self.index_cols) + '\n')
 
     def _write_index(self, index_dict):
-        """Writes the details of the current agent to the index file."""
+        """Writes the details of the current agent to the index file (under a lock: processes may share a zoo)."""
         with open(self.index_path, "a", encoding="utf-8") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
             f.write(','.join(str(index_dict[col]) for col in self.index_cols) + '\n')
 
     def save_agent(self, config, param_dict, scenario_agent_id, team_uuid="", preference_weights=None):
-        """Saves the current agent to the zoo."""
+        """Saves the current agent to the zoo, never overwriting an existing agent or writing into an old-format
+        index. With a zoo_version, the saved config records it as ZOO_VERSION."""
+        if self._missing_cols:
+            raise ValueError(f"{self.index_path} is an older index format (no {self._missing_cols}); this code never "
+                             "writes into it.")
         agent_uuid = str(uuid.uuid4())
+        for path in (osp.join(self.zoo_path, "params", agent_uuid + ".safetensors"),
+                     osp.join(self.zoo_path, "config", agent_uuid + ".yaml")):
+            if osp.exists(path):
+                raise FileExistsError(f"{path} exists; zoo agents are never overwritten.")
+        if self.zoo_version is not None:
+            config = {**config, "ZOO_VERSION": self.zoo_version}
         self._save_safetensors(agent_uuid, param_dict)
         self._save_config(agent_uuid, config)
         pw = preference_weights or {}
