@@ -3,12 +3,14 @@ audit (human_audit.py). Standalone on purpose: it imports nothing else from rewa
 pre-0.1.0 code (058d2f7), whose envs lack what tasks.py relies on.
 
 Each evaluation records, per step: qpos/qvel, dones, every agent's reward, every agent's action as applied (sampled
-or mean) and its policy mean, and the scratch itch (scratch itch only). Three modes, all on the same 32 starts per
-seed as ippo_run.py: sampled actions, policy means, and sampled with the human's actions set to zero.
+or mean) and its policy mean, and the scratch itch (scratch itch only). Four modes, all on the same 32 starts per
+seed as ippo_run.py: sampled actions, policy means, and sampled with the human's or the robot's actions set to zero.
 
 Usage, from the checkout whose assistax should run:
   python /path/to/reward_design/audit_run.py train <env> <out_dir> [--steps 4e7] [--seeds 1] [--seed 0]
   python /path/to/reward_design/audit_run.py eval <env> <out_dir> --params <dir with robot/human.safetensors>
+Options: --set <hydra override> (repeatable, e.g. ++ENV_KWARGS.human_gear=2); --solo-human zeroes the robot's
+actions in training and evaluation, to test whether the human can do the task alone.
 """
 import argparse
 import json
@@ -35,7 +37,7 @@ IPPO_DIR = Path(assistax.__file__).parent / "baselines" / "IPPO"
 sys.path.insert(0, str(IPPO_DIR))
 from ippo_ff_nps import MultiActorCritic, batchify, make_evaluation, make_train, unbatchify  # noqa: E402
 
-MODES = ("sampled", "mean", "human_zero")
+MODES = ("sampled", "mean", "human_zero", "robot_zero")
 
 
 def load_config(env_name: str, overrides: list[str]) -> dict:
@@ -56,7 +58,7 @@ def load_params(run_dir: Path, agents: list[str], seed: int) -> dict:
 
 def make_rollout(eval_env, apply_fn, n_episodes: int, mode: str):
     """One evaluation of n_episodes in `mode`, recording states, rewards and both agents' actions."""
-    human = eval_env.agents.index("human")
+    human, robot = eval_env.agents.index("human"), eval_env.agents.index("robot")
 
     def rollout(rng: jax.Array, params) -> dict:
         rng_reset, rng = jax.random.split(rng)
@@ -74,6 +76,8 @@ def make_rollout(eval_env, apply_fn, n_episodes: int, mode: str):
                 action = mean
             if mode == "human_zero":
                 action = action.at[human].set(0.0)
+            if mode == "robot_zero":
+                action = action.at[robot].set(0.0)
             obs, env_state, reward, done, _ = jax.vmap(eval_env.step)(
                 jax.random.split(k_step, n_episodes), env_state, unbatchify(action, eval_env.agents))
             inner = env_state.env_state
@@ -90,7 +94,7 @@ def make_rollout(eval_env, apply_fn, n_episodes: int, mode: str):
 
 
 def evaluate(config: dict, params_dir: Path, out_dir: Path) -> None:
-    """All three modes for every training seed in params_dir; writes audit_<mode>.npz (seed axis first)."""
+    """Every mode for every training seed in params_dir; writes audit_<mode>.npz (seed axis first)."""
     eval_env, _ = make_evaluation(config)
     apply_fn = MultiActorCritic(config=config).apply
     agents = list(eval_env.agents)
@@ -116,17 +120,27 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--params", type=Path, default=None)
     p.add_argument("--version", default=None, help="reward_design.tasks version to install (0.1.0 code only)")
+    p.add_argument("--set", action="append", default=[], help="extra hydra override, e.g. ++ENV_KWARGS.human_gear=2")
+    p.add_argument("--solo-human", action="store_true", help="zero the robot's actions in training and evaluation")
     a = p.parse_args()
     if a.version is not None:  # imported only on request, so the file still runs on pre-0.1.0 code
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
         from reward_design import tasks
         tasks.install(a.env, a.version)
+    if a.solo_human:  # every multi-agent env in this process ignores the robot's actions
+        from assistax.envs import base_env
+        to_global = base_env.MABraxEnv.map_agents_to_global_action
+        base_env.MABraxEnv.map_agents_to_global_action = lambda self, acts: to_global(
+            self, {**acts, "robot": jnp.zeros_like(acts["robot"])})
     overrides = ([f"TOTAL_TIMESTEPS={a.steps}"] * (a.steps is not None) + [f"NUM_SEEDS={a.seeds}"] * (a.seeds is not None)
-                 + [f"SEED={a.seed}"] * (a.seed is not None))
+                 + [f"SEED={a.seed}"] * (a.seed is not None) + a.set)
     config = load_config(a.env, overrides)
     a.out_dir.mkdir(parents=True, exist_ok=True)
+    from assistax.envs import base_env as _base_env  # the human's actuators in this code, for the audit
+    human_act = [int(i) for i in _base_env._agent_action_mapping[a.env]["human"]]
     (a.out_dir / "config.json").write_text(json.dumps(
-        {**config, "ASSISTAX_FILE": assistax.__file__, "REWARD_VERSION": a.version}, indent=1))
+        {**config, "ASSISTAX_FILE": assistax.__file__, "REWARD_VERSION": a.version, "SOLO_HUMAN": a.solo_human,
+         "HUMAN_ACT": human_act}, indent=1))
     params_dir = a.params
     if a.mode == "train":
         train_rng, _ = jax.random.split(jax.random.key(config["SEED"]))

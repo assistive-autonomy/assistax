@@ -28,7 +28,21 @@ TOOL_TARGET = {  # scene -> (tool site, target: site name, or "itch", or ("geom"
     "bed_scene.xml": ("wiper_centre", ("geom", "right_larm")),
     "bed_scene_armmanip.xml": ("platform_center", "hook_target"),
 }
-HUMAN_ACT = {"teethbrushing_scene.xml": [0, 1], "feeding_scene.xml": [0, 1]}  # others: [11, 12, 13]
+HUMAN_ACT = {"teethbrushing_scene.xml": [0, 1], "feeding_scene.xml": [0, 1]}  # others: [11, 12, 13]; up to 0.1.0
+
+
+def run_model(run: Path, scene: str) -> tuple[mujoco.MjModel, list[int]]:
+    """The scene's MuJoCo model as the run used it, and the human's actuators. Runs recorded from 2026-11-11 store
+    HUMAN_ACT (v2 feeding/teeth: the neck, 17/18) and any ENV_KWARGS.human_gear in config.json; older runs fall
+    back to the HUMAN_ACT table."""
+    m = mujoco.MjModel.from_xml_path(str(Path(__file__).resolve().parents[1] / "assistax/envs/assets" / scene))
+    cfg_path = run / "config.json"
+    cfg = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
+    gear = cfg.get("ENV_KWARGS", {}).get("human_gear")
+    if gear is not None:
+        for name in ("right_shoulder1", "right_shoulder2", "right_elbow"):
+            m.actuator_gear[m.actuator(name).id, 0] = gear
+    return m, cfg.get("HUMAN_ACT", HUMAN_ACT.get(scene, [11, 12, 13]))
 
 
 def first_mask(done: np.ndarray) -> np.ndarray:
@@ -133,10 +147,10 @@ def capability(m: mujoco.MjModel, acts: list[int], seconds: float = 2.0) -> dict
 
 def audit(run: Path, scene: str) -> dict:
     """All audit numbers for one run directory."""
-    m = mujoco.MjModel.from_xml_path(str(Path(__file__).resolve().parents[1] / "assistax/envs/assets" / scene))
-    acts = HUMAN_ACT.get(scene, [11, 12, 13])
+    m, acts = run_model(run, scene)
     lim = m.actuator_ctrlrange[acts, 1]
-    recs = {mode: dict(np.load(run / f"audit_{mode}.npz")) for mode in ("sampled", "mean", "human_zero")}
+    modes = ("sampled", "mean", "human_zero") + (("robot_zero",) if (run / "audit_robot_zero.npz").exists() else ())
+    recs = {mode: dict(np.load(run / f"audit_{mode}.npz")) for mode in modes}
     agents = list(recs["sampled"]["agents"])
     h, r = agents.index("human"), agents.index("robot")
     out = {"run": str(run), "shared_reward_max_diff": float(np.abs(recs["sampled"]["reward"][:, :, r]
@@ -159,7 +173,7 @@ def audit(run: Path, scene: str) -> dict:
         span = [np.ptp(q[s, first_mask(rec["done"][s])[:, e], e]) for s in range(q.shape[0]) for e in range(q.shape[2])]
         joints[m.joint(j).name] = {"range_deg": float(np.median(span)), "speed_deg_s": float(v.mean())}
     out["joints"] = joints
-    for mode in ("sampled", "mean", "human_zero"):
+    for mode in [m_ for m_ in modes if m_ != "robot_zero"]:
         rec = recs[mode]
         shares, dists = [], []
         for s in range(rec["qpos"].shape[0]):
@@ -169,7 +183,7 @@ def audit(run: Path, scene: str) -> dict:
             dists.append(np.median(np.linalg.norm(tool - target, axis=-1)[mask]))
         out[f"{mode}_gap_share"] = float(np.nanmean(shares))
         out[f"{mode}_tool_target_cm"] = float(100 * np.mean(dists))
-    for mode in ("sampled", "human_zero"):
+    for mode in [m_ for m_ in modes if m_ != "mean"]:
         rec = recs[mode]
         ret = [(rec["reward"][s, :, r] * first_mask(rec["done"][s])).sum(0).mean() for s in range(rec["reward"].shape[0])]
         out[f"{mode}_return"] = float(np.mean(ret))

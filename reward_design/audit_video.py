@@ -12,12 +12,12 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from reward_design import render
-from reward_design.human_audit import HUMAN_ACT, TOOL_TARGET
+from reward_design.human_audit import TOOL_TARGET, run_model
 
 
 def main() -> None:
     run, scene, mode, seed, ep, out = Path(sys.argv[1]), sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5]), sys.argv[6]
-    m = mujoco.MjModel.from_xml_path(str(render.ASSETS / scene))
+    m, human_act = run_model(run, scene)
     for name in ("target-u", "target-l"):
         gid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, name)
         if gid >= 0:
@@ -27,7 +27,7 @@ def main() -> None:
     n = int(np.argmax(done)) if done.any() else len(done)
     dt = 0.004 if "armmanip" in scene else 0.008
     stride = max(1, int(np.ceil(1.0 / dt / 30)))
-    joints = [m.actuator_trnid[a, 0] for a in HUMAN_ACT.get(scene, [11, 12, 13])]
+    joints = [m.actuator_trnid[a, 0] for a in human_act]
     tool = m.site(TOOL_TARGET[scene][0]).id
     d = mujoco.MjData(m)
 
