@@ -43,6 +43,9 @@ class ScratchItch(PipelineEnv):
         scratching_reward_weight: float = 4.0,
         target_scratcher_speed: float = 0.1,
         target_scratcher_force: float = 3.0,
+        tight_dist_reward_weight: float = 1.0,
+        tight_dist_scale: float = 0.005,
+        scratch_radius: float = 0.025,
         reset_noise_scale=5e-3,
         backend="mjx",
         **kwargs
@@ -51,6 +54,10 @@ class ScratchItch(PipelineEnv):
 
         Args:
           ctrl_cost_weight: Weight for the control cost.
+          tight_dist_reward_weight: Weight of the tight distance term exp(-d^2/tight_dist_scale), which pays only
+            within a few cm of the itch (scratch v6, 2026-11-11).
+          tight_dist_scale: Scale (m^2) of the tight distance term.
+          scratch_radius: The scratching bonus is paid only within this distance (m) of the itch.
           reset_noise_scale: Scale of noise to add to reset states.
           backend: str, the physics backend to use
           **kwargs: Arguments that are passed to the base class.
@@ -124,6 +131,9 @@ class ScratchItch(PipelineEnv):
         self._scratching_reward_weight = scratching_reward_weight
         self._target_scratcher_speed = target_scratcher_speed
         self._target_scratcher_force = target_scratcher_force
+        self._tight_dist_reward_weight = tight_dist_reward_weight
+        self._tight_dist_scale = tight_dist_scale
+        self._scratch_radius = scratch_radius
         self._reset_noise_scale = reset_noise_scale
 
     def reset(self, rng: jax.Array) -> State:
@@ -193,6 +203,7 @@ class ScratchItch(PipelineEnv):
         reward, done, zero = jp.zeros(3)
         metrics = {
             "reward_dist": zero,
+            "reward_tight": zero,
             "reward_ctrl": zero,
             "reward_scratching": zero,
         }
@@ -230,28 +241,17 @@ class ScratchItch(PipelineEnv):
             human_obs["human_joint_angles"],           
         ))
         
-        dist = -robo_obs["distance_to_target"]
-        r_dist = jp.exp(-dist**2/self._dist_scale)
-
         scratcher_vel = (
             pipeline_state.site_xpos[self.panda_scratcher_tip_idx] - pipeline_state0.site_xpos[self.panda_scratcher_tip_idx]
         ) / self.dt
         scratcher_speed = jp.linalg.norm(scratcher_vel)
         scratcher_force = jp.linalg.norm(human_obs["force_on_human"])
-        # Chosen Boltzmann-like reward functions for scratcher speed and force, but we could swap with alternatives.
-        r_scratching = (
-                (jp.abs(dist) < self._dist_scale)
-                * scratcher_speed/self._target_scratcher_speed * jp.exp(-scratcher_speed/self._target_scratcher_speed)
-                * scratcher_force/self._target_scratcher_force * jp.exp(-scratcher_force/self._target_scratcher_force)
-        )
-        reward = self._dist_reward_weight*r_dist + self._ctrl_cost_weight*ctrl_cost + self._scratching_reward_weight*r_scratching
+        terms = self._reward_terms(robo_obs["distance_to_target"], scratcher_speed, scratcher_force)
+        reward = (self._dist_reward_weight*terms["reward_dist"] + self._tight_dist_reward_weight*terms["reward_tight"]
+                  + self._ctrl_cost_weight*ctrl_cost + self._scratching_reward_weight*terms["reward_scratching"])
 
         done = 0.0
-        state.metrics.update(
-            reward_dist = r_dist,
-            reward_ctrl = ctrl_cost,
-            reward_scratching = r_scratching
-        )
+        state.metrics.update(reward_ctrl=ctrl_cost, **terms)
 
         state.info.update(
             ee_speed=scratcher_speed,
@@ -265,6 +265,24 @@ class ScratchItch(PipelineEnv):
             reward=reward,
             done=done
         )
+
+    def _reward_terms(self, distance: jax.Array, speed: jax.Array, force: jax.Array) -> dict[str, jax.Array]:
+        """Unweighted task-reward terms at a scratcher-tip-to-itch distance (m), tip speed (m/s) and force (N).
+
+        reward_dist is the 0.1.0 distance term; reward_tight (scratch v6) pays only within a few cm, so that the
+        human lifting its arm for an itch underneath pays off; reward_scratching is paid within scratch_radius only.
+        """
+        # Chosen Boltzmann-like reward functions for scratcher speed and force, but we could swap with alternatives.
+        r_scratching = (
+                (distance < self._scratch_radius)
+                * speed/self._target_scratcher_speed * jp.exp(-speed/self._target_scratcher_speed)
+                * force/self._target_scratcher_force * jp.exp(-force/self._target_scratcher_force)
+        )
+        return {
+            "reward_dist": jp.exp(-distance**2/self._dist_scale),
+            "reward_tight": jp.exp(-distance**2/self._tight_dist_scale),
+            "reward_scratching": r_scratching,
+        }
 
     def _get_robo_obs(self, pipeline_state, state_info) -> jax.Array:
         """Returns the environment observations."""

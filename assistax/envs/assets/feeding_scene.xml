@@ -192,6 +192,10 @@
 
   <equality>
     <weld body1="wheelchair" body2="pelvis" torquescale="0"/>
+    <!-- Back glued to the chair (full weld, so head moves cannot tip the human out of the seat). relpose: the
+         torso pose relative to the wheelchair in the init keyframe, shifted by the 2.1 cm the seat weld above
+         pulls the pelvis at reset, so the two welds agree. -->
+    <weld name="back_to_chair" body1="wheelchair" body2="torso" relpose="0.01132 0.90681 0.11625 0.54647 -0.44289 0.44501 0.55424"/>
   </equality>
 
   <keyframe>

@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Optional, Tuple
 
 from brax import base
 from brax.envs.base import PipelineEnv, State
@@ -33,9 +33,10 @@ class ArmManipulation(PipelineEnv):
         self,
         ctrl_cost_weight: float = 1e-6,
         dist_reward_weight: float = 1.0,
-        rot_scale: float = 0.1,
+        rot_scale: float = -0.1,
         waist_scale: float = 10.0,
         dist_scale: float = 0.1,
+        human_gear: Optional[float] = None,
         # wiping_reward_weight: float = 1.0,
         reset_noise_scale=5e-3,
         backend="mjx",
@@ -47,6 +48,12 @@ class ArmManipulation(PipelineEnv):
 
         Args:
           ctrl_cost_weight: Weight for the control cost.
+          rot_scale: Weight of ||R_target - R_tool||_F, the hook frame's orientation difference from the target
+            frame on the forearm (0 when the forearm lies in the hook with the lip underneath, up to 2.83).
+            Negative, so misalignment is penalised.
+          human_gear: Gear of the human's three arm actuators (the human's whole action space). The scene sets 0,
+            i.e. no torque; None keeps the scene's value. Their control range is +-0.4, so gear g gives up to
+            0.4 g N m.
           reset_noise_scale: Scale of noise to add to reset states.
           backend: str, the physics backend to use
           **kwargs: Arguments that are passed to the base class.
@@ -54,6 +61,9 @@ class ArmManipulation(PipelineEnv):
         self.path = epath.resource_path("assistax") / "envs/assets/bed_scene_armmanip.xml"
 
         mjmodel = mujoco.MjModel.from_xml_path(str(self.path))
+        if human_gear is not None:
+            for name in ("right_shoulder1", "right_shoulder2", "right_elbow"):
+                mjmodel.actuator_gear[mjmodel.actuator(name).id, 0] = human_gear
         self.sys = mjcf.load_model(mjmodel)
         if backend == "mjx":
             self.sys = self.sys.tree_replace(
@@ -310,8 +320,8 @@ class ArmManipulation(PipelineEnv):
         # calculate distances
         tool_target_dist = target_position - tool_position
         tool_target_dist_euclidean = jp.linalg.norm(tool_target_dist)
-        # TEMPORARY: NEED TO FIX ROTATION!
-        # tool_target_dist_angular = jp.zeros(9)
+        # Orientation difference of the hook's frame from the target frame on the forearm; the reward weighs its
+        # Frobenius norm with rot_scale (a penalty).
         tool_target_dist_angular = target_orientation - tool_orientation
 
 

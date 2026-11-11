@@ -42,11 +42,11 @@ _agent_action_mapping = {
     },
     "feeding": {
         "robot": jnp.array([19, 20, 21, 22, 23, 24, 25]),
-        "human": jnp.array([0, 1]), # head 
+        "human": jnp.array([17, 18]), # head: neck_yaw, neck_pitch
     },
     "teethbrushing": {
         "robot": jnp.array([19, 20, 21, 22, 23, 24, 25]),
-        "human": jnp.array([0, 1]), # head 
+        "human": jnp.array([17, 18]), # head: neck_yaw, neck_pitch
     },
 }
 
