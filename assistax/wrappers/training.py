@@ -246,6 +246,8 @@ class DisabilityWrapper(Wrapper):
         self.joint_strength = cfg.get("joint_strength", 1.0)
         self.tremor_magnitude = cfg.get("tremor_magnitude", 0.0)
         # joint_idx indexes actuators (the action vector); restrict the range of the joint each one drives.
+        self._jnt_range = self.env.unwrapped.sys.jnt_range  # unrestricted, for per-partner mode
+        self._actuator_jnt = jp.asarray(self.env.unwrapped.sys.actuator_trnid[:, 0])
         disabled_jnt_ids = self.env.unwrapped.sys.actuator_trnid[self.disability_jnt_idx, 0]
         orig_joint_range = self.env.unwrapped.sys.jnt_range[disabled_jnt_ids]
         new_joint_range = self.joint_restriction_factor * orig_joint_range
@@ -254,12 +256,49 @@ class DisabilityWrapper(Wrapper):
                 new_joint_range
             )
         )
+        # Per-partner mode (ad hoc teamwork, cross-play): the four parameters come from state.info["disability"],
+        # so partners with different disabilities can share a vmapped batch. The loading wrapper sets them.
+        self.per_partner = bool(cfg.get("per_partner", False))
+
+    def default_disability(self) -> dict[str, jax.Array]:
+        """This wrapper's own parameters, in the form state.info["disability"] carries in per-partner mode."""
+        return {
+            "joint_idx": jp.asarray(self.disability_jnt_idx, jp.int32),
+            "joint_restriction_factor": jp.asarray(self.joint_restriction_factor, jp.float32),
+            "joint_strength": jp.asarray(self.joint_strength, jp.float32),
+            "tremor_magnitude": jp.asarray(self.tremor_magnitude, jp.float32),
+        }
+
+    def reset(self, rng: jax.Array) -> State:
+        state = self.env.reset(rng)
+        if self.per_partner:
+            state = state.replace(info={**state.info, "disability": self.default_disability()})
+        return state
 
     def step(self, rng: jax.Array, state: State, action: jax.Array) -> State:
         rng_act, rng_env = jax.random.split(rng)
+        if self.per_partner:
+            return self._per_partner_step(rng_act, rng_env, state, action)
         modified_action = self._modify_action(rng_act, action)
         # N.B. we might want to handle control cost before passing to step
         return self.env.step(rng_env, state, modified_action)
+
+    def _per_partner_step(self, rng_act: jax.Array, rng_env: jax.Array, state: State, action: jax.Array) -> State:
+        """Step with the disability in state.info["disability"]: the same action change as _modify_action, and the
+        range restriction applied to a copy of the model for this step only (as DomainRandomizationVmapWrapper
+        swaps the model), so under vmap each env gets its own joint range. Resets use the unrestricted range."""
+        d = state.info["disability"]
+        mask = jp.arange(self.env.action_size) == d["joint_idx"]
+        disabled = d["joint_strength"] * (action + d["tremor_magnitude"] * jax.random.uniform(rng_act))
+        jnt = self._actuator_jnt[d["joint_idx"]]
+        jnt_range = self._jnt_range.at[jnt].set(d["joint_restriction_factor"] * self._jnt_range[jnt])
+        unwrapped = self.env.unwrapped
+        sys = unwrapped.sys
+        unwrapped.sys = sys.replace(jnt_range=jnt_range)
+        try:
+            return self.env.step(rng_env, state, jp.where(mask, disabled, action))
+        finally:
+            unwrapped.sys = sys
 
     def _modify_action(self, rng: jax.Array, action: jax.Array) -> jax.Array:
         tremor_action = self.joint_strength * (

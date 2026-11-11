@@ -19,7 +19,7 @@ import safetensors.flax
 from assistax.envs.multi_agent_env import State, MultiAgentEnv
 from assistax.wrappers.baselines import JaxMARLWrapper
 from gymnax.environments import spaces
-from assistax.wrappers.training import compute_preference_reward
+from assistax.wrappers.training import DisabilityWrapper, compute_preference_reward
 from typing import Sequence, NamedTuple, Any, Dict, Optional, Callable, Tuple, List
 import functools
 from omegaconf import OmegaConf
@@ -77,6 +77,64 @@ def _extract_pref_config(zoo: "ZooManager", agent_uuid: str) -> Dict[str, float]
         "overall_weight": float(pref.get("overall_weight", 1.0)),
         "touch_threshold": float(pref.get("touch_threshold", 0.1)),
     }
+
+
+def _disability_from_config(config: Dict) -> Dict[str, float]:
+    """A zoo agent's disability (its ENV_KWARGS.disability) as DisabilityWrapper parameters; none means no-op."""
+    d = (config.get("ENV_KWARGS") or {}).get("disability") or {}
+    return {
+        "joint_idx": int(d.get("joint_idx", 0)),
+        "joint_restriction_factor": float(d.get("joint_restriction_factor", 1.0)),
+        "joint_strength": float(d.get("joint_strength", 1.0)),
+        "tremor_magnitude": float(d.get("tremor_magnitude", 0.0)),
+    }
+
+
+def _extract_disability_config(zoo: "ZooManager", agent_uuid: str) -> Dict[str, float]:
+    """The disability a zoo agent was trained with (see _disability_from_config)."""
+    return _disability_from_config(zoo._load_config(agent_uuid))
+
+
+def _find_disability_wrapper(env: MultiAgentEnv) -> Optional[DisabilityWrapper]:
+    """The DisabilityWrapper inside a multi-agent env's Brax wrapper chain, if any."""
+    e = getattr(env, "env", None)
+    while e is not None:
+        if isinstance(e, DisabilityWrapper):
+            return e
+        e = getattr(e, "env", None)
+    return None
+
+
+def _setup_partner_disability(
+    env: MultiAgentEnv, disability_configs: Optional[Dict[str, Dict[str, jnp.ndarray]]],
+) -> Optional[Dict[str, Dict[str, jnp.ndarray]]]:
+    """Switch the env's DisabilityWrapper to per-partner mode so each loaded partner acts in the body it was trained
+    in. Returns the configs to apply, or None when there is nothing to apply. Raises if partners are disabled but
+    the env has no DisabilityWrapper (set ENV_KWARGS.disability)."""
+    if not disability_configs:
+        return None
+    wrapper = _find_disability_wrapper(env)
+    if wrapper is None:
+        disabled = any(
+            bool(jnp.any(c["joint_restriction_factor"] != 1.0) | jnp.any(c["joint_strength"] != 1.0)
+                 | jnp.any(c["tremor_magnitude"] != 0.0))
+            for c in disability_configs.values()
+        )
+        if disabled:
+            raise ValueError("Loaded partners were trained with disabilities, but the env has no DisabilityWrapper; "
+                             "set ENV_KWARGS.disability so each partner's own disability can be applied.")
+        return None
+    wrapper.per_partner = True
+    return disability_configs
+
+
+def _with_partner_disability(state, disability_configs, ag_idx: Dict[str, chex.Array]):
+    """The env state with the current human partner's disability in info["disability"] (per-partner mode)."""
+    if disability_configs is None:
+        return state
+    i = ag_idx["human"]
+    partner = {k: v[i] for k, v in disability_configs["human"].items()}
+    return state.replace(info={**state.info, "disability": partner})
 
 
 def _stack_pref_configs(pref_config_list: List[Dict[str, float]]) -> Dict[str, jnp.ndarray]:
@@ -613,12 +671,14 @@ class LoadAgentWrapper(JaxMARLWrapper):
         load_agents: Dict[str, LoadNetworkState],
         pref_configs: Optional[Dict[str, Dict[str, jnp.ndarray]]] = None,
         agents_expect_pref_obs: bool = True,
+        disability_configs: Optional[Dict[str, Dict[str, jnp.ndarray]]] = None,
     ):
         super().__init__(env)
 
         self.loaded_agents = ['human']
         self.loaded_params = load_agents
         self.pref_configs = pref_configs
+        self.disability_configs = _setup_partner_disability(self._env, disability_configs)
         self.agents = [
             agent
             for agent in self._env.agents
@@ -655,16 +715,19 @@ class LoadAgentWrapper(JaxMARLWrapper):
 
         load_agents: Dict[str, Dict[str, LoadNetworkState]] = {}
         pref_config_lists: Dict[str, List[Dict[str, float]]] = {}
+        disability_config_lists: Dict[str, List[Dict[str, float]]] = {}
         for algorithm, agents_dict in load_agents_uuids.items():
             if algorithm not in load_agents:
                 load_agents[algorithm] = {}
             for agent, agent_uuids in agents_dict.items():
                 if agent not in pref_config_lists:
                     pref_config_lists[agent] = []
+                    disability_config_lists[agent] = []
                 if isinstance(agent_uuids, str):
                     # Single agent case.
                     zoo_state = zoo.load_agent(agent_uuids)
                     pref_config_lists[agent].append(_extract_pref_config(zoo, agent_uuids))
+                    disability_config_lists[agent].append(_extract_disability_config(zoo, agent_uuids))
                     load_agents[algorithm][agent] = LoadNetworkState(
                         apply_fn=jax.vmap(zoo_state.apply_fn, in_axes=(0, None, None)),
                         hstate_reset_fn=zoo_state.hstate_reset_fn,
@@ -676,6 +739,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
                     zoo_states = [zoo.load_agent(agent_uuid) for agent_uuid in agent_uuids]
                     for agent_uuid in agent_uuids:
                         pref_config_lists[agent].append(_extract_pref_config(zoo, agent_uuid))
+                        disability_config_lists[agent].append(_extract_disability_config(zoo, agent_uuid))
 
                     # group the zoo states by their parameter shapes
                     shape_groups = {}
@@ -705,8 +769,14 @@ class LoadAgentWrapper(JaxMARLWrapper):
             for agent, configs in pref_config_lists.items()
             if configs
         }
+        stacked_disability_configs = {
+            agent: _stack_pref_configs(configs)
+            for agent, configs in disability_config_lists.items()
+            if configs
+        }
         expect_pref_obs = _zoo_agents_expect_pref_obs(env, zoo, load_agents_uuids) if stacked_pref_configs else False
-        return cls(env, load_agents, pref_configs=stacked_pref_configs or None, agents_expect_pref_obs=expect_pref_obs)
+        return cls(env, load_agents, pref_configs=stacked_pref_configs or None, agents_expect_pref_obs=expect_pref_obs,
+                   disability_configs=stacked_disability_configs or None)
 
     def take_internal_action(
         self,
@@ -865,6 +935,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
         hstate = self.reset_internal_hstates(key_hstate)
 
         ag_idx = self.reset_agent_index(key_ag_idx)
+        state = _with_partner_disability(state, self.disability_configs, ag_idx)
 
         # Append preference obs before take_internal_action so zoo networks get correct input dim
         if self._num_pref_obs > 0:
@@ -950,6 +1021,7 @@ class LoadAgentWrapper(JaxMARLWrapper):
         ag_idx = jax.tree.map(
             lambda x, y: jax.lax.select(dones["__all__"], x, y), ag_idx_re, state.ag_idx
         )
+        states = _with_partner_disability(states, self.disability_configs, ag_idx)
 
         # Append preference obs to each agent's observation
         if self._num_pref_obs > 0:
@@ -1018,11 +1090,13 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         load_agents: Dict[str, LoadNetworkState],
         pref_configs: Optional[Dict[str, Dict[str, jnp.ndarray]]] = None,
         agents_expect_pref_obs: bool = True,
+        disability_configs: Optional[Dict[str, Dict[str, jnp.ndarray]]] = None,
     ):
         super().__init__(env)
         self.loaded_agents = ['human'] # also currently hard coded this works for assistax but not other JaxMARL envs
         self.loaded_params = load_agents
         self.pref_configs = pref_configs
+        self.disability_configs = _setup_partner_disability(self._env, disability_configs)
         self.agents = [
             agent for agent in self._env.agents if agent not in self.loaded_agents
         ] # might need to change this to avoid breaking eval
@@ -1085,6 +1159,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
 
         load_agents: Dict[str, Dict[str, LoadNetworkState]] = {}
         pref_config_lists: Dict[str, List[Dict[str, float]]] = {}
+        disability_config_lists: Dict[str, List[Dict[str, float]]] = {}
 
         for algorithm, agents_dict in load_agents_uuids.items():
             if algorithm not in load_agents:
@@ -1093,6 +1168,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
             for agent, agent_uuids in agents_dict.items():
                 if agent not in pref_config_lists:
                     pref_config_lists[agent] = []
+                    disability_config_lists[agent] = []
 
                 if isinstance(agent_uuids, str):
                     try:
@@ -1103,6 +1179,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
                         )
                         continue
                     pref_config_lists[agent].append(_extract_pref_config(zoo, agent_uuids))
+                    disability_config_lists[agent].append(_extract_disability_config(zoo, agent_uuids))
                     load_agents[algorithm][agent] = LoadNetworkState(
                         apply_fn=jax.vmap(zoo_state.apply_fn, in_axes=(0, None, None)),
                         hstate_reset_fn=zoo_state.hstate_reset_fn,
@@ -1128,6 +1205,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
 
                     for agent_uuid in successful_agent_uuids:
                         pref_config_lists[agent].append(_extract_pref_config(zoo, agent_uuid))
+                        disability_config_lists[agent].append(_extract_disability_config(zoo, agent_uuid))
 
                     # Group the zoo states by their parameter shapes.
                     shape_groups = {}
@@ -1155,8 +1233,14 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
             for agent, configs in pref_config_lists.items()
             if configs
         }
+        stacked_disability_configs = {
+            agent: _stack_pref_configs(configs)
+            for agent, configs in disability_config_lists.items()
+            if configs
+        }
         expect_pref_obs = _zoo_agents_expect_pref_obs(env, zoo, load_agents_uuids) if stacked_pref_configs else False
-        return cls(env, load_agents, pref_configs=stacked_pref_configs or None, agents_expect_pref_obs=expect_pref_obs)
+        return cls(env, load_agents, pref_configs=stacked_pref_configs or None, agents_expect_pref_obs=expect_pref_obs,
+                   disability_configs=stacked_disability_configs or None)
 
     def take_internal_action(
         self,
@@ -1292,6 +1376,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         current_idx = self._preprocess_current_idx(current_idx) # ensure its not int
         # Ensure each index is a scalar
         current_idx = jax.tree.map(self._ensure_scalar_idx, current_idx)
+        state = _with_partner_disability(state, self.disability_configs, current_idx)
 
         # Append preference obs before take_internal_action so zoo networks get correct input dim
         if self._num_pref_obs > 0:
@@ -1375,6 +1460,7 @@ class LoadEvalAgentWrapper(JaxMARLWrapper):
         )
         ag_idx = jax.tree.map(lambda x, y: jax.lax.select(dones["__all__"], x, y), ag_idx_re, state.ag_idx # get rid of this grimm_stuff
         )
+        states = _with_partner_disability(states, self.disability_configs, ag_idx)
 
         # Append preference obs to each agent's observation
         if self._num_pref_obs > 0:
