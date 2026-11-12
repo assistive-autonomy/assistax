@@ -45,6 +45,8 @@ class Feeding(PipelineEnv):
         target_spoon_force: float = 1.0,
         reset_noise_scale=5e-3,
         backend="mjx",
+        tight_dist_reward_weight: float = 2.0,
+        tight_dist_scale: float = 0.005,
         **kwargs
     ):
         """Creates a Feeding environment.
@@ -53,6 +55,10 @@ class Feeding(PipelineEnv):
           ctrl_cost_weight: Weight for the control cost.
           reset_noise_scale: Scale of noise to add to reset states.
           backend: str, the physics backend to use
+          tight_dist_reward_weight: Weight of the tight distance term exp(-d^2/tight_dist_scale), d the spoon-centre
+            to mouth distance, which pays only within a few cm of the mouth (as scratch v6), so touching the mouth
+            pays more than hovering near it. v2 default 2 (2026-11-12); 0 gives the 0.1.0 reward.
+          tight_dist_scale: Scale (m^2) of the tight distance term.
           **kwargs: Arguments that are passed to the base class.
         """
         self.path = epath.resource_path("assistax") / "envs/assets/feeding_scene.xml"
@@ -124,6 +130,8 @@ class Feeding(PipelineEnv):
         self._target_spoon_speed = target_spoon_speed
         self._target_spoon_force = target_spoon_force
         self._reset_noise_scale = reset_noise_scale
+        self._tight_dist_reward_weight = tight_dist_reward_weight
+        self._tight_dist_scale = tight_dist_scale
 
     def reset(self, rng: jax.Array) -> State:
         """Resets the environment to an initial state."""
@@ -173,6 +181,7 @@ class Feeding(PipelineEnv):
             "reward_orientation": zero,
             "reward_velocity": zero,
             "reward_force": zero,
+            "reward_tight": zero,
         }
         return State(pipeline_state, obs, reward, done, metrics, info)
 
@@ -206,6 +215,7 @@ class Feeding(PipelineEnv):
         
         
         r_dist = jp.exp(-self._dist_scale * distance) # Spikier than the bolzmann esque reward from scratching
+        r_tight = jp.exp(-distance**2 / self._tight_dist_scale)  # weighted by tight_dist_reward_weight (v2: 2)
 
 
         local_vec_spoon_up = jp.array([-1.0, 0.0, 0.0])
@@ -286,7 +296,7 @@ class Feeding(PipelineEnv):
             self._dist_reward_weight * r_dist +
             self._feeding_reward_weight * (r_orientation + r_velocity + r_force) +
             self._ctrl_cost_weight * ctrl_cost
-        )
+        ) + self._tight_dist_reward_weight * r_tight
 
         done = 0.0
         state.metrics.update(
@@ -295,6 +305,7 @@ class Feeding(PipelineEnv):
             reward_orientation = r_orientation,
             reward_velocity = r_velocity,
             reward_force = r_force,
+            reward_tight = r_tight,
         )
 
         state.info.update(

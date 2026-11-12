@@ -33,10 +33,10 @@ class ArmManipulation(PipelineEnv):
         self,
         ctrl_cost_weight: float = 1e-6,
         dist_reward_weight: float = 1.0,
-        rot_scale: float = -0.1,
+        rot_scale: float = -1.0,
         waist_scale: float = 10.0,
         dist_scale: float = 0.1,
-        human_gear: Optional[float] = None,
+        human_gear: Optional[float] = 2.0,
         # wiping_reward_weight: float = 1.0,
         reset_noise_scale=5e-3,
         backend="mjx",
@@ -50,10 +50,11 @@ class ArmManipulation(PipelineEnv):
           ctrl_cost_weight: Weight for the control cost.
           rot_scale: Weight of ||R_target - R_tool||_F, the hook frame's orientation difference from the target
             frame on the forearm (0 when the forearm lies in the hook with the lip underneath, up to 2.83).
-            Negative, so misalignment is penalised.
+            Negative, so misalignment is penalised. v2 default -1.0 (2026-11-12): -0.1 left the hook-less strategy
+            in place.
           human_gear: Gear of the human's three arm actuators (the human's whole action space). The scene sets 0,
             i.e. no torque; None keeps the scene's value. Their control range is +-0.4, so gear g gives up to
-            0.4 g N m.
+            0.4 g N m. v2 default 2 (2026-11-12): very weak, so the human cannot do the task alone.
           reset_noise_scale: Scale of noise to add to reset states.
           backend: str, the physics backend to use
           **kwargs: Arguments that are passed to the base class.

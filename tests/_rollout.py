@@ -14,10 +14,12 @@ HUMAN_ROBOT_ENVS = ("scratchitch", "bedbathing", "armmanipulation", "feeding", "
 
 
 @functools.lru_cache(maxsize=None)
-def rollout(env_name: str, n_steps: int = 5, seed: int = 0) -> tuple[PipelineEnv, tuple[State, ...]]:
+def rollout(env_name: str, n_steps: int = 5, seed: int = 0,
+            env_kwargs: tuple[tuple[str, float], ...] = ()) -> tuple[PipelineEnv, tuple[State, ...]]:
     """Return the raw (unwrapped) env and the states of a jitted reset plus ``n_steps`` steps under
-    uniform random actions in [-1, 1]. Cached per argument tuple so test modules share compiles."""
-    env = envs._envs[env_name]()
+    uniform random actions in [-1, 1]. ``env_kwargs`` are (name, value) pairs passed to the env's constructor.
+    Cached per argument tuple so test modules share compiles."""
+    env = envs._envs[env_name](**dict(env_kwargs))
     reset, step = jax.jit(env.reset), jax.jit(env.step)
     key_reset, key = jax.random.split(jax.random.PRNGKey(seed))
     states = [reset(key_reset)]

@@ -3,7 +3,8 @@ audit (human_audit.py). Standalone on purpose: it imports nothing else from rewa
 pre-0.1.0 code (058d2f7), whose envs lack what tasks.py relies on.
 
 Each evaluation records, per step: qpos/qvel, dones, every agent's reward, every agent's action as applied (sampled
-or mean) and its policy mean, and the scratch itch (scratch itch only). Four modes, all on the same 32 starts per
+or mean) and its policy mean, the scratch itch (scratch itch only), the env's unweighted reward terms (metric_reward_*)
+and, where the env reports it, the contact force its force term reads (ee_force). Four modes, all on the same 32 starts per
 seed as ippo_run.py: sampled actions, policy means, and sampled with the human's or the robot's actions set to zero.
 
 Usage, from the checkout whose assistax should run:
@@ -85,6 +86,9 @@ def make_rollout(eval_env, apply_fn, n_episodes: int, mode: str):
                    "reward": jnp.stack([reward[a] for a in eval_env.agents]), "action": action, "mean": mean}
             if "scratch" in inner.info:
                 rec["itch_arm"], rec["itch_pos"] = inner.info["scratch"]["arm"], inner.info["scratch"]["pos"]
+            if "ee_force" in inner.info:  # the contact force (N) the env's force term reads
+                rec["ee_force"] = inner.info["ee_force"]
+            rec.update({f"metric_{k}": v for k, v in inner.metrics.items() if k.startswith("reward_")})
             return (obs, env_state, batchify(done, eval_env.agents), rng), rec
 
         _, recs = jax.lax.scan(step, (obs, env_state, last_done, rng), None, eval_env.episode_length)
