@@ -9,7 +9,9 @@ from population import config as pc
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS = json.loads((ROOT / "paper_baselines/settings.json").read_text())["overrides"]
-B = {"scratchitch": 2.0, "bedbathing": 1.0, "armmanipulation": 7.52, "feeding": 3.11, "teethbrushing": 2.09}
+# Feeding 4.91 = 2/3 of v2's max reward per step 7.368, the rule behind the old scripts' arm assist, teeth and feeding
+# values (Leo, 2026-11-12; was 3.11 = 2/3 of the paper's 4.7).
+B = {"scratchitch": 2.0, "bedbathing": 1.0, "armmanipulation": 7.52, "feeding": 4.91, "teethbrushing": 2.09}
 
 
 class TestCompose(unittest.TestCase):

@@ -17,7 +17,9 @@ from omegaconf import OmegaConf
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS = json.loads((ROOT / "paper_baselines/settings.json").read_text())["overrides"]
-TASKS = {"scratchitch": 2.0, "bedbathing": 1.0, "armmanipulation": 7.52, "feeding": 3.11, "teethbrushing": 2.09}
+# Reward budget B per task. Feeding 4.91 = 2/3 of v2's max reward per step 7.368 (the tight term), the rule behind the
+# old scripts' arm assist, teeth and feeding values (Leo, 2026-11-12; was 3.11 = 2/3 of the paper's 4.7).
+TASKS = {"scratchitch": 2.0, "bedbathing": 1.0, "armmanipulation": 7.52, "feeding": 4.91, "teethbrushing": 2.09}
 BUDGETS = {"ippo": {"TOTAL_TIMESTEPS": "4e7", "NUM_ENVS": 1024}, "mappo": {"TOTAL_TIMESTEPS": "3e7", "NUM_ENVS": 1024},
            "masac": {"TOTAL_TIMESTEPS": "1e7", "NUM_ENVS": 256}}
 DISABILITY_JOINT = 13
