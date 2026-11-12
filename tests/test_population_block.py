@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import jax
 import numpy as np
@@ -39,6 +40,26 @@ class TestBlock(unittest.TestCase):
         self.assertNotIn("params", res)
         self.assertGreater(res["memory"]["temp_bytes"] + res["memory"]["argument_bytes"], 0)
         self.assertEqual(res["config"]["OBS_DIM"], self.block["config"]["OBS_DIM"])
+
+    def test_save_block_flags_non_finite_persons(self) -> None:
+        bad = dict(self.block, params=jax.tree.map(lambda x: x.at[1].set(np.nan), self.block["params"]),
+                   final_returns=self.block["final_returns"].copy())
+        bad["final_returns"][1] = np.nan
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = rb.save_block(Path(tmp) / "b", "scratchitch", PERSONS[0:2], bad, smoke=True)
+            text = (Path(tmp) / "b" / "block.json").read_text()
+        self.assertEqual(summary["params_finite"], [True, False])
+        self.assertIsNone(summary["final_return"][1])
+        json.loads(text, parse_constant=lambda c: self.fail(f"non-strict JSON constant {c}"))
+
+    def test_main_reads_git_before_training(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(rb, "_git", side_effect=RuntimeError("no git here")), \
+                mock.patch.object(rb, "train_block") as train:
+            with self.assertRaises(RuntimeError):
+                rb.main(["population/manifest_v2.json", "scratchitch", "0-1", tmp])
+            train.assert_not_called()
+            self.assertEqual(list(Path(tmp).iterdir()), [])
 
     def test_rejects_mixed_cell(self) -> None:
         for persons in ([PERSONS[0], PERSONS[30]], [PERSONS[0], PERSONS[210]]):

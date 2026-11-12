@@ -27,7 +27,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 import jax
 import jax.numpy as jnp
@@ -120,6 +120,17 @@ def _git(*args: str) -> str:
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
+def git_provenance() -> dict:
+    """The checkout's commit and whether tracked files differ from it. Read before training, so a checkout where git
+    fails stops the block at once instead of after hours of training."""
+    return {"git_sha": _git("rev-parse", "HEAD"), "git_dirty": bool(_git("status", "--porcelain", "--untracked-files=no"))}
+
+
+def _finite_or_none(values) -> list:
+    """Floats as a list, with non-finite values as None (block.json stays strict JSON)."""
+    return [float(v) if np.isfinite(v) else None for v in values]
+
+
 def _flat(tree) -> dict:
     """A pytree's leaves as numpy arrays named by their path (a/b)."""
     return {"/".join(str(getattr(k, "key", getattr(k, "name", k))) for k in path): np.asarray(x)
@@ -127,13 +138,15 @@ def _flat(tree) -> dict:
 
 
 def save_block(out_dir: Path, task: str, persons: Sequence[dict], result: dict, smoke: bool,
-               overrides: Sequence[str] = (), started_utc: str = "") -> dict:
+               overrides: Sequence[str] = (), started_utc: str = "", provenance: Optional[dict] = None) -> dict:
     """Write a trained block to out_dir (which must not exist): its v2 zoo shard, metrics.npz and, last, block.json.
-    Returns the block.json summary."""
+    params_finite flags each person whose parameters hold NaN or inf (a diverged run), so it can be left out of the
+    population. provenance is git_provenance(), read before training (read here if not given). Returns the summary."""
+    prov = provenance or git_provenance()
+    sha, dirty = prov["git_sha"], prov["git_dirty"]
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=False)
     zoo = ZooManager(str(out_dir / "zoo"), zoo_version=ZOO_VERSION)
-    sha, dirty = _git("rev-parse", "HEAD"), bool(_git("status", "--porcelain", "--untracked-files=no"))
     for i, p in enumerate(persons):
         cfg = copy.deepcopy(result["config"])
         cfg["ZOO_PATH"] = str(out_dir / "zoo")
@@ -152,11 +165,13 @@ def save_block(out_dir: Path, task: str, persons: Sequence[dict], result: dict, 
     np.savez(out_dir / "metrics.npz", **_flat(result["metrics"]))
     alg, r, s = check_cell(persons)
     n, steps = len(persons), result["config"]["TOTAL_TIMESTEPS"]
+    leaves = jax.tree.leaves(result["params"])
+    finite = [all(bool(np.isfinite(np.asarray(x[i])).all()) for x in leaves) for i in range(n)]
     summary = {
         "block": out_dir.name, "task": task, "algorithm": alg, "disability": persons[0]["disability"],
-        "restriction": r, "strength": s, "persons": [p["id"] for p in persons],
-        "final_return": result["final_returns"].mean(axis=(1, 2)).tolist(),
-        "final_return_sd_over_envs": result["final_returns"].mean(axis=2).std(axis=1).tolist(),
+        "restriction": r, "strength": s, "persons": [p["id"] for p in persons], "params_finite": finite,
+        "final_return": _finite_or_none(result["final_returns"].mean(axis=(1, 2))),
+        "final_return_sd_over_envs": _finite_or_none(result["final_returns"].mean(axis=2).std(axis=1)),
         "env_steps_per_person": steps, "compile_s": result["compile_s"], "train_s": result["train_s"],
         "env_steps_per_s": n * steps / result["train_s"], "memory": result["memory"], "zoo_version": ZOO_VERSION,
         "git_sha": sha, "git_dirty": dirty, "host": socket.gethostname(), "device": jax.devices()[0].device_kind,
@@ -166,7 +181,7 @@ def save_block(out_dir: Path, task: str, persons: Sequence[dict], result: dict, 
         "finished_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
         "smoke": smoke, "overrides": list(overrides)}
     tmp = out_dir / "block.json.tmp"
-    tmp.write_text(json.dumps(summary, indent=1) + "\n")
+    tmp.write_text(json.dumps(summary, indent=1, allow_nan=False) + "\n")
     tmp.rename(out_dir / "block.json")
     return summary
 
@@ -195,13 +210,17 @@ def main(argv: Sequence[str]) -> None:
     out_dir = args.out_root / args.task / block_name(args.task, check_cell(persons)[0], first, last)
     if out_dir.exists():
         raise FileExistsError(f"{out_dir} exists; blocks are never overwritten")
+    provenance = git_provenance()
     started = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-    print(f"{started} block {out_dir.name}: {len(persons)} persons, devices {jax.devices()}", flush=True)
+    print(f"{started} block {out_dir.name}: {len(persons)} persons at {provenance['git_sha'][:7]}, "
+          f"devices {jax.devices()}", flush=True)
     result = train_block(args.task, persons, extra)
     print(f"compile {result['compile_s']:.0f} s, train {result['train_s']:.0f} s, memory {result['memory']}", flush=True)
-    summary = save_block(out_dir, args.task, persons, result, args.smoke, extra, started)
-    print(f"saved {out_dir}: final return mean {np.mean(summary['final_return']):.1f}, "
-          f"{summary['env_steps_per_s']:.0f} env steps/s", flush=True)
+    summary = save_block(out_dir, args.task, persons, result, args.smoke, extra, started, provenance)
+    returns = [r for r in summary["final_return"] if r is not None]
+    print(f"saved {out_dir}: final return mean {np.mean(returns) if returns else float('nan'):.1f}, "
+          f"{summary['env_steps_per_s']:.0f} env steps/s, non-finite persons "
+          f"{[p for p, ok in zip(summary['persons'], summary['params_finite']) if not ok]}", flush=True)
 
 
 if __name__ == "__main__":
