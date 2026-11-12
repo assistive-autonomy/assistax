@@ -624,8 +624,11 @@ def compute_preference_reward(
     speed_pref = _gaussian_pref(speed, speed_range_min, speed_range_max)
     force_pref = _gaussian_pref(force, force_range_min, force_range_max)
 
-    # Touch penalty: detect new contact transitions
-    current_cf = jp.linalg.norm(force)
+    # Touch penalty: detect new contact transitions, per env. The trainers pass all of a person's envs at once (force
+    # of shape (num_envs,), one contact force per env), so each env's own magnitude is taken, as PreferenceRewardWrapper
+    # takes it inside one env. A norm over the array summed every env's force: the penalty then fired only after
+    # resets, whatever a person's own robot touched (v1 population; fixed for v2, Leo 2026-11-12).
+    current_cf = jp.abs(force)
     new_touch = (prev_contact_force < touch_threshold) & (current_cf >= touch_threshold)
     touch_penalty = jp.where(new_touch, 1.0, 0.0)
 
