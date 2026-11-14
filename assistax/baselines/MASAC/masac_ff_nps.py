@@ -840,7 +840,7 @@ def make_train(config, save_train_state=True, load_zoo=False, dynamic_preference
                     # Step environment
                     rng, step_rng = jax.random.split(rng)
                     rng_step = jax.random.split(step_rng, config["NUM_ENVS"])
-                    obsv, env_state, reward, done, _ = jax.vmap(env.step)(
+                    obsv, env_state, reward, done, info = jax.vmap(env.step)(
                         rng_step, runner_state.env_state, env_act,
                     )
 
@@ -893,12 +893,16 @@ def make_train(config, save_train_state=True, load_zoo=False, dynamic_preference
                         prev_contact_force=new_prev_cf,
                     )
 
-                    return runner_state, transition
+                    # The episode return rides alongside the transition rather than inside it: Transition is the
+                    # replay buffer's element type, so adding a field there would change what the buffer stores.
+                    return runner_state, (transition, info["returned_episode_returns"])
 
                 # Collect rollout data
-                runner_state, traj_batch = jax.lax.scan(
+                runner_state, (traj_batch, ep_returns) = jax.lax.scan(
                     _env_step, runner_state, None, config["ROLLOUT_LENGTH"]
                 )
+                # One return per agent, averaged over the rollout's steps and envs, as IPPO/MAPPO log it.
+                ep_returns = ep_returns.mean(axis=(0, 1))
                 
                 # Reshape trajectory data for buffer storage
                 traj_batch_reshaped = jax.tree_util.tree_map(
@@ -1193,6 +1197,7 @@ def make_train(config, save_train_state=True, load_zoo=False, dynamic_preference
                 update_rngs = jax.random.split(u_rng, config["NUM_SAC_UPDATES"])
                 runner_state, metrics = jax.lax.scan(_update_networks, runner_state, update_rngs)
                 metrics = jax.tree.map(lambda x: x.mean(), metrics)
+                metrics["returned_episode_returns"] = ep_returns   # added after the mean, so it keeps its agent axis
                 
                 return runner_state, metrics
 
@@ -1200,7 +1205,11 @@ def make_train(config, save_train_state=True, load_zoo=False, dynamic_preference
             runner_state, metrics = jax.lax.scan(
                 _update_step, runner_state, None, config["SCAN_STEPS"]
             )
+            # Every other metric collapses to one scalar per checkpoint, as before; the episode return is reduced on
+            # its own so that its agent axis survives, giving (checkpoints, agents) once this scan's caller stacks it.
+            ep_returns = metrics.pop("returned_episode_returns")
             metrics = jax.tree.map(lambda x: x.mean(), metrics)
+            metrics["returned_episode_returns"] = ep_returns.mean(axis=0)
 
             # Optionally save training states in metrics
             if save_train_state:
